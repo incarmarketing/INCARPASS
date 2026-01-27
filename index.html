@@ -5,57 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>INCARPASS - 통합 운영 시스템</title>
     
-    <!-- 1. 필수 라이브러리 (CDN) -->
+    <!-- 1. 라이브러리 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
     
-    <!-- 2. Firebase SDK -->
+    <!-- 2. Firebase -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
-    <!-- 3. QR 스캐너 -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
-
-    <!-- 4. 스타일 및 폰트 -->
+    <!-- 3. 스타일 -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             theme: {
                 extend: {
-                    colors: { 
-                        incar: '#27398C', 
-                        'incar-dark': '#1a2b6d',
-                        'incar-light': '#eef2ff'
-                    },
-                    boxShadow: { 
-                        'card': '0 4px 20px -2px rgba(0, 0, 0, 0.08)',
-                        'nav': '0 -4px 20px rgba(0,0,0,0.05)' 
-                    }
+                    colors: { incar: '#27398C', 'incar-dark': '#1a2b6d', 'incar-light': '#eef2ff' },
+                    boxShadow: { 'card': '0 4px 15px rgba(0,0,0,0.05)', 'nav': '0 -4px 20px rgba(0,0,0,0.05)' }
                 }
             }
         }
     </script>
     <style>
-        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f1f5f9; color: #1e293b; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; color: #1e293b; overflow: hidden; -webkit-tap-highlight-color: transparent; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         
-        /* 가시성 확보를 위한 강제 스타일 */
-        select, input { color: #1e293b !important; background-color: #ffffff !important; }
+        select, input { background-color: white !important; color: #1e293b !important; }
         option { color: #1e293b !important; background-color: #ffffff !important; }
+
+        /* 엑셀 스타일 테이블 */
+        .data-table th { background-color: #f8fafc; color: #64748b; font-weight: 800; font-size: 0.7rem; text-transform: uppercase; padding: 12px 16px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+        .data-table td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; font-weight: 500; }
+        .data-table tr:hover td { background-color: #f8fafc; }
         
-        /* 스캐너 */
-        #reader { width: 100%; border-radius: 1rem; overflow: hidden; border: none; }
-        #reader video { object-fit: cover; border-radius: 1rem; }
+        #reader { width: 100%; border-radius: 1.5rem; overflow: hidden; border: none; }
+        #reader video { object-fit: cover; border-radius: 1.5rem; }
     </style>
 </head>
-<body>
-    <div id="root" class="h-screen w-full"></div>
+<body class="h-screen flex flex-col md:flex-row bg-slate-50">
+
+    <div id="root" class="h-full w-full"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, Fragment } = React;
@@ -64,18 +59,38 @@
         // ▼▼▼ [설정] 파이어베이스 키 입력란 ▼▼▼
         // ============================================================
         const firebaseConfig = {
-  apiKey: "AIzaSyAh1dsSNobeF6Wz-0euP5AUggdqJANJ3dQ",
-  authDomain: "incarpass.firebaseapp.com",
-  projectId: "incarpass",
-  storageBucket: "incarpass.firebasestorage.app",
-  messagingSenderId: "955362361998",
-  appId: "1:955362361998:web:166055dd392784f1827fdf",
-  measurementId: "G-SNR3FPPQ7E"
-};
+            apiKey: "", 
+            authDomain: "",
+            projectId: "",
+            storageBucket: "",
+            messagingSenderId: "",
+            appId: ""
+        };
         const SYSTEM_APP_ID = 'inca-prod-v1';
-        // ============================================================
+        
+        const DEFAULT_SCHEDULES = [
+            { id: 'D1_1', date:'2026-03-11', title: '1일차 공항 미팅 (08:00)', price: 0, type: 'BOARDING', expected: 100 },
+            { id: 'D1_2', date:'2026-03-11', title: '1일차 단수이 투어', price: 0, type: 'BOARDING', expected: 100 },
+            { id: 'D1_3', date:'2026-03-11', title: '1일차 석식 (타카오 1972)', price: 30, type: 'PAYMENT', expected: 100 },
+            { id: 'D1_4', date:'2026-03-11', title: '1일차 타이베이 101', price: 0, type: 'BOARDING', expected: 100 },
+            { id: 'D2_1', date:'2026-03-12', title: '2일차 선택관광 집결', price: 0, type: 'BOARDING', expected: 100 },
+            { id: 'D2_2', date:'2026-03-12', title: '2일차 인카 만찬 (필수)', price: 0, type: 'BOARDING', expected: 100 },
+            { id: 'D3_1', date:'2026-03-13', title: '3일차 야류 해양공원', price: 0, type: 'BOARDING', expected: 100 },
+            { id: 'D3_2', date:'2026-03-13', title: '3일차 중식 (씨푸드)', price: 30, type: 'PAYMENT', expected: 100 },
+            { id: 'D3_3', date:'2026-03-13', title: '3일차 스펀 천등 날리기', price: 0, type: 'BOARDING', expected: 100 },
+            { id: 'D3_4', date:'2026-03-13', title: '3일차 지우펀 야경', price: 0, type: 'BOARDING', expected: 100 },
+            { id: 'D4_1', date:'2026-03-14', title: '4일차 공항 샌딩', price: 0, type: 'BOARDING', expected: 100 }
+        ];
 
-        // --- [부품] 아이콘 ---
+        // --- 공통: 정렬 함수 (날짜순 -> ID순) ---
+        const sortSchedules = (list) => {
+            return list.sort((a, b) => {
+                if (a.date !== b.date) return a.date > b.date ? 1 : -1;
+                return a.id.localeCompare(b.id);
+            });
+        };
+
+        // --- 아이콘 ---
         const Icon = ({ name, size = 20, className = "" }) => {
             const icons = {
                 camera: <g><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></g>,
@@ -95,194 +110,341 @@
                 calendar: <g><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></g>,
                 alert: <g><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></g>,
                 chevronRight: <polyline points="9 18 15 12 9 6"/>,
-                chart: <g><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></g>
+                bus: <g><path d="M19 17h2l.64-2.54c.24-1.12.36-2.26.36-3.41V8.5a4.5 4.5 0 0 0-4.5-4.5h-11A4.5 4.5 0 0 0 2 8.5v2.55c0 1.15.12 2.29.36 3.41L3 17h2"/><path d="M15 17v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2"/><path d="M16 8.5h.01"/><path d="M8 8.5h.01"/></g>,
+                table: <g><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7m0-18H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m0-18v18"/></g>
             };
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="10"/>}</svg>;
         };
 
-        // --- [화면 1] 대시보드 ---
-        const DashboardView = ({ stats, schedules, currentSessionId, logs }) => (
-            <div className="space-y-6 animate-fade-in pb-24 md:pb-8">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-card">
-                        <div className="flex justify-between items-center mb-3">
-                            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">누적 처리 인원</p>
-                            <div className="p-2 bg-indigo-50 rounded-lg text-incar"><Icon name="users" size={20}/></div>
+        // --- 결과 모달 ---
+        const ScanResultModal = ({ scanResult, setScanResult }) => {
+            if (!scanResult) return null;
+            const { status, msg, subMsg, amount, user } = scanResult;
+
+            useEffect(() => {
+                if (status === 'success') {
+                    const timer = setTimeout(() => setScanResult(null), 2500);
+                    return () => clearTimeout(timer);
+                }
+            }, [status]);
+
+            const colors = {
+                success: { bg: 'bg-emerald-50', text: 'text-emerald-700', icon: 'text-emerald-500', btn: 'bg-emerald-600' },
+                duplicate: { bg: 'bg-amber-50', text: 'text-amber-700', icon: 'text-amber-500', btn: 'bg-amber-600' },
+                error: { bg: 'bg-rose-50', text: 'text-rose-700', icon: 'text-rose-500', btn: 'bg-rose-600' }
+            };
+            const theme = colors[status] || colors.error;
+
+            return (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-fade-in">
+                    <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden ring-1 ring-black/5">
+                        <div className={`p-10 flex flex-col items-center text-center ${theme.bg}`}>
+                            <Icon name={status === 'success' ? 'check' : status === 'duplicate' ? 'alert' : 'x'} size={80} className={`${theme.icon} mb-4 drop-shadow-sm`} />
+                            <h3 className={`text-2xl font-black ${theme.text} mb-1`}>{msg}</h3>
+                            <p className="text-slate-500 text-sm font-medium">{subMsg}</p>
                         </div>
-                        <h3 className="text-4xl font-black text-slate-900">{stats.totalCount}<span className="text-lg font-bold text-slate-400 ml-1">명</span></h3>
-                    </div>
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-card">
-                        <div className="flex justify-between items-center mb-3">
-                            <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">총 지급액</p>
-                            <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600"><Icon name="dollar" size={20}/></div>
-                        </div>
-                        <h3 className="text-4xl font-black text-slate-900">${stats.totalAmount.toLocaleString()}</h3>
-                    </div>
-                    <div className="bg-incar p-6 rounded-2xl shadow-card text-white relative overflow-hidden">
-                        <div className="relative z-10">
-                            <p className="text-xs text-blue-200 font-bold uppercase mb-2">현재 진행 세션</p>
-                            <h3 className="text-lg font-bold truncate mb-4">{schedules.find(s=>s.id===currentSessionId)?.title || '세션 미선택'}</h3>
-                            <div className="flex justify-between items-end">
-                                <span className="text-4xl font-black">{stats.currentCount}<span className="text-lg ml-1 font-medium opacity-80">명</span></span>
-                                <span className="text-[10px] bg-white/20 px-2 py-1 rounded backdrop-blur-sm">실시간</span>
+                        {user && (
+                            <div className="p-8 bg-white space-y-4">
+                                <div className="flex items-center gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center text-xl font-black text-incar border-2 border-slate-100 shadow-sm">{user.name[0]}</div>
+                                    <div className="text-left">
+                                        <div className="font-black text-gray-900 text-xl leading-none mb-1">{user.name}</div>
+                                        <div className="text-xs text-slate-400 font-bold uppercase tracking-tight">{user.affiliation} · {user.bus}</div>
+                                    </div>
+                                </div>
+                                {amount > 0 && (
+                                    <div className="flex justify-between items-center p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
+                                        <span className="text-xs font-black text-emerald-700 uppercase tracking-widest">지급 금액</span>
+                                        <span className="text-3xl font-black text-emerald-600">${amount}</span>
+                                    </div>
+                                )}
                             </div>
-                        </div>
-                        <div className="absolute top-0 right-0 p-4 opacity-10"><Icon name="layout" size={100}/></div>
-                    </div>
-                </div>
-                
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden">
-                    <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white">
-                        <h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="activity" size={18} className="text-incar"/> 실시간 로그</h3>
-                        <button onClick={()=>window.location.reload()} className="text-xs border px-3 py-1 rounded hover:bg-slate-50">새로고침</button>
-                    </div>
-                    <div className="overflow-x-auto max-h-[400px]">
-                        <table className="w-full text-left text-sm">
-                            <thead className="bg-slate-50 text-slate-500 text-xs font-bold uppercase sticky top-0">
-                                <tr><th className="p-4 w-20">시간</th><th className="p-4">이름</th><th className="p-4">세션</th><th className="p-4">유형</th><th className="p-4 text-right">금액</th></tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-100">
-                                {logs.length === 0 ? <tr><td colspan="5" className="p-10 text-center text-slate-400">기록 없음</td></tr> : logs.map(log => (
-                                    <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                                        <td className="p-4 text-xs text-slate-400 font-mono">{log.displayTime.split(' ')[1]||log.displayTime}</td>
-                                        <td className="p-4 font-bold text-slate-800">{log.name} <span className="text-xs text-slate-400 font-normal">({log.affiliation})</span></td>
-                                        <td className="p-4 text-slate-600 text-xs">{log.sessionTitle}</td>
-                                        <td className="p-4"><span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${log.action==='지급'?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{log.action}</span></td>
-                                        <td className="p-4 text-right font-bold text-slate-900">{log.amount>0 ? `$${log.amount}` : '-'}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        );
-
-        // --- [화면 2] 스캔 뷰 ---
-        const ScanView = ({ schedules, currentSessionId, setCurrentSessionId, stats, scannerActive, setScannerActive, handleScan }) => (
-            <div className="space-y-6 animate-fade-in pb-24 md:pb-8 max-w-lg mx-auto">
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-card">
-                    <div className="flex justify-between items-center mb-4">
-                        <h3 className="font-bold text-slate-900 flex items-center gap-2"><Icon name="qr" size={20} className="text-incar"/> 스캔 모니터링</h3>
-                        <span className="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded">{new Date().toLocaleDateString()}</span>
-                    </div>
-                    <div className="mb-4">
-                        <label className="block text-xs font-bold text-slate-400 mb-2">TARGET SESSION</label>
-                        <div className="relative">
-                            <select value={currentSessionId} onChange={(e)=>setCurrentSessionId(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-800 appearance-none focus:ring-2 focus:ring-incar outline-none shadow-sm">
-                                {schedules.length===0 ? <option>일정 없음</option> : schedules.map(s=><option key={s.id} value={s.id}>{s.title}</option>)}
-                            </select>
-                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"><Icon name="chevronRight" className="rotate-90"/></div>
+                        )}
+                        <div className="p-4 px-8 pb-8 bg-white">
+                            <button onClick={() => setScanResult(null)} className={`w-full py-5 rounded-2xl font-black text-white shadow-xl transition-transform active:scale-95 ${theme.btn}`}>확인 완료</button>
                         </div>
                     </div>
-                    <div className="flex justify-between items-center p-4 bg-incar-light rounded-xl border border-indigo-100">
-                        <span className="font-bold text-incar text-sm">현재 세션 완료</span>
-                        <span className="font-black text-xl text-slate-900">{stats.currentCount}명</span>
-                    </div>
                 </div>
+            );
+        };
 
-                <div className="bg-white rounded-3xl shadow-card p-6 min-h-[360px] flex flex-col items-center justify-center relative overflow-hidden border border-slate-200">
-                    {scannerActive ? (
-                        <div id="reader" className="w-full h-full relative z-10"></div>
-                    ) : (
-                        <div className="text-center space-y-4">
-                            <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-300"><Icon name="camera" size={40}/></div>
-                            <p className="text-slate-400 font-bold text-sm">카메라가 꺼져있습니다</p>
+        // --- 일정 편집 모달 ---
+        const ScheduleEditorModal = ({ editingSchedule, setEditingSchedule, handleSaveSchedule }) => {
+            const [formData, setFormData] = useState({ title: '', price: 0, expected: 0, date: '' });
+            useEffect(() => { if(editingSchedule) setFormData(editingSchedule); }, [editingSchedule]);
+            if (!editingSchedule) return null;
+
+            return (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[200] p-6 animate-fade-in">
+                    <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                            <h3 className="font-black text-slate-900 text-lg">{editingSchedule.id ? '일정 수정' : '새 일정'}</h3>
+                            <button onClick={() => setEditingSchedule(null)} className="text-slate-400 hover:text-slate-600 transition-colors"><Icon name="x" size={24}/></button>
                         </div>
-                    )}
-                </div>
-
-                <div className="flex gap-3">
-                    <button onClick={()=>setScannerActive(!scannerActive)} className={`flex-1 py-4 rounded-xl font-bold text-white shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2 ${scannerActive ? 'bg-rose-500' : 'bg-incar'}`}>
-                        <Icon name={scannerActive ? 'x' : 'camera'}/> {scannerActive ? '스캔 중단' : '스캔 시작'}
-                    </button>
-                    <button onClick={()=>handleScan('1611499_A')} className="px-6 py-4 bg-white border border-slate-200 text-slate-500 font-bold rounded-xl hover:bg-slate-50 active:scale-95 text-xs">테스트</button>
-                </div>
-            </div>
-        );
-
-        // --- [화면 3] 관리 뷰 (유지보수) ---
-        const ManageView = ({ schedules, setEditingSchedule, handleDeleteSchedule, handleInitializeDB }) => (
-            <div className="space-y-6 animate-fade-in pb-24 md:pb-8">
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-card flex justify-between items-center">
-                    <div><h2 className="text-xl font-bold text-slate-900">일정 관리</h2><p className="text-sm text-slate-500">행사 일정 및 지급액 설정</p></div>
-                    <button onClick={()=>setEditingSchedule({id:'',title:'',price:0,type:'BOARDING'})} className="bg-incar text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-md flex items-center gap-2 active:scale-95 transition-transform"><Icon name="plus" size={18}/> 추가</button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {schedules.map(s => (
-                        <div key={s.id} className="p-5 bg-white border border-slate-200 rounded-2xl shadow-sm flex justify-between items-center hover:border-incar transition-colors">
+                        <div className="p-8 space-y-4">
                             <div>
-                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded border mb-1 inline-block ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':'탑승'}</span>
-                                <h4 className="font-bold text-slate-800">{s.title}</h4>
-                                <p className="text-xs text-slate-400 font-medium">{s.type==='PAYMENT'?`$${s.price}`:'인원체크'}</p>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">날짜</label>
+                                <input type="date" value={formData.date || ''} onChange={e=>setFormData({...formData, date: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:ring-2 focus:ring-incar outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">일정명</label>
+                                <input type="text" value={formData.title} onChange={e=>setFormData({...formData, title: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:ring-2 focus:ring-incar outline-none" />
                             </div>
                             <div className="flex gap-2">
-                                <button onClick={()=>setEditingSchedule(s)} className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:text-incar"><Icon name="edit" size={16}/></button>
-                                <button onClick={()=>handleDeleteSchedule(s.id)} className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:text-rose-500"><Icon name="trash" size={16}/></button>
+                                {['BOARDING', 'PAYMENT'].map(type => (
+                                    <button key={type} onClick={()=>setFormData(prev => ({...prev, type}))} className={`flex-1 py-3 rounded-xl text-xs font-black transition-all ${formData.type === type ? 'bg-white text-incar shadow-sm ring-2 ring-incar' : 'bg-slate-100 text-slate-500'}`}>
+                                        {type === 'PAYMENT' ? '💰 지급' : '🚌 탑승'}
+                                    </button>
+                                ))}
                             </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">예상 인원</label>
+                                    <input type="number" value={formData.expected} onChange={e=>setFormData({...formData, expected: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:ring-2 focus:ring-incar outline-none text-center" />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">1인 금액($)</label>
+                                    <input type="number" value={formData.price} onChange={e=>setFormData({...formData, price: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:ring-2 focus:ring-incar outline-none text-center" disabled={formData.type !== 'PAYMENT'} />
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6 border-t border-slate-100 flex gap-3 bg-slate-50/50">
+                            <button onClick={() => setEditingSchedule(null)} className="flex-1 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50">취소</button>
+                            <button onClick={() => handleSaveSchedule(editingSchedule.id, formData)} className="flex-1 py-4 bg-incar text-white font-black rounded-2xl shadow-lg hover:bg-incar-dark">저장</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- [화면 1] 대시보드 ---
+        const DashboardView = ({ stats, schedules, currentSessionId, logs, handleRefresh }) => {
+            const groupedSchedules = useMemo(() => {
+                const groups = {};
+                sortSchedules([...schedules]).forEach(s => {
+                    const date = s.date || '날짜 미정';
+                    if (!groups[date]) groups[date] = [];
+                    groups[date].push(s);
+                });
+                return groups;
+            }, [schedules]);
+
+            return (
+                <div className="space-y-8 animate-fade-in pb-24 md:pb-8">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div className="bg-white p-8 rounded-[2rem] border-t-8 border-incar shadow-card hover:shadow-xl transition-all group">
+                            <div className="flex justify-between items-start mb-4">
+                                <p className="text-xs text-slate-400 font-black uppercase tracking-widest">Total Scans</p>
+                                <div className="p-3 bg-indigo-50 rounded-2xl text-incar group-hover:scale-110 transition-transform"><Icon name="users" size={24} /></div>
+                            </div>
+                            <h3 className="text-5xl font-black text-slate-900 tracking-tighter leading-none mb-2">{stats.totalCount}<span className="text-xl font-bold text-slate-300 ml-1">명</span></h3>
+                        </div>
+                        <div className="bg-white p-8 rounded-[2rem] border-t-8 border-emerald-500 shadow-card hover:shadow-xl transition-all group">
+                            <div className="flex justify-between items-start mb-4">
+                                <p className="text-xs text-slate-400 font-black uppercase tracking-widest">Total Settle</p>
+                                <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600 group-hover:scale-110 transition-transform"><Icon name="dollar" size={24} /></div>
+                            </div>
+                            <h3 className="text-5xl font-black text-slate-900 tracking-tighter leading-none mb-2">${stats.totalAmount.toLocaleString()}</h3>
+                        </div>
+                        <div className="bg-incar-gradient p-8 rounded-[2rem] shadow-2xl border-t-8 border-blue-400 text-white relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 p-4 opacity-10"><Icon name="layout" size={120} /></div>
+                            <p className="text-xs text-blue-200 font-black uppercase tracking-widest mb-3">Live Session</p>
+                            <h3 className="text-xl font-bold truncate mb-6 pb-4 border-b border-white/10">{schedules.find(s=>s.id===currentSessionId)?.title || '세션 미선택'}</h3>
+                            <div className="flex justify-between items-end">
+                                <span className="text-5xl font-black">{stats.currentCount}<span className="text-xl ml-2 font-bold opacity-70">명</span></span>
+                                <div className="flex items-center gap-1.5 text-[10px] font-black bg-white/20 px-3 py-1.5 rounded-full"><div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div> LIVE</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-8 rounded-[2rem] shadow-card border border-slate-200">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="font-black text-xl text-slate-900 flex items-center gap-3">
+                                <div className="w-2 h-8 bg-incar rounded-full"></div> 일자별 현황 리포트
+                            </h3>
+                            <button onClick={()=>window.print()} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-bold text-xs hover:bg-slate-200 flex items-center gap-2">
+                                <Icon name="layout" size={14}/> 출력
+                            </button>
+                        </div>
+                        {Object.entries(groupedSchedules).sort().map(([date, scheds]) => (
+                            <div key={date} className="mb-8 last:mb-0">
+                                <h4 className="text-xs font-black text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-4 shadow-sm">{date}</h4>
+                                <div className="overflow-x-auto rounded-xl border border-slate-200">
+                                    <table className="w-full text-left data-table">
+                                        <thead>
+                                            <tr>
+                                                <th className="w-1/3">일정명</th>
+                                                <th className="text-center">구분</th>
+                                                <th className="text-right">예약</th>
+                                                <th className="text-right">실제</th>
+                                                <th className="text-right">예상액</th>
+                                                <th className="text-right">지급액</th>
+                                                <th className="text-center">차이</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {scheds.map(s => {
+                                                const actualCount = logs.filter(l => l.sessionId === s.id).length;
+                                                const actualAmount = logs.filter(l => l.sessionId === s.id).reduce((sum, l) => sum + (l.amount||0), 0);
+                                                const expectedAmount = s.type === 'PAYMENT' ? (s.price * s.expected) : 0;
+                                                const diff = actualCount - s.expected;
+                                                return (
+                                                    <tr key={s.id}>
+                                                        <td className="font-bold text-slate-700">{s.title}</td>
+                                                        <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-black border ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':'탑승'}</span></td>
+                                                        <td className="text-right text-slate-500">{s.expected}</td>
+                                                        <td className="text-right font-bold text-slate-900">{actualCount}</td>
+                                                        <td className="text-right text-slate-400">{s.type==='PAYMENT' ? `$${expectedAmount.toLocaleString()}` : '-'}</td>
+                                                        <td className="text-right font-bold text-emerald-600">{s.type==='PAYMENT' ? `$${actualAmount.toLocaleString()}` : '-'}</td>
+                                                        <td className="text-center">{diff === 0 ? <span className="text-emerald-500 font-bold text-xs">OK</span> : diff < 0 ? <span className="text-rose-500 font-bold text-xs">{diff}</span> : <span className="text-blue-500 font-bold text-xs">+{diff}</span>}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-card overflow-hidden">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
+                            <h3 className="font-black text-lg text-slate-900 flex items-center gap-3"><div className="w-2 h-6 bg-incar rounded-full"></div> 실시간 로그</h3>
+                            <button onClick={handleRefresh} className="text-xs border px-4 py-2 rounded-xl hover:bg-slate-50 flex items-center gap-2 font-bold text-slate-500"><Icon name="refresh" size={14}/> 새로고침</button>
+                        </div>
+                        <div className="overflow-x-auto max-h-[400px]">
+                            <table className="w-full text-left text-sm">
+                                <thead className="bg-slate-50 text-slate-500 text-xs font-bold uppercase sticky top-0">
+                                    <tr><th className="p-5 pl-8">Time</th><th className="p-5">User</th><th className="p-5">Session</th><th className="p-5">Type</th><th className="p-5 pr-8 text-right">Balance</th></tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100">
+                                    {logs.length === 0 ? <tr><td colSpan="5" className="p-20 text-center text-slate-300 font-bold italic">데이터가 없습니다.</td></tr> : logs.map(log => (
+                                        <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="p-5 pl-8 font-mono text-xs text-slate-400 font-medium">{log.displayTime.split(' ')[1]||log.displayTime}</td>
+                                            <td className="p-5 font-bold text-slate-800">{log.name} <span className="text-xs text-slate-400 font-normal">({log.affiliation})</span></td>
+                                            <td className="p-5 text-slate-600 font-bold text-xs">{log.sessionTitle}</td>
+                                            <td className="p-5"><span className={`px-3 py-1 rounded-full text-[10px] font-black border ${log.action==='지급'?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{log.action}</span></td>
+                                            <td className="p-5 pr-8 text-right font-black text-slate-900 text-base">{log.amount>0 ? `$${log.amount}` : '-'}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- [화면 2] 스캔 뷰 ---
+        const ScanView = ({ mode, schedules, currentSessionId, setCurrentSessionId, stats, scannerActive, setScannerActive, logs, handleScan }) => {
+            const filteredSchedules = useMemo(() => {
+                if (mode === 'PAYMENT') return schedules.filter(s => s.price > 0);
+                return schedules; 
+            }, [mode, schedules]);
+
+            useEffect(() => {
+                if (filteredSchedules.length > 0) {
+                     const exists = filteredSchedules.find(s => s.id === currentSessionId);
+                     if (!exists) setCurrentSessionId(filteredSchedules[0].id);
+                } else {
+                    setCurrentSessionId('');
+                }
+            }, [mode, filteredSchedules]);
+
+            const currentCount = logs.filter(l => l.sessionId === currentSessionId && (mode === 'PAYMENT' ? l.action === '지급' : l.action === '탑승')).length;
+            
+            return (
+                <div className="space-y-6 animate-fade-in max-w-lg mx-auto pb-24 md:pb-8">
+                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-card">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className={`font-black flex items-center gap-3 text-lg leading-none ${mode==='PAYMENT'?'text-emerald-700':'text-incar'}`}>
+                                <Icon name={mode==='PAYMENT'?'dollar':'bus'} size={24} /> {mode==='PAYMENT'?'비용 지급':'탑승 확인'}
+                            </h3>
+                            <span className="text-xs font-black text-slate-400 bg-slate-100 px-3 py-1.5 rounded-xl uppercase">{new Date().toLocaleDateString('ko-KR')}</span>
+                        </div>
+                        <div className="mb-6">
+                            <label className="block text-[10px] font-black text-slate-400 mb-3 tracking-widest uppercase ml-1">Target Session</label>
+                            <div className="relative group">
+                                <select value={currentSessionId} onChange={(e) => setCurrentSessionId(e.target.value)} className={`w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] font-black text-slate-900 appearance-none focus:outline-none focus:ring-4 transition-all text-xl shadow-inner group-hover:border-opacity-50 ${mode==='PAYMENT'?'focus:ring-emerald-500/10 group-hover:border-emerald-500':'focus:ring-incar/10 group-hover:border-incar'}`}>
+                                    {filteredSchedules.length === 0 ? <option value="">가능한 일정이 없습니다</option> : filteredSchedules.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                                </select>
+                                <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none group-hover:text-slate-500"><Icon name="chevronRight" size={24} className="rotate-90" /></div>
+                            </div>
+                        </div>
+                        <div className={`flex items-center justify-between p-5 rounded-[1.5rem] border border-dashed ${mode==='PAYMENT'?'bg-emerald-50 border-emerald-200':'bg-indigo-50 border-indigo-200'}`}>
+                            <span className={`font-black uppercase tracking-tighter ${mode==='PAYMENT'?'text-emerald-700':'text-incar'}`}>완료 인원</span>
+                            <span className="font-black text-slate-900 text-xl leading-none">{currentCount}<span className="text-xs font-bold text-slate-400 ml-1">명</span></span>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-[3rem] border border-slate-200 shadow-card p-8 flex flex-col items-center justify-center relative overflow-hidden group min-h-[400px]">
+                        {scannerActive ? (
+                            <div id="reader" className="w-full h-full relative z-10 animate-fade-in shadow-2xl overflow-hidden rounded-[2rem]"></div>
+                        ) : (
+                            <div className="text-center space-y-6 animate-fade-in">
+                                <div className={`w-40 h-40 rounded-[3rem] flex items-center justify-center text-slate-200 mx-auto ring-1 ring-slate-100 shadow-inner ${mode==='PAYMENT'?'bg-emerald-50 text-emerald-200':'bg-indigo-50 text-indigo-200'}`}><Icon name="camera" size={80}/></div>
+                                <div className="space-y-2">
+                                    <h4 className="font-black text-slate-800 text-xl">카메라 대기 중</h4>
+                                    <p className="text-sm text-slate-400 font-medium">아래 버튼을 눌러 스캔을 시작하세요</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                        {!scannerActive ? (
+                            <button onClick={()=>setScannerActive(true)} className={`w-full py-5 text-white font-black rounded-3xl shadow-2xl active:scale-95 transition-all text-xl flex items-center justify-center gap-4 ${mode==='PAYMENT'?'bg-emerald-600 shadow-emerald-900/30 hover:bg-emerald-700':'bg-incar shadow-indigo-900/30 hover:bg-incar-dark'}`}><Icon name="camera" size={28}/> 스캔 시작하기</button>
+                        ) : (
+                            <button onClick={()=>setScannerActive(false)} className="w-full py-5 bg-rose-500 text-white font-black rounded-3xl shadow-xl active:scale-95 transition-all text-xl flex items-center justify-center gap-4"><Icon name="x" size={28}/> 스캔 중단</button>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- [화면 4] 관리 뷰 ---
+        const ManageView = ({ schedules, setEditingSchedule, handleDeleteSchedule, handleInitializeDB, handleScan }) => (
+            <div className="space-y-6 animate-fade-in pb-24 md:pb-8">
+                <div className="bg-white p-8 rounded-[2.5rem] shadow-card flex justify-between items-center border border-slate-100">
+                    <div><h3 className="text-2xl font-black text-slate-900 leading-none">일정 관리</h3><p className="text-sm text-slate-400 font-medium mt-2 uppercase tracking-wide">금액이 $0이면 '탑승' 전용입니다.</p></div>
+                    <button onClick={()=>setEditingSchedule({id:'',title:'',price:0, expected:100, date: new Date().toISOString().split('T')[0]})} className="p-4 bg-incar text-white rounded-2xl shadow-xl hover:bg-incar-dark active:scale-95 transition-all"><Icon name="plus" size={24}/></button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {sortSchedules([...schedules]).map(s => (
+                        <div key={s.id} className="p-6 bg-white rounded-3xl border border-slate-100 shadow-sm flex justify-between items-center group hover:border-incar hover:shadow-xl transition-all duration-300">
+                            <div className="flex items-center gap-4">
+                                <div className={`p-3 rounded-2xl ${s.price > 0 ?'bg-emerald-50 text-emerald-600':'bg-indigo-50 text-incar'}`}><Icon name={s.price > 0 ?'dollar':'camera'} size={24}/></div>
+                                <div>
+                                    <div className="flex gap-2 mb-1">
+                                        <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{s.date || '날짜미정'}</span>
+                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border inline-block ${s.price > 0 ?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.price > 0 ?'지급/탑승':'탑승전용'}</span>
+                                    </div>
+                                    <h4 className="font-black text-slate-800">{s.title}</h4>
+                                    <p className="text-xs text-slate-400 font-bold mt-1">예약: {s.expected}명 {s.price > 0 ? ` / $${s.price}` : ''}</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0"><button onClick={()=>setEditingSchedule(s)} className="p-3 bg-slate-50 rounded-xl hover:text-incar transition-colors"><Icon name="edit" size={16}/></button><button onClick={()=>handleDeleteSchedule(s.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors"><Icon name="trash" size={16}/></button></div>
                         </div>
                     ))}
                 </div>
 
-                <div className="p-6 bg-slate-800 rounded-2xl text-white flex justify-between items-center shadow-lg mt-8">
-                    <div><h4 className="font-bold">시스템 유지보수</h4><p className="text-xs text-slate-400">데이터 오류 시 초기화</p></div>
-                    <button onClick={handleInitializeDB} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold flex items-center gap-2"><Icon name="database" size={14}/> DB 초기화</button>
+                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-card mt-6">
+                    <h3 className="font-bold text-slate-800 mb-4 text-lg">시스템 기능 테스트</h3>
+                    <button onClick={()=>handleScan('1611499_A')} className="w-full py-3 bg-white border border-slate-200 text-slate-500 rounded-xl font-bold text-sm hover:bg-slate-50 active:scale-95 transition-all">
+                        스캔 시뮬레이션 (홍길동)
+                    </button>
+                    <p className="text-xs text-slate-400 mt-2">* 현재 선택된 세션(탑승/지급)을 기준으로 동작합니다.</p>
+                </div>
+
+                <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white flex justify-between items-center shadow-2xl relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-incar opacity-0 group-hover:opacity-20 transition-opacity"></div>
+                    <div className="relative z-10"><h4 className="font-black text-lg leading-none uppercase tracking-widest mb-1">Database Maintenance</h4><p className="text-xs text-slate-400 font-medium italic">ISC 3박 4일 일정으로 초기화합니다.</p></div>
+                    <button onClick={handleInitializeDB} className="px-8 py-4 bg-white text-slate-900 rounded-2xl font-black text-xs hover:bg-slate-100 transition-all shadow-lg active:scale-95">서버 DB 초기화</button>
                 </div>
             </div>
         );
 
-        // --- 모달 컴포넌트 ---
-        const ScheduleEditorModal = ({ editingSchedule, setEditingSchedule, handleSaveSchedule }) => {
-            const [formData, setFormData] = useState({ title: '', price: 0, type: 'BOARDING' });
-            useEffect(() => { if(editingSchedule) setFormData(editingSchedule); }, [editingSchedule]);
-            if (!editingSchedule) return null;
-            return (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-6 animate-fade-in">
-                    <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-bold text-lg text-slate-900">{editingSchedule.id ? '일정 수정' : '새 일정'}</h3>
-                            <button onClick={()=>setEditingSchedule(null)}><Icon name="x" className="text-slate-400"/></button>
-                        </div>
-                        <div className="space-y-4 mb-6">
-                            <input type="text" value={formData.title} onChange={e=>setFormData({...formData, title: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:border-incar" placeholder="일정명" />
-                            <div className="flex gap-2">
-                                {['BOARDING', 'PAYMENT'].map(type => (
-                                    <button key={type} onClick={()=>setFormData({...formData, type})} className={`flex-1 py-3 rounded-xl text-xs font-bold ${formData.type===type?'bg-incar text-white':'bg-slate-100 text-slate-500'}`}>{type==='PAYMENT'?'지급':'탑승'}</button>
-                                ))}
-                            </div>
-                            {formData.type === 'PAYMENT' && <input type="number" value={formData.price} onChange={e=>setFormData({...formData, price: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-900 outline-none focus:border-incar" placeholder="금액" />}
-                        </div>
-                        <button onClick={()=>handleSaveSchedule(editingSchedule.id, formData)} className="w-full py-4 bg-incar text-white font-bold rounded-xl shadow-lg">저장하기</button>
-                    </div>
-                </div>
-            );
-        };
-
-        const ScanResultModal = ({ scanResult, setScanResult }) => {
-            if (!scanResult) return null;
-            const { status, msg, subMsg, amount, user } = scanResult;
-            useEffect(() => { if (status === 'success') setTimeout(() => setScanResult(null), 2000); }, [status]);
-            const color = status === 'success' ? 'text-emerald-500' : status === 'duplicate' ? 'text-amber-500' : 'text-rose-500';
-            
-            return (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-6 animate-fade-in">
-                    <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-8 text-center">
-                        <div className={`mx-auto mb-4 ${color}`}><Icon name={status==='success'?'check':'alert'} size={64}/></div>
-                        <h3 className="text-2xl font-black text-slate-900 mb-1">{msg}</h3>
-                        <p className="text-slate-500 text-sm mb-6">{subMsg}</p>
-                        {user && <div className="bg-slate-50 p-4 rounded-xl text-left border border-slate-100 mb-6">
-                            <div className="font-bold text-slate-900 text-lg">{user.name}</div>
-                            <div className="text-xs text-slate-500">{user.affiliation} · {user.bus}</div>
-                            {amount > 0 && <div className="mt-2 pt-2 border-t border-slate-200 flex justify-between text-emerald-600 font-bold"><span>지급</span><span>${amount}</span></div>}
-                        </div>}
-                        <button onClick={()=>setScanResult(null)} className="w-full py-4 bg-slate-900 text-white font-bold rounded-xl">닫기</button>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- [메인 앱] ---
+        // --- [메인 App] ---
         function App() {
             const [user, setUser] = useState(null);
             const [db, setDb] = useState(null);
@@ -299,18 +461,18 @@
             // 초기화
             useEffect(() => {
                 const init = async () => {
-                    if(firebaseConfig.apiKey) {
-                        try {
+                    try {
+                        if(firebaseConfig.apiKey) {
                             if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
                             const _db = firebase.firestore();
                             setDb(_db);
                             await firebase.auth().signInAnonymously();
                             firebase.auth().onAuthStateChanged(u => { setUser(u); if(!u) setIsLoading(false); });
-                        } catch(e) { console.error(e); initLocal(); }
-                    } else { initLocal(); }
+                        } else { initLocal(); }
+                    } catch(e) { console.error(e); initLocal(); }
                 };
                 init();
-                const resize = () => { setIsMobile(window.innerWidth < 768); if(window.innerWidth < 768 && activeTab === 'dashboard') setActiveTab('scan'); };
+                const resize = () => { setIsMobile(window.innerWidth < 768); if(window.innerWidth < 768 && activeTab === 'dashboard') setActiveTab('boarding'); };
                 window.addEventListener('resize', resize);
                 return () => window.removeEventListener('resize', resize);
             }, []);
@@ -319,23 +481,21 @@
                 setIsLoading(false);
                 const localSched = JSON.parse(localStorage.getItem('inca_schedules') || '[]');
                 const localLogs = JSON.parse(localStorage.getItem('inca_logs') || '[]');
-                const INIT_SCHED = [
-                    { id: 'D1', title: '1일차 공항 미팅', price: 0, type: 'BOARDING' },
-                    { id: 'D2', title: '2일차 중식 (딘타이펑)', price: 30, type: 'PAYMENT' }
-                ];
-                setSchedules(localSched.length ? localSched : INIT_SCHED);
+                if(localSched.length === 0) setSchedules(DEFAULT_SCHEDULES);
+                else setSchedules(localSched);
                 setLogs(localLogs);
-                if(!localSched.length && INIT_SCHED.length) setCurrentSessionId(INIT_SCHED[0].id);
-                else if(localSched.length) setCurrentSessionId(localSched[0].id);
             };
 
             // DB 동기화
             useEffect(() => {
                 if(db && user) {
                     const unsubS = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').onSnapshot(snap => {
-                        const list = snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=>a.id.localeCompare(b.id));
-                        setSchedules(list);
-                        if(list.length && !currentSessionId) setCurrentSessionId(list[0].id);
+                        const list = snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=> (a.date > b.date) ? 1 : -1);
+                        if (list.length === 0) {
+                             setSchedules([]);
+                        } else {
+                            setSchedules(list);
+                        }
                     });
                     const unsubL = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').orderBy('timestamp','desc').onSnapshot(snap => {
                         setLogs(snap.docs.map(d => ({id: d.id, ...d.data()})));
@@ -343,12 +503,26 @@
                     });
                     return () => { unsubS(); unsubL(); };
                 } else if (!db) {
+                    // 로컬 모드 저장
+                    if (schedules.length === 0) setSchedules(DEFAULT_SCHEDULES);
                     localStorage.setItem('inca_schedules', JSON.stringify(schedules));
-                    localStorage.setItem('inca_slogs', JSON.stringify(logs));
+                    localStorage.setItem('inca_logs', JSON.stringify(logs));
                 }
             }, [db, user, schedules, logs]);
 
-            // 로직
+            useEffect(() => {
+                if (scannerActive && (activeTab === 'boarding' || activeTab === 'payment')) {
+                    const html5QrCode = new Html5Qrcode("reader");
+                    const config = { fps: 10, qrbox: { width: 280, height: 280 } };
+                    html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
+                        handleScan(decodedText);
+                        setScannerActive(false);
+                        html5QrCode.stop();
+                    }).catch(err => { console.error("Camera access error:", err); setScannerActive(false); });
+                    return () => { if (html5QrCode.isScanning) html5QrCode.stop().catch(e => {}); };
+                }
+            }, [scannerActive, activeTab]);
+
             const handleScan = async (uid) => {
                 const MOCK_USERS = [
                     { uid: '1611499_A', name: '홍길동', bus: '1호차', affiliation: '본사' },
@@ -358,38 +532,40 @@
                 const sched = schedules.find(s => s.id === currentSessionId);
                 
                 if(!target) return setScanResult({ status: 'error', msg: '미등록', subMsg: 'QR 확인 필요' });
-                if(!sched) return setScanResult({ status: 'error', msg: '일정 선택', subMsg: '관리 탭에서 초기화 필요' });
+                if(!sched) return setScanResult({ status: 'error', msg: '일정 미선택', subMsg: '세션을 선택해주세요.' });
                 
-                if(logs.some(l => l.uid === uid && l.sessionId === currentSessionId)) 
+                const actionType = activeTab === 'payment' ? '지급' : '탑승';
+                
+                if(logs.some(l => l.uid === uid && l.sessionId === currentSessionId && l.action === actionType)) 
                     return setScanResult({ status: 'duplicate', msg: '중복', subMsg: '이미 처리됨', user: target });
 
                 const newLog = {
                     uid: target.uid, name: target.name, affiliation: target.affiliation,
-                    sessionId: sched.id, sessionTitle: sched.title, action: sched.type === 'PAYMENT'?'지급':'탑승',
-                    amount: sched.type === 'PAYMENT' ? sched.price : 0,
+                    sessionId: sched.id, sessionTitle: sched.title, action: actionType,
+                    amount: actionType === '지급' ? sched.price : 0,
                     timestamp: new Date().toISOString(), displayTime: new Date().toLocaleString()
                 };
 
                 if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog);
                 else setLogs(p => [newLog, ...p]);
 
-                setScanResult({ status: 'success', msg: '완료', subMsg: sched.title, amount: newLog.amount, user: target });
+                setScanResult({ status: 'success', msg: actionType + ' 완료', subMsg: sched.title, amount: newLog.amount, user: target });
             };
 
             const handleInitDB = async () => {
-                if(!confirm("초기화 하시겠습니까?")) return;
+                if(!confirm("DB를 초기화하시겠습니까? (ISC 대만 일정 반영)")) return;
                 setIsLoading(true);
-                const INIT = [
-                    { id: 'D1', title: '1일차 공항 미팅', price: 0, type: 'BOARDING' },
-                    { id: 'D2', title: '2일차 중식 (딘타이펑)', price: 30, type: 'PAYMENT' }
-                ];
                 if(db) {
-                    const batch = db.batch();
-                    INIT.forEach(s => batch.set(db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(s.id), s));
-                    await batch.commit();
-                    alert("서버 초기화 완료");
+                    try {
+                        const batch = db.batch();
+                        DEFAULT_SCHEDULES.forEach(s => batch.set(db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(s.id), s));
+                        await batch.commit();
+                        alert("서버 초기화 완료");
+                    } catch(e) { alert("오류: "+e.message); }
                 } else {
-                    setSchedules(INIT); setLogs([]); localStorage.clear(); alert("로컬 초기화 완료");
+                    setSchedules(DEFAULT_SCHEDULES); setLogs([]); localStorage.clear();
+                    localStorage.setItem('inca_schedules', JSON.stringify(DEFAULT_SCHEDULES));
+                    alert("로컬 초기화 완료");
                 }
                 setIsLoading(false);
             };
@@ -397,10 +573,16 @@
             const handleSaveSched = async (id, data) => {
                 const sid = id || `S_${Date.now()}`;
                 const newData = { ...data, id: sid };
-                if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(sid).set(newData);
-                else {
+                
+                if(db) {
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(sid).set(newData);
+                } else {
+                    // [로컬 모드 수정] 기존 리스트에서 id가 다른 것만 남기고 새 데이터 추가 후 정렬
                     const next = schedules.filter(s => s.id !== id);
-                    setSchedules([...next, newData]);
+                    const updatedList = [...next, newData];
+                    // 날짜순 정렬 보장
+                    sortSchedules(updatedList);
+                    setSchedules(updatedList);
                 }
                 setEditingSchedule(null);
             };
@@ -431,8 +613,9 @@
                             </div>
                             <nav className="flex-1 px-4 py-6 space-y-2">
                                 <button onClick={()=>setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab==='dashboard'?'bg-white text-incar shadow-lg':'text-blue-200 hover:bg-white/10'}`}><Icon name="layout"/> 대시보드</button>
-                                <button onClick={()=>setActiveTab('scan')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab==='scan'?'bg-white text-incar shadow-lg':'text-blue-200 hover:bg-white/10'}`}><Icon name="qr"/> 스캔 모니터링</button>
-                                <button onClick={()=>setActiveTab('manage')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab==='manage'?'bg-white text-incar shadow-lg':'text-blue-200 hover:bg-white/10'}`}><Icon name="settings"/> 유지보수/설정</button>
+                                <button onClick={()=>setActiveTab('boarding')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab==='boarding'?'bg-white text-incar shadow-lg':'text-blue-200 hover:bg-white/10'}`}><Icon name="bus"/> 탑승 확인</button>
+                                <button onClick={()=>setActiveTab('payment')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab==='payment'?'bg-white text-incar shadow-lg':'text-blue-200 hover:bg-white/10'}`}><Icon name="dollar"/> 비용 지급</button>
+                                <button onClick={()=>setActiveTab('manage')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab==='manage'?'bg-white text-incar shadow-lg':'text-blue-200 hover:bg-white/10'}`}><Icon name="settings"/> 유지보수</button>
                             </nav>
                             <div className="p-5 border-t border-white/10 flex items-center gap-2 text-xs font-bold text-blue-200">
                                 <div className={`w-2.5 h-2.5 rounded-full ${db?'bg-emerald-400':'bg-amber-400'}`}></div> {db?'Server Online':'Local Mode'}
@@ -443,18 +626,19 @@
                     <div className="flex-1 flex flex-col relative bg-slate-50">
                         {/* Header */}
                         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-10 shadow-sm">
-                            <h2 className="text-lg font-bold text-slate-800">{activeTab==='dashboard'?'통합 대시보드':activeTab==='scan'?'스캔 모니터링':'시스템 유지보수'}</h2>
+                            <h2 className="text-lg font-bold text-slate-800">{activeTab==='dashboard'?'통합 대시보드':activeTab==='boarding'?'탑승 스캔':activeTab==='payment'?'지급 스캔':'시스템 유지보수'}</h2>
                             {isMobile && <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-bold text-xs">P</div>}
                         </header>
 
                         {/* Main Content */}
                         <main className="flex-1 overflow-y-auto p-4 pb-24 md:pb-8">
-                            <div className="max-w-6xl mx-auto">
+                            <div className="max-w-7xl mx-auto">
                                 {isLoading ? <div className="flex flex-col items-center justify-center h-96 text-slate-400"><div className="loader mb-4"></div>로딩중...</div> : (
                                     <Fragment>
-                                        {activeTab === 'dashboard' && <DashboardView stats={stats} schedules={schedules} currentSessionId={currentSessionId} logs={logs} />}
-                                        {activeTab === 'scan' && <ScanView schedules={schedules} currentSessionId={currentSessionId} setCurrentSessionId={setCurrentSessionId} stats={stats} scannerActive={scannerActive} setScannerActive={setScannerActive} handleScan={handleScan} />}
-                                        {activeTab === 'manage' && <ManageView schedules={schedules} setEditingSchedule={setEditingSchedule} handleDeleteSchedule={handleDeleteSchedule} handleInitializeDB={handleInitDB} />}
+                                        {activeTab === 'dashboard' && <DashboardView stats={stats} schedules={schedules} currentSessionId={currentSessionId} logs={logs} handleRefresh={()=>window.location.reload()} />}
+                                        {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} currentSessionId={currentSessionId} setCurrentSessionId={setCurrentSessionId} stats={stats} scannerActive={scannerActive} setScannerActive={setScannerActive} logs={logs} handleScan={handleScan} />}
+                                        {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} currentSessionId={currentSessionId} setCurrentSessionId={setCurrentSessionId} stats={stats} scannerActive={scannerActive} setScannerActive={setScannerActive} logs={logs} handleScan={handleScan} />}
+                                        {activeTab === 'manage' && <ManageView schedules={schedules} setEditingSchedule={setEditingSchedule} handleDeleteSchedule={handleDelSched} handleInitializeDB={handleInitDB} handleScan={handleScan} />}
                                     </Fragment>
                                 )}
                             </div>
@@ -464,7 +648,8 @@
                         {isMobile && (
                             <nav className="md:hidden bg-white border-t border-slate-200 flex justify-around pb-safe pt-3 px-2 shadow-[0_-5px_15px_rgba(0,0,0,0.05)] fixed bottom-0 w-full z-50 rounded-t-3xl">
                                 <button onClick={()=>setActiveTab('dashboard')} className={`flex-1 flex flex-col items-center gap-1 ${activeTab==='dashboard'?'text-incar':'text-slate-400'}`}><Icon name="layout"/><span className="text-[10px] font-bold">현황</span></button>
-                                <button onClick={()=>setActiveTab('scan')} className={`flex-1 flex flex-col items-center gap-1 ${activeTab==='scan'?'text-incar':'text-slate-400'}`}><Icon name="qr"/><span className="text-[10px] font-bold">스캔</span></button>
+                                <button onClick={()=>setActiveTab('boarding')} className={`flex-1 flex flex-col items-center gap-1 ${activeTab==='boarding'?'text-incar':'text-slate-400'}`}><Icon name="bus"/><span className="text-[10px] font-bold">탑승</span></button>
+                                <button onClick={()=>setActiveTab('payment')} className={`flex-1 flex flex-col items-center gap-1 ${activeTab==='payment'?'text-incar':'text-slate-400'}`}><Icon name="dollar"/><span className="text-[10px] font-bold">지급</span></button>
                                 <button onClick={()=>setActiveTab('manage')} className={`flex-1 flex flex-col items-center gap-1 ${activeTab==='manage'?'text-incar':'text-slate-400'}`}><Icon name="settings"/><span className="text-[10px] font-bold">관리</span></button>
                             </nav>
                         )}
@@ -480,5 +665,4 @@
         root.render(<App />);
     </script>
 </body>
-
 </html>
