@@ -3,663 +3,1034 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>INCARPASS - 통합 운영 시스템</title>
+    <title>INCARPASS PRO - Universal Event Platform</title>
     
-    <!-- 1. 라이브러리 -->
+    <!-- 필수 라이브러리 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- 로컬 QR 생성을 위한 라이브러리 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     
-    <!-- 2. Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-
-    <!-- 3. 스타일 -->
+    <!-- 스타일 -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
     <script>
         tailwind.config = {
             theme: {
                 extend: {
-                    colors: { incar: '#27398C', 'incar-dark': '#1a2b6d', 'incar-light': '#eef2ff' },
-                    boxShadow: { 'card': '0 4px 15px rgba(0,0,0,0.05)', 'nav': '0 -4px 20px rgba(0,0,0,0.05)' }
+                    colors: { 
+                        incar: '#27398C', 
+                        'incar-dark': '#1a2b6d', 
+                        'incar-light': '#eef2ff',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444'
+                    },
+                    boxShadow: { 'card': '0 4px 20px rgba(39, 57, 140, 0.08)' }
                 }
             }
         }
     </script>
     <style>
-        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f8fafc; color: #1e293b; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f1f5f9; color: #334155; overflow: hidden; -webkit-tap-highlight-color: transparent; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         
-        select, input { background-color: white !important; color: #1e293b !important; }
-        option { color: #1e293b !important; background-color: #ffffff !important; }
-
-        /* 엑셀 스타일 테이블 */
-        .data-table th { background-color: #f8fafc; color: #64748b; font-weight: 800; font-size: 0.7rem; text-transform: uppercase; padding: 12px 16px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
-        .data-table td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; font-weight: 500; }
+        .scan-line { width: 100%; height: 2px; background: #ef4444; position: absolute; top: 0; left: 0; animation: scan 2s infinite linear; z-index: 20; box-shadow: 0 0 4px #ef4444; }
+        @keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }
+        
+        /* PC/Mobile Layout Utilities */
+        .mobile-only { display: block; }
+        .pc-only { display: none; }
+        @media (min-width: 768px) {
+            .mobile-only { display: none; }
+            .pc-only { display: block; }
+        }
+        
+        /* Table Styles */
+        .data-table th { background-color: #f8fafc; color: #64748b; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; padding: 12px 16px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+        .data-table td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; font-weight: 600; color: #334155; }
         .data-table tr:hover td { background-color: #f8fafc; }
-        
-        #reader { width: 100%; border-radius: 1.5rem; overflow: hidden; border: none; }
-        #reader video { object-fit: cover; border-radius: 1.5rem; }
+
+        /* Print Styles */
+        @media print {
+            body { background-color: white; overflow: visible; }
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            .page-break { break-after: page; page-break-after: always; margin: 0 auto; }
+            #root { height: auto; overflow: visible; }
+            @page { margin: 0; }
+        }
+        .print-only { display: none; }
     </style>
 </head>
-<body class="h-screen flex flex-col md:flex-row bg-slate-50">
-
+<body class="h-screen w-screen flex flex-col md:flex-row bg-slate-50">
     <div id="root" class="h-full w-full"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, Fragment } = React;
+        const CURRENCY = '$';
 
-        // ============================================================
-        // ▼▼▼ [설정] 파이어베이스 키 입력란 ▼▼▼
-        // ============================================================
-        const firebaseConfig = {
-            apiKey: "", 
-            authDomain: "",
-            projectId: "",
-            storageBucket: "",
-            messagingSenderId: "",
-            appId: ""
-        };
-        const SYSTEM_APP_ID = 'inca-prod-v1';
-        
-        const DEFAULT_SCHEDULES = [
-            { id: 'D1_1', date:'2026-03-11', title: '1일차 공항 미팅 (08:00)', price: 0, type: 'BOARDING', expected: 100 },
-            { id: 'D1_2', date:'2026-03-11', title: '1일차 단수이 투어', price: 0, type: 'BOARDING', expected: 100 },
-            { id: 'D1_3', date:'2026-03-11', title: '1일차 석식 (타카오 1972)', price: 30, type: 'PAYMENT', expected: 100 },
-            { id: 'D1_4', date:'2026-03-11', title: '1일차 타이베이 101', price: 0, type: 'BOARDING', expected: 100 },
-            { id: 'D2_1', date:'2026-03-12', title: '2일차 선택관광 집결', price: 0, type: 'BOARDING', expected: 100 },
-            { id: 'D2_2', date:'2026-03-12', title: '2일차 인카 만찬 (필수)', price: 0, type: 'BOARDING', expected: 100 },
-            { id: 'D3_1', date:'2026-03-13', title: '3일차 야류 해양공원', price: 0, type: 'BOARDING', expected: 100 },
-            { id: 'D3_2', date:'2026-03-13', title: '3일차 중식 (씨푸드)', price: 30, type: 'PAYMENT', expected: 100 },
-            { id: 'D3_3', date:'2026-03-13', title: '3일차 스펀 천등 날리기', price: 0, type: 'BOARDING', expected: 100 },
-            { id: 'D3_4', date:'2026-03-13', title: '3일차 지우펀 야경', price: 0, type: 'BOARDING', expected: 100 },
-            { id: 'D4_1', date:'2026-03-14', title: '4일차 공항 샌딩', price: 0, type: 'BOARDING', expected: 100 }
-        ];
-
-        // --- 공통: 정렬 함수 (날짜순 -> ID순) ---
-        const sortSchedules = (list) => {
-            return list.sort((a, b) => {
-                if (a.date !== b.date) return a.date > b.date ? 1 : -1;
-                return a.id.localeCompare(b.id);
-            });
-        };
-
-        // --- 아이콘 ---
+        // --- 아이콘 컴포넌트 ---
         const Icon = ({ name, size = 20, className = "" }) => {
             const icons = {
-                camera: <g><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></g>,
-                qr: <g><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><path d="M3 14h7v7H3z"/></g>,
-                layout: <g><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></g>,
+                menu: <path d="M3 12h18M3 6h18M3 18h18"/>,
+                dashboard: <path d="M3 3h7v7H3V3m11 0h7v7h-7V3m0 11h7v7h-7v-7M3 14h7v7H3v-7"/>,
+                qr: <path d="M3 7V3h4M3 17v4h4M17 3h4v4M21 17v-4h4m-4 4h-4M7 11h2v2H7v-2m4 0h2v2h-2v-2m4 0h2v2h-2v-2"/>,
+                users: <g><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></g>,
+                money: <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>,
+                edit: <g><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></g>,
+                settings: <g><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></g>,
                 check: <polyline points="20 6 9 17 4 12"/>,
                 x: <g><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></g>,
-                users: <g><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></g>,
-                dollar: <g><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></g>,
-                settings: <g><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></g>,
-                plus: <g><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></g>,
-                edit: <g><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></g>,
-                trash: <g><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></g>,
-                refresh: <g><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></g>,
-                database: <g><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></g>,
-                activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>,
-                calendar: <g><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></g>,
-                alert: <g><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></g>,
-                chevronRight: <polyline points="9 18 15 12 9 6"/>,
-                bus: <g><path d="M19 17h2l.64-2.54c.24-1.12.36-2.26.36-3.41V8.5a4.5 4.5 0 0 0-4.5-4.5h-11A4.5 4.5 0 0 0 2 8.5v2.55c0 1.15.12 2.29.36 3.41L3 17h2"/><path d="M15 17v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2"/><path d="M16 8.5h.01"/><path d="M8 8.5h.01"/></g>,
-                table: <g><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7m0-18H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m0-18v18"/></g>
+                alert: <g><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/></g>,
+                history: <g><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></g>,
+                upload: <g><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></g>,
+                download: <g><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></g>,
+                desktop: <g><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></g>,
+                mobile: <g><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12" y2="18"/></g>,
+                table: <g><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7m0-18H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m0-18v18"/></g>,
+                print: <g><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></g>
             };
-            return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="10"/>}</svg>;
+            return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="2"/>}</svg>;
         };
 
-        // --- 결과 모달 ---
-        const ScanResultModal = ({ scanResult, setScanResult }) => {
-            if (!scanResult) return null;
-            const { status, msg, subMsg, amount, user } = scanResult;
-
+        // --- 스캔 결과 모달 ---
+        const ResultModal = ({ result, onClose }) => {
+            if (!result) return null;
+            const { status, msg, subMsg, user, logs } = result;
+            const isSuccess = status === 'success';
+            
             useEffect(() => {
-                if (status === 'success') {
-                    const timer = setTimeout(() => setScanResult(null), 2500);
+                if(isSuccess) {
+                    const timer = setTimeout(onClose, 2000);
                     return () => clearTimeout(timer);
                 }
-            }, [status]);
-
-            const colors = {
-                success: { bg: 'bg-emerald-50', text: 'text-emerald-700', icon: 'text-emerald-500', btn: 'bg-emerald-600' },
-                duplicate: { bg: 'bg-amber-50', text: 'text-amber-700', icon: 'text-amber-500', btn: 'bg-amber-600' },
-                error: { bg: 'bg-rose-50', text: 'text-rose-700', icon: 'text-rose-500', btn: 'bg-rose-600' }
-            };
-            const theme = colors[status] || colors.error;
+            }, [isSuccess]);
 
             return (
-                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[200] p-6 animate-fade-in">
-                    <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden ring-1 ring-black/5">
-                        <div className={`p-10 flex flex-col items-center text-center ${theme.bg}`}>
-                            <Icon name={status === 'success' ? 'check' : status === 'duplicate' ? 'alert' : 'x'} size={80} className={`${theme.icon} mb-4 drop-shadow-sm`} />
-                            <h3 className={`text-2xl font-black ${theme.text} mb-1`}>{msg}</h3>
-                            <p className="text-slate-500 text-sm font-medium">{subMsg}</p>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-slide-up no-print">
+                    <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+                        <div className={`p-8 text-center flex flex-col items-center justify-center ${isSuccess ? 'bg-emerald-50' : (status==='duplicate'?'bg-amber-50':'bg-rose-50')}`}>
+                            <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${isSuccess ? 'bg-emerald-100 text-emerald-600' : (status==='duplicate'?'bg-amber-100 text-amber-600':'bg-rose-100 text-rose-600')}`}>
+                                <Icon name={isSuccess ? 'check' : (status==='duplicate'?'alert':'x')} size={40} />
+                            </div>
+                            <h2 className={`text-2xl font-black mb-1 ${isSuccess ? 'text-emerald-800' : (status==='duplicate'?'text-amber-800':'text-rose-800')}`}>{msg}</h2>
+                            <p className="text-slate-500 font-medium">{subMsg}</p>
                         </div>
                         {user && (
-                            <div className="p-8 bg-white space-y-4">
-                                <div className="flex items-center gap-4 p-5 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <div className="w-14 h-14 bg-white rounded-full flex items-center justify-center text-xl font-black text-incar border-2 border-slate-100 shadow-sm">{user.name[0]}</div>
-                                    <div className="text-left">
-                                        <div className="font-black text-gray-900 text-xl leading-none mb-1">{user.name}</div>
-                                        <div className="text-xs text-slate-400 font-bold uppercase tracking-tight">{user.affiliation} · {user.bus}</div>
+                            <div className="p-6 bg-white space-y-4">
+                                <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                                    <div className="w-12 h-12 rounded-full bg-incar text-white flex items-center justify-center font-bold text-lg">{user.name[0]}</div>
+                                    <div>
+                                        <div className="font-bold text-lg text-slate-900">{user.name}</div>
+                                        <div className="text-xs text-slate-400 font-bold">{user.org} | {user.uid}</div>
                                     </div>
                                 </div>
-                                {amount > 0 && (
-                                    <div className="flex justify-between items-center p-4 bg-emerald-50/50 rounded-2xl border border-emerald-100">
-                                        <span className="text-xs font-black text-emerald-700 uppercase tracking-widest">지급 금액</span>
-                                        <span className="text-3xl font-black text-emerald-600">${amount}</span>
+                                {logs && logs.finalAmount !== undefined && (
+                                    <div className="flex justify-between items-center p-4 bg-emerald-50 rounded-xl border border-emerald-100">
+                                        <span className="text-emerald-700 font-bold text-sm">최종 지급액</span>
+                                        <div className="text-right">
+                                            <span className="text-2xl font-black text-emerald-600">{CURRENCY}{logs.finalAmount}</span>
+                                            {logs.penaltyApplied > 0 && <div className="text-[10px] text-rose-500 font-bold">(-패널티 {CURRENCY}{logs.penaltyApplied} 적용됨)</div>}
+                                        </div>
                                     </div>
                                 )}
                             </div>
                         )}
-                        <div className="p-4 px-8 pb-8 bg-white">
-                            <button onClick={() => setScanResult(null)} className={`w-full py-5 rounded-2xl font-black text-white shadow-xl transition-transform active:scale-95 ${theme.btn}`}>확인 완료</button>
-                        </div>
+                        <button onClick={onClose} className="w-full py-5 bg-slate-900 text-white font-bold text-lg hover:bg-slate-800 transition-colors">닫기</button>
                     </div>
                 </div>
             );
         };
 
-        // --- 일정 편집 모달 ---
-        const ScheduleEditorModal = ({ editingSchedule, setEditingSchedule, handleSaveSchedule }) => {
-            const [formData, setFormData] = useState({ title: '', price: 0, expected: 0, date: '' });
-            useEffect(() => { if(editingSchedule) setFormData(editingSchedule); }, [editingSchedule]);
-            if (!editingSchedule) return null;
-
-            return (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-[200] p-6 animate-fade-in">
-                    <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                            <h3 className="font-black text-slate-900 text-lg">{editingSchedule.id ? '일정 수정' : '새 일정'}</h3>
-                            <button onClick={() => setEditingSchedule(null)} className="text-slate-400 hover:text-slate-600 transition-colors"><Icon name="x" size={24}/></button>
-                        </div>
-                        <div className="p-8 space-y-4">
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">날짜</label>
-                                <input type="date" value={formData.date || ''} onChange={e=>setFormData({...formData, date: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:ring-2 focus:ring-incar outline-none" />
-                            </div>
-                            <div>
-                                <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">일정명</label>
-                                <input type="text" value={formData.title} onChange={e=>setFormData({...formData, title: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:ring-2 focus:ring-incar outline-none" />
-                            </div>
-                            <div className="flex gap-2">
-                                {['BOARDING', 'PAYMENT'].map(type => (
-                                    <button key={type} onClick={()=>setFormData(prev => ({...prev, type}))} className={`flex-1 py-3 rounded-xl text-xs font-black transition-all ${formData.type === type ? 'bg-white text-incar shadow-sm ring-2 ring-incar' : 'bg-slate-100 text-slate-500'}`}>
-                                        {type === 'PAYMENT' ? '💰 지급' : '🚌 탑승'}
-                                    </button>
-                                ))}
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">예상 인원</label>
-                                    <input type="number" value={formData.expected} onChange={e=>setFormData({...formData, expected: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:ring-2 focus:ring-incar outline-none text-center" />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">1인 금액($)</label>
-                                    <input type="number" value={formData.price} onChange={e=>setFormData({...formData, price: Number(e.target.value)})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-slate-900 focus:ring-2 focus:ring-incar outline-none text-center" disabled={formData.type !== 'PAYMENT'} />
-                                </div>
-                            </div>
-                        </div>
-                        <div className="p-6 border-t border-slate-100 flex gap-3 bg-slate-50/50">
-                            <button onClick={() => setEditingSchedule(null)} className="flex-1 py-4 bg-white border border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50">취소</button>
-                            <button onClick={() => handleSaveSchedule(editingSchedule.id, formData)} className="flex-1 py-4 bg-incar text-white font-black rounded-2xl shadow-lg hover:bg-incar-dark">저장</button>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- [화면 1] 대시보드 ---
-        const DashboardView = ({ stats, schedules, currentSessionId, logs, handleRefresh }) => {
-            const groupedSchedules = useMemo(() => {
-                const groups = {};
-                sortSchedules([...schedules]).forEach(s => {
-                    const date = s.date || '날짜 미정';
-                    if (!groups[date]) groups[date] = [];
-                    groups[date].push(s);
-                });
-                return groups;
-            }, [schedules]);
-
-            return (
-                <div className="space-y-8 animate-fade-in pb-24 md:pb-8">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-white p-8 rounded-[2rem] border-t-8 border-incar shadow-card hover:shadow-xl transition-all group">
-                            <div className="flex justify-between items-start mb-4">
-                                <p className="text-xs text-slate-400 font-black uppercase tracking-widest">Total Scans</p>
-                                <div className="p-3 bg-indigo-50 rounded-2xl text-incar group-hover:scale-110 transition-transform"><Icon name="users" size={24} /></div>
-                            </div>
-                            <h3 className="text-5xl font-black text-slate-900 tracking-tighter leading-none mb-2">{stats.totalCount}<span className="text-xl font-bold text-slate-300 ml-1">명</span></h3>
-                        </div>
-                        <div className="bg-white p-8 rounded-[2rem] border-t-8 border-emerald-500 shadow-card hover:shadow-xl transition-all group">
-                            <div className="flex justify-between items-start mb-4">
-                                <p className="text-xs text-slate-400 font-black uppercase tracking-widest">Total Settle</p>
-                                <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600 group-hover:scale-110 transition-transform"><Icon name="dollar" size={24} /></div>
-                            </div>
-                            <h3 className="text-5xl font-black text-slate-900 tracking-tighter leading-none mb-2">${stats.totalAmount.toLocaleString()}</h3>
-                        </div>
-                        <div className="bg-incar-gradient p-8 rounded-[2rem] shadow-2xl border-t-8 border-blue-400 text-white relative overflow-hidden group">
-                            <div className="absolute top-0 right-0 p-4 opacity-10"><Icon name="layout" size={120} /></div>
-                            <p className="text-xs text-blue-200 font-black uppercase tracking-widest mb-3">Live Session</p>
-                            <h3 className="text-xl font-bold truncate mb-6 pb-4 border-b border-white/10">{schedules.find(s=>s.id===currentSessionId)?.title || '세션 미선택'}</h3>
-                            <div className="flex justify-between items-end">
-                                <span className="text-5xl font-black">{stats.currentCount}<span className="text-xl ml-2 font-bold opacity-70">명</span></span>
-                                <div className="flex items-center gap-1.5 text-[10px] font-black bg-white/20 px-3 py-1.5 rounded-full"><div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div> LIVE</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white p-8 rounded-[2rem] shadow-card border border-slate-200">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className="font-black text-xl text-slate-900 flex items-center gap-3">
-                                <div className="w-2 h-8 bg-incar rounded-full"></div> 일자별 현황 리포트
-                            </h3>
-                            <button onClick={()=>window.print()} className="bg-slate-100 text-slate-600 px-4 py-2 rounded-xl font-bold text-xs hover:bg-slate-200 flex items-center gap-2">
-                                <Icon name="layout" size={14}/> 출력
-                            </button>
-                        </div>
-                        {Object.entries(groupedSchedules).sort().map(([date, scheds]) => (
-                            <div key={date} className="mb-8 last:mb-0">
-                                <h4 className="text-xs font-black text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-4 shadow-sm">{date}</h4>
-                                <div className="overflow-x-auto rounded-xl border border-slate-200">
-                                    <table className="w-full text-left data-table">
-                                        <thead>
-                                            <tr>
-                                                <th className="w-1/3">일정명</th>
-                                                <th className="text-center">구분</th>
-                                                <th className="text-right">예약</th>
-                                                <th className="text-right">실제</th>
-                                                <th className="text-right">예상액</th>
-                                                <th className="text-right">지급액</th>
-                                                <th className="text-center">차이</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {scheds.map(s => {
-                                                const actualCount = logs.filter(l => l.sessionId === s.id).length;
-                                                const actualAmount = logs.filter(l => l.sessionId === s.id).reduce((sum, l) => sum + (l.amount||0), 0);
-                                                const expectedAmount = s.type === 'PAYMENT' ? (s.price * s.expected) : 0;
-                                                const diff = actualCount - s.expected;
-                                                return (
-                                                    <tr key={s.id}>
-                                                        <td className="font-bold text-slate-700">{s.title}</td>
-                                                        <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-black border ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':'탑승'}</span></td>
-                                                        <td className="text-right text-slate-500">{s.expected}</td>
-                                                        <td className="text-right font-bold text-slate-900">{actualCount}</td>
-                                                        <td className="text-right text-slate-400">{s.type==='PAYMENT' ? `$${expectedAmount.toLocaleString()}` : '-'}</td>
-                                                        <td className="text-right font-bold text-emerald-600">{s.type==='PAYMENT' ? `$${actualAmount.toLocaleString()}` : '-'}</td>
-                                                        <td className="text-center">{diff === 0 ? <span className="text-emerald-500 font-bold text-xs">OK</span> : diff < 0 ? <span className="text-rose-500 font-bold text-xs">{diff}</span> : <span className="text-blue-500 font-bold text-xs">+{diff}</span>}</td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-card overflow-hidden">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
-                            <h3 className="font-black text-lg text-slate-900 flex items-center gap-3"><div className="w-2 h-6 bg-incar rounded-full"></div> 실시간 로그</h3>
-                            <button onClick={handleRefresh} className="text-xs border px-4 py-2 rounded-xl hover:bg-slate-50 flex items-center gap-2 font-bold text-slate-500"><Icon name="refresh" size={14}/> 새로고침</button>
-                        </div>
-                        <div className="overflow-x-auto max-h-[400px]">
-                            <table className="w-full text-left text-sm">
-                                <thead className="bg-slate-50 text-slate-500 text-xs font-bold uppercase sticky top-0">
-                                    <tr><th className="p-5 pl-8">Time</th><th className="p-5">User</th><th className="p-5">Session</th><th className="p-5">Type</th><th className="p-5 pr-8 text-right">Balance</th></tr>
-                                </thead>
-                                <tbody class="divide-y divide-slate-100">
-                                    {logs.length === 0 ? <tr><td colSpan="5" className="p-20 text-center text-slate-300 font-bold italic">데이터가 없습니다.</td></tr> : logs.map(log => (
-                                        <tr key={log.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="p-5 pl-8 font-mono text-xs text-slate-400 font-medium">{log.displayTime.split(' ')[1]||log.displayTime}</td>
-                                            <td className="p-5 font-bold text-slate-800">{log.name} <span className="text-xs text-slate-400 font-normal">({log.affiliation})</span></td>
-                                            <td className="p-5 text-slate-600 font-bold text-xs">{log.sessionTitle}</td>
-                                            <td className="p-5"><span className={`px-3 py-1 rounded-full text-[10px] font-black border ${log.action==='지급'?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{log.action}</span></td>
-                                            <td className="p-5 pr-8 text-right font-black text-slate-900 text-base">{log.amount>0 ? `$${log.amount}` : '-'}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- [화면 2] 스캔 뷰 ---
-        const ScanView = ({ mode, schedules, currentSessionId, setCurrentSessionId, stats, scannerActive, setScannerActive, logs, handleScan }) => {
-            const filteredSchedules = useMemo(() => {
-                if (mode === 'PAYMENT') return schedules.filter(s => s.price > 0);
-                return schedules; 
-            }, [mode, schedules]);
-
+        // --- QR 생성 컴포넌트 ---
+        const QRCodeCanvas = ({ text, size = 100, transparent = false }) => {
+            const ref = useRef();
             useEffect(() => {
-                if (filteredSchedules.length > 0) {
-                     const exists = filteredSchedules.find(s => s.id === currentSessionId);
-                     if (!exists) setCurrentSessionId(filteredSchedules[0].id);
-                } else {
-                    setCurrentSessionId('');
+                if(ref.current) {
+                    ref.current.innerHTML = '';
+                    try {
+                        new QRCode(ref.current, {
+                            text: text,
+                            width: size,
+                            height: size,
+                            colorDark : "#000000",
+                            colorLight : transparent ? "rgba(255,255,255,0)" : "#ffffff",
+                            correctLevel : QRCode.CorrectLevel.M
+                        });
+                    } catch(e) {
+                        console.error("QR Gen Error", e);
+                    }
                 }
-            }, [mode, filteredSchedules]);
+            }, [text, size, transparent]);
+            return <div ref={ref}></div>
+        }
 
-            const currentCount = logs.filter(l => l.sessionId === currentSessionId && (mode === 'PAYMENT' ? l.action === '지급' : l.action === '탑승')).length;
-            
-            return (
-                <div className="space-y-6 animate-fade-in max-w-lg mx-auto pb-24 md:pb-8">
-                    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-card">
-                        <div className="flex justify-between items-center mb-6">
-                            <h3 className={`font-black flex items-center gap-3 text-lg leading-none ${mode==='PAYMENT'?'text-emerald-700':'text-incar'}`}>
-                                <Icon name={mode==='PAYMENT'?'dollar':'bus'} size={24} /> {mode==='PAYMENT'?'비용 지급':'탑승 확인'}
-                            </h3>
-                            <span className="text-xs font-black text-slate-400 bg-slate-100 px-3 py-1.5 rounded-xl uppercase">{new Date().toLocaleDateString('ko-KR')}</span>
-                        </div>
-                        <div className="mb-6">
-                            <label className="block text-[10px] font-black text-slate-400 mb-3 tracking-widest uppercase ml-1">Target Session</label>
-                            <div className="relative group">
-                                <select value={currentSessionId} onChange={(e) => setCurrentSessionId(e.target.value)} className={`w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.5rem] font-black text-slate-900 appearance-none focus:outline-none focus:ring-4 transition-all text-xl shadow-inner group-hover:border-opacity-50 ${mode==='PAYMENT'?'focus:ring-emerald-500/10 group-hover:border-emerald-500':'focus:ring-incar/10 group-hover:border-incar'}`}>
-                                    {filteredSchedules.length === 0 ? <option value="">가능한 일정이 없습니다</option> : filteredSchedules.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
-                                </select>
-                                <div className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none group-hover:text-slate-500"><Icon name="chevronRight" size={24} className="rotate-90" /></div>
-                            </div>
-                        </div>
-                        <div className={`flex items-center justify-between p-5 rounded-[1.5rem] border border-dashed ${mode==='PAYMENT'?'bg-emerald-50 border-emerald-200':'bg-indigo-50 border-indigo-200'}`}>
-                            <span className={`font-black uppercase tracking-tighter ${mode==='PAYMENT'?'text-emerald-700':'text-incar'}`}>완료 인원</span>
-                            <span className="font-black text-slate-900 text-xl leading-none">{currentCount}<span className="text-xs font-bold text-slate-400 ml-1">명</span></span>
-                        </div>
-                    </div>
-
-                    <div className="bg-white rounded-[3rem] border border-slate-200 shadow-card p-8 flex flex-col items-center justify-center relative overflow-hidden group min-h-[400px]">
-                        {scannerActive ? (
-                            <div id="reader" className="w-full h-full relative z-10 animate-fade-in shadow-2xl overflow-hidden rounded-[2rem]"></div>
-                        ) : (
-                            <div className="text-center space-y-6 animate-fade-in">
-                                <div className={`w-40 h-40 rounded-[3rem] flex items-center justify-center text-slate-200 mx-auto ring-1 ring-slate-100 shadow-inner ${mode==='PAYMENT'?'bg-emerald-50 text-emerald-200':'bg-indigo-50 text-indigo-200'}`}><Icon name="camera" size={80}/></div>
-                                <div className="space-y-2">
-                                    <h4 className="font-black text-slate-800 text-xl">카메라 대기 중</h4>
-                                    <p className="text-sm text-slate-400 font-medium">아래 버튼을 눌러 스캔을 시작하세요</p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="flex flex-col gap-3">
-                        {!scannerActive ? (
-                            <button onClick={()=>setScannerActive(true)} className={`w-full py-5 text-white font-black rounded-3xl shadow-2xl active:scale-95 transition-all text-xl flex items-center justify-center gap-4 ${mode==='PAYMENT'?'bg-emerald-600 shadow-emerald-900/30 hover:bg-emerald-700':'bg-incar shadow-indigo-900/30 hover:bg-incar-dark'}`}><Icon name="camera" size={28}/> 스캔 시작하기</button>
-                        ) : (
-                            <button onClick={()=>setScannerActive(false)} className="w-full py-5 bg-rose-500 text-white font-black rounded-3xl shadow-xl active:scale-95 transition-all text-xl flex items-center justify-center gap-4"><Icon name="x" size={28}/> 스캔 중단</button>
-                        )}
-                    </div>
-                </div>
-            );
-        };
-
-        // --- [화면 4] 관리 뷰 ---
-        const ManageView = ({ schedules, setEditingSchedule, handleDeleteSchedule, handleInitializeDB, handleScan }) => (
-            <div className="space-y-6 animate-fade-in pb-24 md:pb-8">
-                <div className="bg-white p-8 rounded-[2.5rem] shadow-card flex justify-between items-center border border-slate-100">
-                    <div><h3 className="text-2xl font-black text-slate-900 leading-none">일정 관리</h3><p className="text-sm text-slate-400 font-medium mt-2 uppercase tracking-wide">금액이 $0이면 '탑승' 전용입니다.</p></div>
-                    <button onClick={()=>setEditingSchedule({id:'',title:'',price:0, expected:100, date: new Date().toISOString().split('T')[0]})} className="p-4 bg-incar text-white rounded-2xl shadow-xl hover:bg-incar-dark active:scale-95 transition-all"><Icon name="plus" size={24}/></button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {sortSchedules([...schedules]).map(s => (
-                        <div key={s.id} className="p-6 bg-white rounded-3xl border border-slate-100 shadow-sm flex justify-between items-center group hover:border-incar hover:shadow-xl transition-all duration-300">
-                            <div className="flex items-center gap-4">
-                                <div className={`p-3 rounded-2xl ${s.price > 0 ?'bg-emerald-50 text-emerald-600':'bg-indigo-50 text-incar'}`}><Icon name={s.price > 0 ?'dollar':'camera'} size={24}/></div>
-                                <div>
-                                    <div className="flex gap-2 mb-1">
-                                        <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded">{s.date || '날짜미정'}</span>
-                                        <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border inline-block ${s.price > 0 ?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.price > 0 ?'지급/탑승':'탑승전용'}</span>
-                                    </div>
-                                    <h4 className="font-black text-slate-800">{s.title}</h4>
-                                    <p className="text-xs text-slate-400 font-bold mt-1">예약: {s.expected}명 {s.price > 0 ? ` / $${s.price}` : ''}</p>
-                                </div>
-                            </div>
-                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0"><button onClick={()=>setEditingSchedule(s)} className="p-3 bg-slate-50 rounded-xl hover:text-incar transition-colors"><Icon name="edit" size={16}/></button><button onClick={()=>handleDeleteSchedule(s.id)} className="p-3 bg-rose-50 text-rose-500 rounded-xl hover:bg-rose-100 transition-colors"><Icon name="trash" size={16}/></button></div>
-                        </div>
-                    ))}
-                </div>
-
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-card mt-6">
-                    <h3 className="font-bold text-slate-800 mb-4 text-lg">시스템 기능 테스트</h3>
-                    <button onClick={()=>handleScan('1611499_A')} className="w-full py-3 bg-white border border-slate-200 text-slate-500 rounded-xl font-bold text-sm hover:bg-slate-50 active:scale-95 transition-all">
-                        스캔 시뮬레이션 (홍길동)
-                    </button>
-                    <p className="text-xs text-slate-400 mt-2">* 현재 선택된 세션(탑승/지급)을 기준으로 동작합니다.</p>
-                </div>
-
-                <div className="p-8 bg-slate-900 rounded-[2.5rem] text-white flex justify-between items-center shadow-2xl relative overflow-hidden group">
-                    <div className="absolute inset-0 bg-incar opacity-0 group-hover:opacity-20 transition-opacity"></div>
-                    <div className="relative z-10"><h4 className="font-black text-lg leading-none uppercase tracking-widest mb-1">Database Maintenance</h4><p className="text-xs text-slate-400 font-medium italic">ISC 3박 4일 일정으로 초기화합니다.</p></div>
-                    <button onClick={handleInitializeDB} className="px-8 py-4 bg-white text-slate-900 rounded-2xl font-black text-xs hover:bg-slate-100 transition-all shadow-lg active:scale-95">서버 DB 초기화</button>
-                </div>
-            </div>
-        );
-
-        // --- [메인 App] ---
-        function App() {
-            const [user, setUser] = useState(null);
-            const [db, setDb] = useState(null);
-            const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+        // --- 메인 앱 ---
+        const App = () => {
             const [activeTab, setActiveTab] = useState('dashboard');
+            const [isPrintMode, setIsPrintMode] = useState(false);
+            
+            // [통합된 명찰 디자인 설정 상태]
+            // 기본값: 545x697, QR 상단, 소속 중앙 위, 이름 중앙 아래
+            const [badgeConfig, setBadgeConfig] = useState({
+                bgImage: null,
+                qr: { x: 50, y: 20, size: 100 },
+                name: { x: 50, y: 55, size: 40, color: '#000000', show: true },
+                org: { x: 50, y: 45, size: 20, color: '#475569', show: true },
+                uid: { x: 50, y: 85, size: 14, color: '#94a3b8', show: false } // 사번 숨김
+            });
+
+            const [users, setUsers] = useState([]);
             const [schedules, setSchedules] = useState([]);
             const [logs, setLogs] = useState([]);
-            const [currentSessionId, setCurrentSessionId] = useState('');
+            const [changeLogs, setChangeLogs] = useState([]);
             const [scanResult, setScanResult] = useState(null);
-            const [editingSchedule, setEditingSchedule] = useState(null);
-            const [scannerActive, setScannerActive] = useState(false);
-            const [isLoading, setIsLoading] = useState(true);
+            
+            const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+            const [isScanning, setIsScanning] = useState(false);
+            const [targetSessionId, setTargetSessionId] = useState('');
+            const [targetBus, setTargetBus] = useState('1호차');
+            const [manualBus, setManualBus] = useState(false);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [selectedUser, setSelectedUser] = useState(null);
+            const [editForm, setEditForm] = useState({ optKey: '', optVal: '', penalty: 0, reason: '' });
 
-            // 초기화
             useEffect(() => {
-                const init = async () => {
-                    try {
-                        if(firebaseConfig.apiKey) {
-                            if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-                            const _db = firebase.firestore();
-                            setDb(_db);
-                            await firebase.auth().signInAnonymously();
-                            firebase.auth().onAuthStateChanged(u => { setUser(u); if(!u) setIsLoading(false); });
-                        } else { initLocal(); }
-                    } catch(e) { console.error(e); initLocal(); }
-                };
-                init();
-                const resize = () => { setIsMobile(window.innerWidth < 768); if(window.innerWidth < 768 && activeTab === 'dashboard') setActiveTab('boarding'); };
-                window.addEventListener('resize', resize);
-                return () => window.removeEventListener('resize', resize);
+                const handleResize = () => setIsMobile(window.innerWidth < 768);
+                window.addEventListener('resize', handleResize);
+                return () => window.removeEventListener('resize', handleResize);
             }, []);
 
-            const initLocal = () => {
-                setIsLoading(false);
-                const localSched = JSON.parse(localStorage.getItem('inca_schedules') || '[]');
-                const localLogs = JSON.parse(localStorage.getItem('inca_logs') || '[]');
-                if(localSched.length === 0) setSchedules(DEFAULT_SCHEDULES);
-                else setSchedules(localSched);
-                setLogs(localLogs);
+            useEffect(() => {
+                const loadedUsers = JSON.parse(localStorage.getItem('incar_pro_users') || '[]');
+                const loadedSched = JSON.parse(localStorage.getItem('incar_pro_schedules') || '[]');
+                const loadedLogs = JSON.parse(localStorage.getItem('incar_pro_logs') || '[]');
+                const loadedChanges = JSON.parse(localStorage.getItem('incar_pro_changelogs') || '[]');
+                
+                // [수정] 설정 충돌 방지를 위해 저장소 키 변경 (v2 -> v2.1)
+                const loadedBadgeConfig = JSON.parse(localStorage.getItem('incar_pro_badge_config_v2_1') || 'null');
+
+                setUsers(loadedUsers);
+                setSchedules(loadedSched);
+                setLogs(loadedLogs);
+                setChangeLogs(loadedChanges);
+                
+                // 저장된 설정이 있고, 데이터 구조가 유효한 경우에만 로드 (안전장치 추가)
+                if(loadedBadgeConfig && loadedBadgeConfig.name && loadedBadgeConfig.org) {
+                    setBadgeConfig(loadedBadgeConfig);
+                }
+
+                if (loadedSched.length > 0) setTargetSessionId(loadedSched[0].id);
+            }, []);
+
+            useEffect(() => { localStorage.setItem('incar_pro_users', JSON.stringify(users)); }, [users]);
+            useEffect(() => { localStorage.setItem('incar_pro_schedules', JSON.stringify(schedules)); }, [schedules]);
+            useEffect(() => { localStorage.setItem('incar_pro_logs', JSON.stringify(logs)); }, [logs]);
+            useEffect(() => { localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs]);
+            // [수정] 저장 키 변경 반영
+            useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_1', JSON.stringify(badgeConfig)); }, [badgeConfig]);
+
+            // --- Handlers ---
+            const handleUserUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        const parsed = results.data.map(row => {
+                            const uid = row['사번'] || row['ID'] || row['uid'] || Object.values(row)[0];
+                            const name = row['성명'] || row['이름'] || row['Name'] || Object.values(row)[1];
+                            const org = row['소속'] || row['부서'] || row['Org'] || '-';
+                            const bus = row['버스'] || row['탑승버스'] || row['Bus'] || '미정';
+                            const options = {};
+                            Object.keys(row).forEach(key => {
+                                if(!['사번','ID','uid','성명','이름','Name','소속','부서','Org','버스','탑승버스','Bus'].includes(key)) {
+                                    if(row[key]) options[key] = row[key];
+                                }
+                            });
+                            return { uid, name, org, bus, options, penaltyTotal: 0 };
+                        }).filter(u => u.uid);
+
+                        if(confirm(`${parsed.length}명의 참가자 명단을 로드하시겠습니까?`)) {
+                            setUsers(parsed);
+                            alert("로드 완료!");
+                        }
+                    }
+                });
             };
 
-            // DB 동기화
-            useEffect(() => {
-                if(db && user) {
-                    const unsubS = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').onSnapshot(snap => {
-                        const list = snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a,b)=> (a.date > b.date) ? 1 : -1);
-                        if (list.length === 0) {
-                             setSchedules([]);
-                        } else {
-                            setSchedules(list);
+            const handleScheduleUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: (results) => {
+                        const parsed = results.data.map((row, idx) => {
+                            const rawDate = row['일정'] || row['Date'] || `Day ${idx+1}`;
+                            const today = new Date();
+                            const dateObj = new Date(today);
+                            if(rawDate.includes('1일')) dateObj.setDate(today.getDate());
+                            else if(rawDate.includes('2일')) dateObj.setDate(today.getDate()+1);
+                            else if(rawDate.includes('3일')) dateObj.setDate(today.getDate()+2);
+                            else if(rawDate.includes('4일')) dateObj.setDate(today.getDate()+3);
+                            
+                            const dateStr = dateObj.toISOString().split('T')[0];
+                            const type = (row['타입'] && row['타입'].includes('지급')) || (row['지급'] && row['지급'] > 0) ? 'PAYMENT' : 'BOARDING';
+                            
+                            return {
+                                id: `SCHED_${idx}`,
+                                date: dateStr,
+                                displayDate: rawDate,
+                                title: row['장소'] || row['Title'] || '일정',
+                                type: type,
+                                price: parseInt(row['지급'] || row['Price'] || 0),
+                                targetKey: row['타겟옵션'] || row['OptionKey'] || 'ALL',
+                                targetVal: row['타겟값'] || row['OptionVal'] || 'ALL'
+                            };
+                        });
+
+                        if(confirm(`${parsed.length}개의 스케줄을 로드하시겠습니까?`)) {
+                            setSchedules(parsed);
+                            if(parsed.length > 0) setTargetSessionId(parsed[0].id);
+                            alert("로드 완료!");
                         }
-                    });
-                    const unsubL = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').orderBy('timestamp','desc').onSnapshot(snap => {
-                        setLogs(snap.docs.map(d => ({id: d.id, ...d.data()})));
-                        setIsLoading(false);
-                    });
-                    return () => { unsubS(); unsubL(); };
-                } else if (!db) {
-                    // 로컬 모드 저장
-                    if (schedules.length === 0) setSchedules(DEFAULT_SCHEDULES);
-                    localStorage.setItem('inca_schedules', JSON.stringify(schedules));
-                    localStorage.setItem('inca_logs', JSON.stringify(logs));
-                }
-            }, [db, user, schedules, logs]);
+                    }
+                });
+            };
 
-            useEffect(() => {
-                if (scannerActive && (activeTab === 'boarding' || activeTab === 'payment')) {
-                    const html5QrCode = new Html5Qrcode("reader");
-                    const config = { fps: 10, qrbox: { width: 280, height: 280 } };
-                    html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-                        handleScan(decodedText);
-                        setScannerActive(false);
-                        html5QrCode.stop();
-                    }).catch(err => { console.error("Camera access error:", err); setScannerActive(false); });
-                    return () => { if (html5QrCode.isScanning) html5QrCode.stop().catch(e => {}); };
-                }
-            }, [scannerActive, activeTab]);
+            const processScan = (scannedUid) => {
+                const user = users.find(u => u.uid === scannedUid);
+                if (!user) return setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `ID: ${scannedUid}` });
 
-            const handleScan = async (uid) => {
-                const MOCK_USERS = [
-                    { uid: '1611499_A', name: '홍길동', bus: '1호차', affiliation: '본사' },
-                    { uid: '1611499_B', name: '김영희', bus: '1호차', affiliation: '지사' }
-                ];
-                const target = MOCK_USERS.find(u => u.uid === uid);
-                const sched = schedules.find(s => s.id === currentSessionId);
-                
-                if(!target) return setScanResult({ status: 'error', msg: '미등록', subMsg: 'QR 확인 필요' });
-                if(!sched) return setScanResult({ status: 'error', msg: '일정 미선택', subMsg: '세션을 선택해주세요.' });
-                
-                const actionType = activeTab === 'payment' ? '지급' : '탑승';
-                
-                if(logs.some(l => l.uid === uid && l.sessionId === currentSessionId && l.action === actionType)) 
-                    return setScanResult({ status: 'duplicate', msg: '중복', subMsg: '이미 처리됨', user: target });
+                const session = schedules.find(s => s.id === targetSessionId);
+                if (!session) return setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' });
+
+                const isDuplicate = logs.some(l => l.uid === user.uid && l.sessionId === session.id);
+                if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user });
+
+                if (session.targetKey !== 'ALL') {
+                    const userChoice = user.options[session.targetKey];
+                    const requiredChoice = session.targetVal;
+                    if (!userChoice || (requiredChoice !== 'ALL' && !userChoice.includes(requiredChoice))) {
+                        return setScanResult({ status: 'error', msg: '대상자 아님', subMsg: `필요: ${requiredChoice} / 본인: ${userChoice || '선택없음'}`, user });
+                    }
+                }
+
+                let finalAmount = 0;
+                let penaltyApplied = 0;
+
+                if (session.type === 'PAYMENT') {
+                    const baseAmount = session.price;
+                    const deduction = user.penaltyTotal || 0;
+                    finalAmount = Math.max(0, baseAmount - deduction);
+                    penaltyApplied = (baseAmount - finalAmount);
+
+                    if (penaltyApplied > 0) {
+                        const updatedUsers = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u);
+                        setUsers(updatedUsers);
+                    }
+                }
 
                 const newLog = {
-                    uid: target.uid, name: target.name, affiliation: target.affiliation,
-                    sessionId: sched.id, sessionTitle: sched.title, action: actionType,
-                    amount: actionType === '지급' ? sched.price : 0,
-                    timestamp: new Date().toISOString(), displayTime: new Date().toLocaleString()
+                    id: `LOG_${Date.now()}`,
+                    timestamp: new Date().toISOString(),
+                    uid: user.uid,
+                    name: user.name,
+                    org: user.org,
+                    action: session.type === 'PAYMENT' ? '지급' : '탑승',
+                    sessionId: session.id,
+                    sessionTitle: session.title,
+                    bus: session.type === 'BOARDING' ? targetBus : '-',
+                    amount: session.type === 'PAYMENT' ? session.price : 0,
+                    penaltyApplied: penaltyApplied,
+                    finalAmount: finalAmount
                 };
 
-                if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog);
-                else setLogs(p => [newLog, ...p]);
-
-                setScanResult({ status: 'success', msg: actionType + ' 완료', subMsg: sched.title, amount: newLog.amount, user: target });
+                setLogs([newLog, ...logs]);
+                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog });
             };
 
-            const handleInitDB = async () => {
-                if(!confirm("DB를 초기화하시겠습니까? (ISC 대만 일정 반영)")) return;
-                setIsLoading(true);
-                if(db) {
-                    try {
-                        const batch = db.batch();
-                        DEFAULT_SCHEDULES.forEach(s => batch.set(db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(s.id), s));
-                        await batch.commit();
-                        alert("서버 초기화 완료");
-                    } catch(e) { alert("오류: "+e.message); }
-                } else {
-                    setSchedules(DEFAULT_SCHEDULES); setLogs([]); localStorage.clear();
-                    localStorage.setItem('inca_schedules', JSON.stringify(DEFAULT_SCHEDULES));
-                    alert("로컬 초기화 완료");
-                }
-                setIsLoading(false);
-            };
-
-            const handleSaveSched = async (id, data) => {
-                const sid = id || `S_${Date.now()}`;
-                const newData = { ...data, id: sid };
+            const handleUserUpdate = () => {
+                if (!selectedUser || !editForm.optKey) return;
                 
-                if(db) {
-                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(sid).set(newData);
-                } else {
-                    // [로컬 모드 수정] 기존 리스트에서 id가 다른 것만 남기고 새 데이터 추가 후 정렬
-                    const next = schedules.filter(s => s.id !== id);
-                    const updatedList = [...next, newData];
-                    // 날짜순 정렬 보장
-                    sortSchedules(updatedList);
-                    setSchedules(updatedList);
-                }
-                setEditingSchedule(null);
-            };
-
-            const handleDelSched = async (id) => {
-                if(!confirm("삭제?")) return;
-                if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(id).delete();
-                else setSchedules(schedules.filter(s => s.id !== id));
-            };
-
-            const stats = useMemo(() => {
-                return {
-                    totalCount: logs.length,
-                    totalAmount: logs.reduce((s, l) => s + (Number(l.amount)||0), 0),
-                    currentCount: logs.filter(l => l.sessionId === currentSessionId).length
+                const updatedUsers = users.map(u => {
+                    if (u.uid === selectedUser.uid) {
+                        const newOptions = { ...u.options, [editForm.optKey]: editForm.optVal };
+                        const newPenalty = (u.penaltyTotal || 0) + parseInt(editForm.penalty || 0);
+                        return { ...u, options: newOptions, penaltyTotal: newPenalty };
+                    }
+                    return u;
+                });
+                
+                const changeLog = {
+                    id: `CHG_${Date.now()}`,
+                    timestamp: new Date().toLocaleString(),
+                    uid: selectedUser.uid,
+                    name: selectedUser.name,
+                    targetOption: editForm.optKey,
+                    oldVal: selectedUser.options[editForm.optKey],
+                    newVal: editForm.optVal,
+                    penalty: parseInt(editForm.penalty || 0),
+                    reason: editForm.reason
                 };
-            }, [logs, currentSessionId]);
 
-            // --- 렌더링 ---
-            return (
-                <div className="flex h-full w-full">
-                    {/* PC Sidebar */}
-                    {!isMobile && (
-                        <aside className="w-72 bg-incar text-white h-full shadow-2xl flex flex-col z-20">
-                            <div className="p-8 border-b border-white/10 flex items-center gap-3">
-                                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center font-black">P</div>
-                                <div><span className="font-bold block leading-none">INCARPASS</span><span className="text-[10px] text-blue-200 opacity-80">PRO EDITION</span></div>
+                setUsers(updatedUsers);
+                setChangeLogs([changeLog, ...changeLogs]);
+                alert("변경 및 패널티 적용이 완료되었습니다.");
+                
+                setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' });
+                setSelectedUser(null);
+                setSearchQuery('');
+            };
+
+            const scheduleStats = useMemo(() => {
+                return schedules.map(s => {
+                    let targetCount = 0;
+                    if(s.targetKey === 'ALL') {
+                        targetCount = users.length;
+                    } else {
+                        targetCount = users.filter(u => u.options && u.options[s.targetKey] && u.options[s.targetKey].includes(s.targetVal)).length;
+                    }
+                    
+                    const doneCount = logs.filter(l => l.sessionId === s.id).length;
+                    const percent = targetCount > 0 ? Math.round((doneCount / targetCount) * 100) : 0;
+                    
+                    const expectedAmount = targetCount * (s.price || 0);
+                    const actualAmount = logs.filter(l => l.sessionId === s.id).reduce((sum, l) => sum + (l.finalAmount || 0), 0);
+                    const diffCount = doneCount - targetCount;
+                    const diffAmount = actualAmount - expectedAmount;
+
+                    return { ...s, targetCount, doneCount, percent, expectedAmount, actualAmount, diffCount, diffAmount };
+                });
+            }, [schedules, users, logs]);
+
+            const groupedStats = useMemo(() => {
+                const groups = {};
+                scheduleStats.forEach(stat => {
+                    const date = stat.displayDate || '기타';
+                    if(!groups[date]) groups[date] = [];
+                    groups[date].push(stat);
+                });
+                return groups;
+            }, [scheduleStats]);
+
+            // --- Sub Views ---
+            const DashboardView = () => (
+                <div className="space-y-6 animate-slide-up">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-incar">
+                            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Participants</div>
+                            <div className="text-4xl font-black text-slate-800">{users.length}</div>
+                        </div>
+                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-emerald-500">
+                            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Payout</div>
+                            <div className="text-4xl font-black text-slate-800">{CURRENCY}{logs.reduce((sum, l) => sum + (l.finalAmount||0), 0).toLocaleString()}</div>
+                        </div>
+                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-indigo-400 hidden md:block">
+                            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Completion Rate</div>
+                            <div className="text-4xl font-black text-slate-800">
+                                {scheduleStats.length > 0 
+                                    ? Math.round(scheduleStats.reduce((acc, s) => acc + s.percent, 0) / scheduleStats.length) 
+                                    : 0}%
                             </div>
-                            <nav className="flex-1 px-4 py-6 space-y-2">
-                                <button onClick={()=>setActiveTab('dashboard')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab==='dashboard'?'bg-white text-incar shadow-lg':'text-blue-200 hover:bg-white/10'}`}><Icon name="layout"/> 대시보드</button>
-                                <button onClick={()=>setActiveTab('boarding')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab==='boarding'?'bg-white text-incar shadow-lg':'text-blue-200 hover:bg-white/10'}`}><Icon name="bus"/> 탑승 확인</button>
-                                <button onClick={()=>setActiveTab('payment')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab==='payment'?'bg-white text-incar shadow-lg':'text-blue-200 hover:bg-white/10'}`}><Icon name="dollar"/> 비용 지급</button>
-                                <button onClick={()=>setActiveTab('manage')} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${activeTab==='manage'?'bg-white text-incar shadow-lg':'text-blue-200 hover:bg-white/10'}`}><Icon name="settings"/> 유지보수</button>
-                            </nav>
-                            <div className="p-5 border-t border-white/10 flex items-center gap-2 text-xs font-bold text-blue-200">
-                                <div className={`w-2.5 h-2.5 rounded-full ${db?'bg-emerald-400':'bg-amber-400'}`}></div> {db?'Server Online':'Local Mode'}
-                            </div>
-                        </aside>
-                    )}
-
-                    <div className="flex-1 flex flex-col relative bg-slate-50">
-                        {/* Header */}
-                        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-10 shadow-sm">
-                            <h2 className="text-lg font-bold text-slate-800">{activeTab==='dashboard'?'통합 대시보드':activeTab==='boarding'?'탑승 스캔':activeTab==='payment'?'지급 스캔':'시스템 유지보수'}</h2>
-                            {isMobile && <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-bold text-xs">P</div>}
-                        </header>
-
-                        {/* Main Content */}
-                        <main className="flex-1 overflow-y-auto p-4 pb-24 md:pb-8">
-                            <div className="max-w-7xl mx-auto">
-                                {isLoading ? <div className="flex flex-col items-center justify-center h-96 text-slate-400"><div className="loader mb-4"></div>로딩중...</div> : (
-                                    <Fragment>
-                                        {activeTab === 'dashboard' && <DashboardView stats={stats} schedules={schedules} currentSessionId={currentSessionId} logs={logs} handleRefresh={()=>window.location.reload()} />}
-                                        {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} currentSessionId={currentSessionId} setCurrentSessionId={setCurrentSessionId} stats={stats} scannerActive={scannerActive} setScannerActive={setScannerActive} logs={logs} handleScan={handleScan} />}
-                                        {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} currentSessionId={currentSessionId} setCurrentSessionId={setCurrentSessionId} stats={stats} scannerActive={scannerActive} setScannerActive={setScannerActive} logs={logs} handleScan={handleScan} />}
-                                        {activeTab === 'manage' && <ManageView schedules={schedules} setEditingSchedule={setEditingSchedule} handleDeleteSchedule={handleDelSched} handleInitializeDB={handleInitDB} handleScan={handleScan} />}
-                                    </Fragment>
-                                )}
-                            </div>
-                        </main>
-
-                        {/* Mobile Nav */}
-                        {isMobile && (
-                            <nav className="md:hidden bg-white border-t border-slate-200 flex justify-around pb-safe pt-3 px-2 shadow-[0_-5px_15px_rgba(0,0,0,0.05)] fixed bottom-0 w-full z-50 rounded-t-3xl">
-                                <button onClick={()=>setActiveTab('dashboard')} className={`flex-1 flex flex-col items-center gap-1 ${activeTab==='dashboard'?'text-incar':'text-slate-400'}`}><Icon name="layout"/><span className="text-[10px] font-bold">현황</span></button>
-                                <button onClick={()=>setActiveTab('boarding')} className={`flex-1 flex flex-col items-center gap-1 ${activeTab==='boarding'?'text-incar':'text-slate-400'}`}><Icon name="bus"/><span className="text-[10px] font-bold">탑승</span></button>
-                                <button onClick={()=>setActiveTab('payment')} className={`flex-1 flex flex-col items-center gap-1 ${activeTab==='payment'?'text-incar':'text-slate-400'}`}><Icon name="dollar"/><span className="text-[10px] font-bold">지급</span></button>
-                                <button onClick={()=>setActiveTab('manage')} className={`flex-1 flex flex-col items-center gap-1 ${activeTab==='manage'?'text-incar':'text-slate-400'}`}><Icon name="settings"/><span className="text-[10px] font-bold">관리</span></button>
-                            </nav>
-                        )}
+                        </div>
+                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-rose-400 hidden md:block">
+                            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Penalties</div>
+                            <div className="text-4xl font-black text-slate-800">{changeLogs.length}건</div>
+                        </div>
                     </div>
 
-                    <ScanResultModal scanResult={scanResult} setScanResult={setScanResult} />
-                    <ScheduleEditorModal editingSchedule={editingSchedule} setEditingSchedule={setEditingSchedule} handleSaveSchedule={handleSaveSched} />
+                    <div>
+                        <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+                            <Icon name="dashboard" className="text-incar"/> 일정별 진행률 (요약)
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {scheduleStats.map(stat => (
+                                <div key={stat.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow">
+                                    <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
+                                        <Icon name={stat.type === 'PAYMENT' ? 'money' : 'bus'} size={60} />
+                                    </div>
+                                    <div className="relative z-10">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded ${stat.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-indigo-50 text-incar'}`}>{stat.type==='PAYMENT'?'지급':'탑승'}</span>
+                                            <span className="text-xs font-bold text-slate-400">{stat.displayDate}</span>
+                                        </div>
+                                        <h4 className="font-bold text-slate-800 mb-4 truncate pr-8">{stat.title}</h4>
+                                        <div className="flex justify-between items-end mb-1">
+                                            <span className="text-3xl font-black text-slate-800">{stat.doneCount}<span className="text-sm text-slate-400 font-medium ml-1">/ {stat.targetCount}</span></span>
+                                            <span className={`text-xl font-bold ${stat.percent === 100 ? 'text-emerald-500' : 'text-incar'}`}>{stat.percent}%</span>
+                                        </div>
+                                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
+                                            <div className={`h-full rounded-full transition-all duration-1000 ${stat.percent===100?'bg-emerald-500':'bg-incar'}`} style={{width: `${stat.percent}%`}}></div>
+                                        </div>
+                                        {stat.type === 'PAYMENT' && (
+                                            <div className="pt-2 border-t border-slate-50 flex justify-between text-xs">
+                                                <span className="text-slate-400">집행액: <b>{CURRENCY}{stat.actualAmount.toLocaleString()}</b></span>
+                                                <span className="text-slate-400">예상: {CURRENCY}{stat.expectedAmount.toLocaleString()}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                            {scheduleStats.length === 0 && <div className="col-span-full py-10 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">등록된 일정이 없습니다.</div>}
+                        </div>
+                    </div>
+
+                    <div className="pc-only bg-white rounded-3xl border border-slate-200 shadow-card overflow-hidden mt-8">
+                        <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="table" className="text-incar"/> 상세 현황 분석표</h3>
+                        </div>
+                        {Object.entries(groupedStats).length === 0 ? (
+                            <div className="p-10 text-center text-slate-400">데이터가 없습니다.</div>
+                        ) : (
+                            <div className="p-6 space-y-8">
+                                {Object.entries(groupedStats).sort().map(([date, stats]) => (
+                                    <div key={date}>
+                                        <h4 className="text-xs font-black text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-3">{date}</h4>
+                                        <div className="overflow-hidden rounded-xl border border-slate-200">
+                                            <table className="w-full text-left data-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th className="w-1/3">일정명</th>
+                                                        <th className="text-center">구분</th>
+                                                        <th className="text-right">대상(Target)</th>
+                                                        <th className="text-right">완료(Done)</th>
+                                                        <th className="text-center border-l border-slate-200">미완료</th>
+                                                        <th className="text-right">예상 금액</th>
+                                                        <th className="text-right">실제 집행</th>
+                                                        <th className="text-center border-l border-slate-200">차액 (Diff)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {stats.map(s => (
+                                                        <tr key={s.id}>
+                                                            <td className="font-bold">{s.title}</td>
+                                                            <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-black border ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':'탑승'}</span></td>
+                                                            <td className="text-right text-slate-500">{s.targetCount}</td>
+                                                            <td className="text-right font-bold text-slate-900">{s.doneCount}</td>
+                                                            <td className="text-center border-l border-slate-50">
+                                                                {s.targetCount - s.doneCount === 0 ? <span className="text-emerald-500 font-bold text-xs">Complete</span> : <span className="text-rose-500 font-bold text-xs">{s.targetCount - s.doneCount}명 남음</span>}
+                                                            </td>
+                                                            <td className="text-right text-slate-400">{s.type==='PAYMENT'?`${CURRENCY}${s.expectedAmount.toLocaleString()}`:'-'}</td>
+                                                            <td className="text-right font-bold text-emerald-600">{s.type==='PAYMENT'?`${CURRENCY}${s.actualAmount.toLocaleString()}`:'-'}</td>
+                                                            <td className="text-center border-l border-slate-50">
+                                                                {s.type !== 'PAYMENT' ? '-' : (
+                                                                    s.diffAmount === 0 ? <span className="text-emerald-500 font-bold text-xs">OK</span> : 
+                                                                    s.diffAmount < 0 ? <span className="text-rose-500 font-bold text-xs">{s.diffAmount}</span> : 
+                                                                    <span className="text-blue-500 font-bold text-xs">+{s.diffAmount}</span>
+                                                                )}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 </div>
             );
-        }
+
+            const ScanView = ({ mode }) => {
+                const scannerRef = useRef(null);
+                const filteredSchedules = useMemo(() => {
+                    return schedules.filter(s => s.type === mode);
+                }, [schedules, mode]);
+
+                useEffect(() => {
+                    if (filteredSchedules.length > 0) {
+                        const exists = filteredSchedules.find(s => s.id === targetSessionId);
+                        if (!exists) setTargetSessionId(filteredSchedules[0].id);
+                    } else {
+                        setTargetSessionId('');
+                    }
+                }, [mode, filteredSchedules]);
+
+                useEffect(() => {
+                    let html5QrCode;
+                    if (isScanning && scannerRef.current) {
+                        html5QrCode = new Html5Qrcode("reader");
+                        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, 
+                            (decodedText) => {
+                                setIsScanning(false);
+                                processScan(decodedText);
+                                html5QrCode.stop().catch(err => console.error(err));
+                            },
+                            (errorMessage) => { /* ignore */ }
+                        ).catch(err => {
+                            setIsScanning(false);
+                            alert("카메라 권한을 확인해주세요.");
+                        });
+                    }
+                    return () => { if(html5QrCode && html5QrCode.isScanning) html5QrCode.stop().catch(err=>{}); };
+                }, [isScanning]);
+
+                const currentSession = schedules.find(s => s.id === targetSessionId);
+
+                return (
+                    <div className="space-y-6 h-full flex flex-col animate-slide-up">
+                        <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
+                            <div className="flex items-center gap-2 mb-4">
+                                <span className={`px-2 py-1 rounded-lg text-xs font-black ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>
+                                    {mode==='BOARDING' ? 'STEP 1' : '지급'}
+                                </span>
+                                <h3 className="text-lg font-black text-slate-800">
+                                    {mode==='BOARDING' ? '탑승 일정 선택' : '지급 항목 선택'}
+                                </h3>
+                            </div>
+                            
+                            <div className="mb-6">
+                                <select value={targetSessionId} onChange={(e) => setTargetSessionId(e.target.value)} className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-lg outline-none focus:ring-4 transition-all ${mode==='BOARDING'?'focus:ring-incar/20':'focus:ring-emerald-500/20'}`}>
+                                    {filteredSchedules.length === 0 && <option>해당하는 일정이 없습니다</option>}
+                                    {filteredSchedules.map(s => <option key={s.id} value={s.id}>[{s.displayDate}] {s.title}</option>)}
+                                </select>
+                            </div>
+                            
+                            {mode === 'BOARDING' && (
+                                <div className="animate-slide-up">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <span className="px-2 py-1 rounded-lg text-xs font-black bg-slate-800 text-white">STEP 2</span>
+                                        <div className="flex justify-between items-center flex-1">
+                                            <h3 className="text-lg font-black text-slate-800">차량 번호 선택</h3>
+                                            <button onClick={()=>setManualBus(!manualBus)} className="text-xs font-bold text-slate-400 underline decoration-slate-300">
+                                                {manualBus ? '목록에서 선택' : '직접 입력'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    
+                                    {manualBus ? 
+                                        <input type="text" value={targetBus} onChange={e=>setTargetBus(e.target.value)} className="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl font-bold text-center text-lg focus:border-incar outline-none" placeholder="차량 번호 입력" /> :
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                                                <button key={n} onClick={()=>setTargetBus(`${n}호차`)} className={`py-3 rounded-xl text-sm font-black transition-all ${targetBus===`${n}호차`?'bg-incar text-white shadow-lg scale-105':'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                                                    {n}호차
+                                                </button>
+                                            ))}
+                                        </div>
+                                    }
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="flex-1 flex flex-col justify-end">
+                            {isScanning ? (
+                                <div className="bg-black rounded-3xl overflow-hidden relative shadow-2xl flex-1 max-h-[400px]">
+                                    <div id="reader" className="w-full h-full"></div>
+                                    <div className={`scan-line ${mode==='BOARDING'?'bg-incar':'bg-emerald-500'}`}></div>
+                                    <button onClick={()=>setIsScanning(false)} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur text-white px-6 py-2 rounded-full font-bold text-sm border border-white/30">스캔 취소</button>
+                                </div>
+                            ) : (
+                                <button onClick={()=>setIsScanning(true)} className={`w-full py-6 text-white rounded-3xl font-black text-xl shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${mode==='BOARDING'?'bg-incar shadow-incar/30':'bg-emerald-500 shadow-emerald-500/30'}`}>
+                                    <Icon name="qr" size={28}/> {mode==='BOARDING' ? '탑승 스캔 시작' : '지급 스캔 시작'}
+                                </button>
+                            )}
+                            {!isMobile && <button onClick={()=>processScan(users[0]?.uid || 'TEST')} className="mt-4 text-xs text-slate-400 underline text-center">테스트: 첫번째 유저 강제 인식</button>}
+                        </div>
+                    </div>
+                );
+            };
+
+            const ChangeView = () => (
+                <div className="space-y-6 animate-slide-up">
+                    <div className="bg-white p-6 rounded-3xl shadow-card">
+                        <h3 className="font-bold text-lg mb-4 text-slate-800">참가자 일정 변경 및 패널티 관리</h3>
+                        <div className="flex gap-2 mb-6">
+                            <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="사번 또는 이름 검색" className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-incar" />
+                            <button onClick={()=>{
+                                const found = users.find(u => u.uid.includes(searchQuery) || u.name.includes(searchQuery));
+                                if(found) setSelectedUser(found); else alert("사용자를 찾을 수 없습니다.");
+                            }} className="bg-slate-800 text-white px-6 rounded-2xl font-bold">검색</button>
+                        </div>
+                        {selectedUser && (
+                            <div className="border-t border-slate-100 pt-6 space-y-4">
+                                <div className="flex flex-col md:flex-row gap-6 mb-6">
+                                    <div className="flex-1 bg-slate-50 p-5 rounded-2xl border border-slate-100 flex flex-col justify-center">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div>
+                                                <div className="font-black text-2xl text-slate-800">{selectedUser.name}</div>
+                                                <div className="text-sm font-bold text-slate-500">{selectedUser.org}</div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-[10px] font-bold text-slate-400 uppercase">사번(ID)</div>
+                                                <div className="font-mono font-bold text-incar">{selectedUser.uid}</div>
+                                            </div>
+                                        </div>
+                                        <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-between items-center">
+                                            <span className="text-xs font-bold text-slate-400">누적 패널티</span>
+                                            <span className="font-black text-rose-500 text-lg">-{CURRENCY}{selectedUser.penaltyTotal || 0}</span>
+                                        </div>
+                                    </div>
+                                    <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center w-full md:w-auto">
+                                        <div className="mb-2 w-32 h-32 flex items-center justify-center bg-slate-50">
+                                            <QRCodeCanvas text={selectedUser.uid} />
+                                        </div>
+                                        <p className="text-[10px] font-bold text-slate-400">QR 데이터: {selectedUser.uid}</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">변경할 옵션 (Key)</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{key} (현재: {selectedUser.options[key]})</option>)}</select></div>
+                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">변경값 (New)</label><input type="text" value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm" /></div>
+                                </div>
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1">패널티 ({CURRENCY})</label><input type="number" value={editForm.penalty} onChange={e=>setEditForm({...editForm, penalty: e.target.value})} className="w-full p-3 border border-rose-200 bg-rose-50 rounded-xl font-bold text-rose-600" /></div>
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1">변경 사유</label><input type="text" value={editForm.reason} onChange={e=>setEditForm({...editForm, reason: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm" /></div>
+                                <button onClick={handleUserUpdate} className="w-full py-4 bg-incar text-white font-bold rounded-2xl shadow-lg mt-4 hover:bg-incar-dark">저장하기</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+
+            const BadgePrintView = ({ users, onClose, config }) => {
+                return (
+                    <div className="fixed inset-0 bg-white z-[100] overflow-auto animate-fade-in print-only-container">
+                        <div className="no-print fixed top-0 left-0 w-full bg-slate-900 text-white p-4 flex justify-between items-center shadow-xl z-50">
+                            <div className="font-bold text-lg flex items-center gap-4">
+                                <span className="bg-incar px-2 py-1 rounded text-xs">PRINT MODE</span> 
+                                <span>명찰 일괄 출력 (총 {users.length}명)</span>
+                            </div>
+                            <div className="flex gap-3">
+                                <button onClick={() => window.print()} className="bg-emerald-500 hover:bg-emerald-600 px-6 py-2 rounded-lg font-bold flex items-center gap-2">
+                                    <Icon name="print" /> 인쇄 / PDF저장
+                                </button>
+                                <button onClick={onClose} className="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-lg font-bold">닫기</button>
+                            </div>
+                        </div>
+                        <div className="p-8 pt-24 flex flex-col items-center gap-8 max-w-full mx-auto print:p-0 print:block">
+                            {users.map((u, i) => (
+                                <div key={u.uid} className="page-break relative shadow-sm overflow-hidden print:border-0 print:shadow-none" 
+                                     style={{
+                                         width: '545px',
+                                         height: '697px',
+                                         border: config?.bgImage ? '1px solid #eee' : '2px solid #0f172a',
+                                         borderRadius: '0.75rem',
+                                         backgroundColor: 'white',
+                                         marginBottom: '20px'
+                                     }}>
+                                    {config?.bgImage ? (
+                                        <>
+                                            <img src={config.bgImage} className="absolute inset-0 w-full h-full object-cover z-0 print:block" />
+                                            
+                                            {/* QR Code Layer */}
+                                            <div style={{ 
+                                                position: 'absolute', 
+                                                top: `${config.qr.y}%`, 
+                                                left: `${config.qr.x}%`, 
+                                                transform: 'translate(-50%, -50%)', 
+                                                zIndex: 10 
+                                            }}>
+                                                <QRCodeCanvas text={u.uid} size={config.qr.size} transparent={true} />
+                                            </div>
+
+                                            {/* Text Layer: Organization */}
+                                            {config.org.show && (
+                                                <div style={{ 
+                                                    position: 'absolute', 
+                                                    top: `${config.org.y}%`, 
+                                                    left: `${config.org.x}%`, 
+                                                    transform: 'translate(-50%, -50%)',
+                                                    color: config.org.color, 
+                                                    fontSize: `${config.org.size}px`,
+                                                    fontWeight: 'bold',
+                                                    whiteSpace: 'nowrap',
+                                                    zIndex: 10 
+                                                }}>
+                                                    {u.org}
+                                                </div>
+                                            )}
+
+                                            {/* Text Layer: Name */}
+                                            {config.name.show && (
+                                                <div style={{ 
+                                                    position: 'absolute', 
+                                                    top: `${config.name.y}%`, 
+                                                    left: `${config.name.x}%`, 
+                                                    transform: 'translate(-50%, -50%)',
+                                                    color: config.name.color, 
+                                                    fontSize: `${config.name.size}px`,
+                                                    fontWeight: '900',
+                                                    whiteSpace: 'nowrap',
+                                                    zIndex: 10 
+                                                }}>
+                                                    {u.name}
+                                                </div>
+                                            )}
+
+                                            {/* Text Layer: UID */}
+                                            {config.uid.show && (
+                                                <div style={{ 
+                                                    position: 'absolute', 
+                                                    top: `${config.uid.y}%`, 
+                                                    left: `${config.uid.x}%`, 
+                                                    transform: 'translate(-50%, -50%)',
+                                                    color: config.uid.color, 
+                                                    fontSize: `${config.uid.size}px`,
+                                                    fontFamily: 'monospace',
+                                                    zIndex: 10 
+                                                }}>
+                                                    {u.uid}
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <div className="flex flex-col items-center justify-center h-full p-6 text-center">
+                                            <div className="w-40 h-40 bg-white mb-6">
+                                                <QRCodeCanvas text={u.uid} size={160} />
+                                            </div>
+                                            <div className="overflow-hidden w-full">
+                                                <div className="text-xl font-bold text-slate-500 mb-2 truncate">{u.org}</div>
+                                                <div className="text-6xl font-black text-slate-900 mb-4 truncate leading-tight">{u.name}</div>
+                                                <div className="text-sm font-mono text-slate-400 tracking-widest">{u.uid}</div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
+            const ManageView = () => {
+                const [viewQrUser, setViewQrUser] = useState(null); 
+                
+                const handleBgImageUpload = (e) => {
+                    const file = e.target.files[0];
+                    if(file){
+                        const reader = new FileReader();
+                        reader.onload = (evt) => setBadgeConfig(prev => ({...prev, bgImage: evt.target.result}));
+                        reader.readAsDataURL(file);
+                    }
+                };
+
+                const downloadTemplate = (type) => {
+                    let content = '';
+                    let filename = '';
+                    if(type === 'users') {
+                        content = '\uFEFF사번,성명,소속,버스,2일차,3일차\n202401,홍길동,마케팅팀,1호차,힐링코스,투어\n202402,김철수,영업팀,미정,문화탐방,자유일정';
+                        filename = '참가자명단_샘플.csv';
+                    } else {
+                        content = '\uFEFF일정,장소,타입,지급,타겟옵션,타겟값\n1일차,공항미팅,관광,0,ALL,ALL\n2일차,자유식비,지급,30,2일차,자유일정\n2일차,힐링코스탑승,관광,0,2일차,힐링코스';
+                        filename = '일정정보_샘플.csv';
+                    }
+                    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = filename;
+                    link.click();
+                };
+
+                const SliderGroup = ({ label, conf, onChange, colorPicker = false }) => (
+                    <div className="p-4 bg-slate-50 rounded-xl space-y-3 border border-slate-100">
+                        <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-slate-700">{label}</span>
+                            {conf.hasOwnProperty('show') && (
+                                <label className="flex items-center gap-1 cursor-pointer">
+                                    <input type="checkbox" checked={conf.show} onChange={e => onChange('show', e.target.checked)} className="w-3 h-3 rounded text-incar focus:ring-incar"/>
+                                    <span className="text-[10px] text-slate-400">표시</span>
+                                </label>
+                            )}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2">
+                            <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">가로</span><input type="range" min="0" max="100" value={conf.x} onChange={e=>onChange('x', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
+                            <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">세로</span><input type="range" min="0" max="100" value={conf.y} onChange={e=>onChange('y', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
+                            <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">크기</span><input type="range" min="10" max={label==='QR코드'?250:100} value={conf.size} onChange={e=>onChange('size', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
+                            {colorPicker && (
+                                <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">색상</span><input type="color" value={conf.color} onChange={e=>onChange('color', e.target.value)} className="w-full h-6 rounded cursor-pointer border border-slate-200"/></div>
+                            )}
+                        </div>
+                    </div>
+                );
+
+                return (
+                    <div className="space-y-6 animate-slide-up no-print">
+                        <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
+                            <h3 className="font-bold text-lg mb-4 text-slate-800 flex items-center gap-2"><Icon name="edit" className="text-incar"/> 명찰 디자인 설정</h3>
+                            <div className="flex flex-col md:flex-row gap-8">
+                                <div className="flex-1 flex justify-center items-start bg-slate-50 rounded-2xl p-4 border-2 border-dashed border-slate-200 min-h-[300px] overflow-auto">
+                                    <div className="relative overflow-hidden shadow-2xl bg-white sticky top-4 origin-top transform scale-75 md:scale-50 lg:scale-75" 
+                                         style={{ width: '545px', height: '697px', borderRadius: '10px', flexShrink: 0 }}>
+                                        {badgeConfig.bgImage ? (
+                                            <>
+                                                <img src={badgeConfig.bgImage} className="absolute inset-0 w-full h-full object-cover" />
+                                                <div style={{ position: 'absolute', top: `${badgeConfig.qr.y}%`, left: `${badgeConfig.qr.x}%`, width: `${badgeConfig.qr.size}px`, height: `${badgeConfig.qr.size}px`, transform: 'translate(-50%, -50%)', border: '2px dashed red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'red', fontWeight: 'bold' }}>QR</div>
+                                                {badgeConfig.org.show && <div style={{ position: 'absolute', top: `${badgeConfig.org.y}%`, left: `${badgeConfig.org.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.org.color, fontSize: `${badgeConfig.org.size}px`, fontWeight: 'bold', border: '1px dashed blue', whiteSpace: 'nowrap' }}>소속 (Organization)</div>}
+                                                {badgeConfig.name.show && <div style={{ position: 'absolute', top: `${badgeConfig.name.y}%`, left: `${badgeConfig.name.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.name.color, fontSize: `${badgeConfig.name.size}px`, fontWeight: '900', border: '1px dashed blue', whiteSpace: 'nowrap' }}>성 명 (Name)</div>}
+                                                {badgeConfig.uid.show && <div style={{ position: 'absolute', top: `${badgeConfig.uid.y}%`, left: `${badgeConfig.uid.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.uid.color, fontSize: `${badgeConfig.uid.size}px`, fontFamily: 'monospace', border: '1px dashed blue', whiteSpace: 'nowrap' }}>12345678</div>}
+                                            </>
+                                        ) : (
+                                            <div className="flex items-center justify-center h-full text-slate-400 text-sm flex-col gap-2"><Icon name="upload" size={32}/><span>배경 이미지를 업로드해주세요</span></div>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className="flex-1 space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 mb-2">배경 이미지 업로드</label>
+                                        <input type="file" accept="image/*" onChange={handleBgImageUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-incar-light file:text-incar hover:file:bg-indigo-100"/>
+                                    </div>
+                                    {badgeConfig.bgImage && (
+                                        <div className="space-y-3">
+                                            <SliderGroup label="QR코드" conf={badgeConfig.qr} onChange={(k,v)=>setBadgeConfig(p=>({...p, qr:{...p.qr, [k]:v}}))} />
+                                            <SliderGroup label="소속 (상단)" conf={badgeConfig.org} onChange={(k,v)=>setBadgeConfig(p=>({...p, org:{...p.org, [k]:v}}))} colorPicker={true} />
+                                            <SliderGroup label="성명 (중앙)" conf={badgeConfig.name} onChange={(k,v)=>setBadgeConfig(p=>({...p, name:{...p.name, [k]:v}}))} colorPicker={true} />
+                                            <SliderGroup label="사번 (하단)" conf={badgeConfig.uid} onChange={(k,v)=>setBadgeConfig(p=>({...p, uid:{...p.uid, [k]:v}}))} colorPicker={true} />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-incar text-white p-6 rounded-3xl shadow-xl relative overflow-hidden">
+                            <div className="relative z-10">
+                                <h3 className="font-black text-2xl">Master Data Setup</h3>
+                                <p className="text-blue-200 text-sm mt-1 mb-6">엑셀 파일을 업로드하여 행사를 설정하세요.</p>
+                                <div className="space-y-4">
+                                    <div className="bg-white/10 rounded-2xl border border-white/20 p-4">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <div className="flex items-center gap-3"><Icon name="users" className="text-blue-200"/><div><div className="font-bold text-sm">1. 참가자 명단 (Users.csv)</div><div className="text-[10px] text-blue-300">사번, 성명, 옵션(2일차 등) 포함</div></div></div>
+                                            <button onClick={()=>downloadTemplate('users')} className="text-[10px] bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"><Icon name="download" size={12} /> 양식 다운로드</button>
+                                        </div>
+                                        <label className="flex items-center justify-center w-full p-3 bg-white text-incar font-bold rounded-xl cursor-pointer hover:bg-slate-100 transition-colors text-sm"><input type="file" accept=".csv" onChange={handleUserUpload} className="hidden" /><Icon name="upload" size={16} className="mr-2" /> 파일 업로드</label>
+                                    </div>
+                                    <div className="bg-white/10 rounded-2xl border border-white/20 p-4">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <div className="flex items-center gap-3"><Icon name="dashboard" className="text-blue-200"/><div><div className="font-bold text-sm">2. 일정 정보 (Schedules.csv)</div><div className="text-[10px] text-blue-300">일정, 장소, 타입, 타겟옵션 포함</div></div></div>
+                                            <button onClick={()=>downloadTemplate('schedules')} className="text-[10px] bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"><Icon name="download" size={12} /> 양식 다운로드</button>
+                                        </div>
+                                        <label className="flex items-center justify-center w-full p-3 bg-white text-incar font-bold rounded-xl cursor-pointer hover:bg-slate-100 transition-colors text-sm"><input type="file" accept=".csv" onChange={handleScheduleUpload} className="hidden" /><Icon name="upload" size={16} className="mr-2" /> 파일 업로드</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-card flex justify-between items-center relative overflow-hidden group">
+                            <div className="absolute right-0 bottom-0 opacity-10 p-4"><Icon name="print" size={80} /></div>
+                            <div className="relative z-10">
+                                <h4 className="font-bold text-lg mb-1 flex items-center gap-2"><Icon name="print" /> 명찰 일괄 출력</h4>
+                                <p className="text-xs text-slate-400">등록된 {users.length}명의 QR 명찰을 한 번에 생성합니다.</p>
+                            </div>
+                            <button onClick={() => {
+                                if(users.length === 0) return alert("참가자 데이터가 없습니다.");
+                                setIsPrintMode(true);
+                            }} className="relative z-10 px-6 py-3 bg-white text-slate-900 rounded-xl font-bold text-sm hover:bg-slate-100 transition-colors shadow-lg active:scale-95">전체 인쇄 모드</button>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-3xl shadow-card">
+                            <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Icon name="users" className="text-incar"/> 참가자 QR 카드 발급</h4>
+                            <div className="overflow-y-auto max-h-80 border border-slate-100 rounded-2xl">
+                                {users.length === 0 ? <div className="p-8 text-center text-slate-400 text-sm">참가자 명단을 먼저 업로드해주세요.</div> : (
+                                    <div className="divide-y divide-slate-100">
+                                        {users.map(u => (
+                                            <div key={u.uid} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                                                <div><div className="font-bold text-slate-800">{u.name}</div><div className="text-xs text-slate-400 font-medium">{u.org} | <span className="font-mono text-incar">{u.uid}</span></div></div>
+                                                <button onClick={()=>setViewQrUser(u)} className="px-4 py-2 bg-indigo-50 text-incar font-bold text-xs rounded-xl hover:bg-indigo-100 transition-colors flex items-center gap-1"><Icon name="qr" size={14}/> QR 보기</button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="bg-white p-6 rounded-3xl shadow-card">
+                            <h4 className="font-bold text-slate-800 mb-4">현재 데이터 현황</h4>
+                            <div className="grid grid-cols-2 gap-4 text-center">
+                                <div className="p-4 bg-slate-50 rounded-2xl"><div className="text-2xl font-black text-incar">{users.length}</div><div className="text-xs text-slate-400 font-bold">참가자</div></div>
+                                <div className="p-4 bg-slate-50 rounded-2xl"><div className="text-2xl font-black text-emerald-600">{schedules.length}</div><div className="text-xs text-slate-400 font-bold">세션</div></div>
+                            </div>
+                            <button onClick={()=>{ if(confirm("초기화?")) { localStorage.clear(); window.location.reload(); }}} className="w-full mt-6 py-4 bg-rose-50 text-rose-600 font-bold rounded-2xl hover:bg-rose-100">전체 초기화</button>
+                        </div>
+
+                        {viewQrUser && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in" onClick={()=>setViewQrUser(null)}>
+                                <div className="bg-white p-8 rounded-3xl w-full max-w-xs text-center relative shadow-2xl" onClick={e=>e.stopPropagation()}>
+                                    <div className="absolute top-0 left-0 w-full h-2 bg-incar"></div>
+                                    <h3 className="font-black text-2xl text-incar mb-1 mt-2">INCARPASS</h3>
+                                    <div className="text-[10px] text-slate-400 font-bold tracking-[0.2em] mb-8">OFFICIAL EVENT ID</div>
+                                    <div className="bg-white p-2 rounded-2xl border-2 border-dashed border-slate-200 inline-block mb-6"><div className="w-48 h-48 flex items-center justify-center"><QRCodeCanvas text={viewQrUser.uid} /></div></div>
+                                    <div className="space-y-1 mb-8"><div className="font-black text-3xl text-slate-900">{viewQrUser.name}</div><div className="text-sm font-bold text-slate-500">{viewQrUser.org}</div><div className="inline-block bg-slate-100 px-4 py-1 rounded-full text-sm font-mono font-bold text-slate-600 mt-2">{viewQrUser.uid}</div></div>
+                                    <div className="text-[10px] text-slate-300 font-medium mb-6">본 QR코드를 스태프에게 제시해주세요.</div>
+                                    <button onClick={()=>setViewQrUser(null)} className="w-full py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">닫기</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            const Sidebar = () => (
+                <aside className="w-64 bg-white h-full border-r border-slate-200 flex flex-col shadow-lg z-30 no-print">
+                    <div className="p-6 border-b border-slate-100 flex items-center gap-3">
+                        <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
+                        <h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PC</span></h1>
+                    </div>
+                    <nav className="flex-1 p-4 space-y-2">
+                        {[
+                            {id:'dashboard', icon:'dashboard', label:'관제 대시보드'},
+                            {id:'boarding', icon:'bus', label:'탑승 (Boarding)'},
+                            {id:'payment', icon:'money', label:'지급 (Payment)'},
+                            {id:'change', icon:'edit', label:'일정/패널티 관리'},
+                            {id:'manage', icon:'settings', label:'마스터 설정'}
+                        ].map(menu => (
+                            <button key={menu.id} onClick={()=>setActiveTab(menu.id)} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab===menu.id ? 'bg-incar text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>
+                                <Icon name={menu.icon} /> {menu.label}
+                            </button>
+                        ))}
+                    </nav>
+                    <div className="p-6 border-t border-slate-100">
+                        <div className="text-xs text-slate-400 font-bold mb-2">OPERATOR</div>
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-slate-200"></div>
+                            <div className="text-sm font-bold text-slate-700">관리자님</div>
+                        </div>
+                    </div>
+                </aside>
+            );
+
+            const MobileTab = () => (
+                <nav className="fixed bottom-0 w-full bg-white border-t border-slate-200 pb-safe pt-2 px-4 flex justify-around items-center z-30 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] no-print">
+                    <button onClick={()=>setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='dashboard'?'text-incar':'text-slate-300'}`}><Icon name="dashboard" size={20} className={activeTab==='dashboard'?'fill-current':''} /><span className="text-[9px] font-bold">현황</span></button>
+                    <button onClick={()=>setActiveTab('boarding')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='boarding'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='boarding'?'bg-incar text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="bus" size={20} /></div>{activeTab!=='boarding' && <span className="text-[9px] font-bold">탑승</span>}</button>
+                    <button onClick={()=>setActiveTab('payment')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='payment'?'text-emerald-500':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='payment'?'bg-emerald-500 text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="money" size={20} /></div>{activeTab!=='payment' && <span className="text-[9px] font-bold">지급</span>}</button>
+                    <button onClick={()=>setActiveTab('change')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='change'?'text-incar':'text-slate-300'}`}><Icon name="edit" size={20} className={activeTab==='change'?'fill-current':''} /><span className="text-[9px] font-bold">변경</span></button>
+                </nav>
+            );
+
+            return (
+                <div className="h-full flex flex-row bg-slate-50 w-full">
+                    { !isMobile && <Sidebar /> }
+                    <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full">
+                        { isMobile && (
+                            <header className="bg-white px-6 py-4 shadow-sm flex justify-between items-center z-20 no-print">
+                                <div className="flex items-center gap-2"><div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div><h1 className="font-black text-slate-800 tracking-tight">INCARPASS</h1></div>
+                                <div className="text-xs font-bold text-slate-400">{users.length}명</div>
+                            </header>
+                        )}
+                        <div className="flex-1 overflow-y-auto p-4 pb-24 md:p-8 md:pb-8 w-full no-print-scroll">
+                            <div className="max-w-5xl mx-auto w-full">
+                                {activeTab === 'dashboard' && <DashboardView />}
+                                {activeTab === 'boarding' && <ScanView mode="BOARDING" />}
+                                {activeTab === 'payment' && <ScanView mode="PAYMENT" />}
+                                {activeTab === 'change' && <ChangeView />}
+                                {activeTab === 'manage' && <ManageView />}
+                            </div>
+                        </div>
+                        { isMobile && <MobileTab /> }
+                        {isPrintMode && <BadgePrintView users={users} config={badgeConfig} onClose={() => setIsPrintMode(false)} />}
+                    </main>
+                    <ResultModal result={scanResult} onClose={() => setScanResult(null)} />
+                </div>
+            );
+        };
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
