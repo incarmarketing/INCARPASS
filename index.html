@@ -14,6 +14,10 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <!-- 로컬 QR 생성을 위한 라이브러리 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     
     <!-- 스타일 -->
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
@@ -95,7 +99,8 @@
                 desktop: <g><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></g>,
                 mobile: <g><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12" y2="18"/></g>,
                 table: <g><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7m0-18H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m0-18v18"/></g>,
-                print: <g><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></g>
+                print: <g><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></g>,
+                bus: <g><path d="M19 17h2l.64-2.54c.24-1.12.36-2.26.36-3.41V8.5a4.5 4.5 0 0 0-4.5-4.5h-11A4.5 4.5 0 0 0 2 8.5v2.55c0 1.15.12 2.29.36 3.41L3 17h2"/><path d="M15 17v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2"/><path d="M16 8.5h.01"/><path d="M8 8.5h.01"/></g>
             };
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="2"/>}</svg>;
         };
@@ -178,14 +183,18 @@
             const [isPrintMode, setIsPrintMode] = useState(false);
             
             // [통합된 명찰 디자인 설정 상태]
-            // 기본값: 545x697, QR 상단, 소속 중앙 위, 이름 중앙 아래
             const [badgeConfig, setBadgeConfig] = useState({
                 bgImage: null,
-                qr: { x: 50, y: 20, size: 100 },
-                name: { x: 50, y: 55, size: 40, color: '#000000', show: true },
-                org: { x: 50, y: 45, size: 20, color: '#475569', show: true },
-                uid: { x: 50, y: 85, size: 14, color: '#94a3b8', show: false } // 사번 숨김
+                qr: { x: 50, y: 70, size: 150 },
+                name: { x: 50, y: 45, size: 40, color: '#000000', show: true },
+                org: { x: 50, y: 35, size: 20, color: '#475569', show: true },
+                uid: { x: 50, y: 85, size: 14, color: '#94a3b8', show: false } 
             });
+
+            const [user, setUser] = useState(null); // Firebase User
+            const [db, setDb] = useState(null);     // Firestore Instance
+            const [isLoading, setIsLoading] = useState(true);
+            const [serverError, setServerError] = useState(null);
 
             const [users, setUsers] = useState([]);
             const [schedules, setSchedules] = useState([]);
@@ -202,49 +211,120 @@
             const [selectedUser, setSelectedUser] = useState(null);
             const [editForm, setEditForm] = useState({ optKey: '', optVal: '', penalty: 0, reason: '' });
 
+            // [NEW] 상수: 파이어베이스 컬렉션 경로
+            const SYSTEM_APP_ID = 'inca-prod-v1';
+
+            // [수정] 파이어베이스 설정값 (코드에 직접 입력)
+            const firebaseConfig = {
+              apiKey: "AIzaSyAh1dsSNobeF6Wz-0euP5AUggdqJANJ3dQ",
+              authDomain: "incarpass.firebaseapp.com",
+              projectId: "incarpass",
+              storageBucket: "incarpass.firebasestorage.app",
+              messagingSenderId: "955362361998",
+              appId: "1:955362361998:web:166055dd392784f1827fdf",
+              measurementId: "G-SNR3FPPQ7E"
+            };
+            
             useEffect(() => {
                 const handleResize = () => setIsMobile(window.innerWidth < 768);
                 window.addEventListener('resize', handleResize);
                 return () => window.removeEventListener('resize', handleResize);
             }, []);
 
+            // [수정] 초기화 로직
             useEffect(() => {
-                const loadedUsers = JSON.parse(localStorage.getItem('incar_pro_users') || '[]');
-                const loadedSched = JSON.parse(localStorage.getItem('incar_pro_schedules') || '[]');
-                const loadedLogs = JSON.parse(localStorage.getItem('incar_pro_logs') || '[]');
-                const loadedChanges = JSON.parse(localStorage.getItem('incar_pro_changelogs') || '[]');
-                
-                // [수정] 설정 충돌 방지를 위해 저장소 키 변경 (v2 -> v2.1)
-                const loadedBadgeConfig = JSON.parse(localStorage.getItem('incar_pro_badge_config_v2_1') || 'null');
+                const initSystem = async () => {
+                    // 0. 실행 환경 체크
+                    if (window.location.protocol === 'file:') {
+                        alert("⚠️ 주의: HTML 파일을 직접 열면(file://) 파이어베이스 서버 연결이 차단됩니다.\n\nVS Code의 'Live Server'를 사용하거나, GitHub/Netlify에 올려서(http/https) 실행해주세요.");
+                    }
 
-                setUsers(loadedUsers);
-                setSchedules(loadedSched);
-                setLogs(loadedLogs);
-                setChangeLogs(loadedChanges);
-                
-                // 저장된 설정이 있고, 데이터 구조가 유효한 경우에만 로드 (안전장치 추가)
+                    // 1. 코드에 입력된 설정 확인
+                    if (firebaseConfig.apiKey && firebaseConfig.projectId) {
+                        try {
+                            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+                            const _db = firebase.firestore();
+                            await firebase.auth().signInAnonymously();
+                            
+                            setDb(_db);
+                            setServerError(null);
+
+                            const unsubS = _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').onSnapshot(snap => {
+                                const list = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b)=>a.date>b.date?1:-1);
+                                setSchedules(list);
+                                if(list.length > 0 && !targetSessionId) setTargetSessionId(list[0].id);
+                            }, err => console.error("Schedules Sync Error:", err));
+
+                            const unsubL = _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').orderBy('timestamp','desc').onSnapshot(snap => {
+                                setLogs(snap.docs.map(d => ({id:d.id, ...d.data()})));
+                            }, err => console.error("Logs Sync Error:", err));
+
+                            const unsubC = _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').orderBy('timestamp','desc').onSnapshot(snap => {
+                                setChangeLogs(snap.docs.map(d => ({id:d.id, ...d.data()})));
+                            }, err => console.error("Changelogs Sync Error:", err));
+
+                            const unsubU = _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').onSnapshot(snap => {
+                                setUsers(snap.docs.map(d => d.data()));
+                            }, err => console.error("Users Sync Error:", err));
+
+                            firebase.auth().onAuthStateChanged(u => {
+                                setUser(u);
+                                setIsLoading(false);
+                            });
+
+                            return () => { unsubS(); unsubL(); unsubC(); unsubU(); };
+
+                        } catch (e) {
+                            console.error("Firebase Init Failed:", e);
+                            let errorMsg = e.message;
+                            if(e.code === 'auth/operation-not-allowed') errorMsg = "파이어베이스 콘솔에서 [Authentication > Sign-in method > 익명]을 사용 설정해주세요.";
+                            if(e.code === 'permission-denied') errorMsg = "Firestore 보안 규칙이 잠겨있습니다. [Firestore > 규칙]을 테스트 모드로 변경해주세요.";
+                            
+                            setServerError(errorMsg);
+                            alert(`서버 연결 실패!\n\n원인: ${errorMsg}\n\n로컬 모드로 전환합니다.`);
+                            initLocal();
+                        }
+                    } else {
+                        initLocal();
+                    }
+                };
+
+                const initLocal = () => {
+                    const loadedUsers = JSON.parse(localStorage.getItem('incar_pro_users') || '[]');
+                    const loadedSched = JSON.parse(localStorage.getItem('incar_pro_schedules') || '[]');
+                    const loadedLogs = JSON.parse(localStorage.getItem('incar_pro_logs') || '[]');
+                    const loadedChanges = JSON.parse(localStorage.getItem('incar_pro_changelogs') || '[]');
+                    
+                    setUsers(loadedUsers);
+                    setSchedules(loadedSched);
+                    setLogs(loadedLogs);
+                    setChangeLogs(loadedChanges);
+                    
+                    if (loadedSched.length > 0) setTargetSessionId(loadedSched[0].id);
+                    setIsLoading(false);
+                };
+
+                initSystem();
+
+                const loadedBadgeConfig = JSON.parse(localStorage.getItem('incar_pro_badge_config_v2_1') || 'null');
                 if(loadedBadgeConfig && loadedBadgeConfig.name && loadedBadgeConfig.org) {
                     setBadgeConfig(loadedBadgeConfig);
                 }
-
-                if (loadedSched.length > 0) setTargetSessionId(loadedSched[0].id);
             }, []);
 
-            useEffect(() => { localStorage.setItem('incar_pro_users', JSON.stringify(users)); }, [users]);
-            useEffect(() => { localStorage.setItem('incar_pro_schedules', JSON.stringify(schedules)); }, [schedules]);
-            useEffect(() => { localStorage.setItem('incar_pro_logs', JSON.stringify(logs)); }, [logs]);
-            useEffect(() => { localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs]);
-            // [수정] 저장 키 변경 반영
+            useEffect(() => { if(!db) localStorage.setItem('incar_pro_users', JSON.stringify(users)); }, [users, db]);
+            useEffect(() => { if(!db) localStorage.setItem('incar_pro_schedules', JSON.stringify(schedules)); }, [schedules, db]);
+            useEffect(() => { if(!db) localStorage.setItem('incar_pro_logs', JSON.stringify(logs)); }, [logs, db]);
+            useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
             useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_1', JSON.stringify(badgeConfig)); }, [badgeConfig]);
 
-            // --- Handlers ---
-            const handleUserUpload = (e) => {
+            const handleUserUpload = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 Papa.parse(file, {
                     header: true,
                     skipEmptyLines: true,
-                    complete: (results) => {
+                    complete: async (results) => {
                         const parsed = results.data.map(row => {
                             const uid = row['사번'] || row['ID'] || row['uid'] || Object.values(row)[0];
                             const name = row['성명'] || row['이름'] || row['Name'] || Object.values(row)[1];
@@ -260,20 +340,30 @@
                         }).filter(u => u.uid);
 
                         if(confirm(`${parsed.length}명의 참가자 명단을 로드하시겠습니까?`)) {
-                            setUsers(parsed);
-                            alert("로드 완료!");
+                            if (db) {
+                                const batch = db.batch();
+                                parsed.forEach(u => {
+                                    const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(u.uid));
+                                    batch.set(ref, u);
+                                });
+                                await batch.commit();
+                                alert("서버 업로드 완료!");
+                            } else {
+                                setUsers(parsed);
+                                alert("로컬 로드 완료!");
+                            }
                         }
                     }
                 });
             };
 
-            const handleScheduleUpload = (e) => {
+            const handleScheduleUpload = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 Papa.parse(file, {
                     header: true,
                     skipEmptyLines: true,
-                    complete: (results) => {
+                    complete: async (results) => {
                         const parsed = results.data.map((row, idx) => {
                             const rawDate = row['일정'] || row['Date'] || `Day ${idx+1}`;
                             const today = new Date();
@@ -299,15 +389,25 @@
                         });
 
                         if(confirm(`${parsed.length}개의 스케줄을 로드하시겠습니까?`)) {
-                            setSchedules(parsed);
-                            if(parsed.length > 0) setTargetSessionId(parsed[0].id);
-                            alert("로드 완료!");
+                            if (db) {
+                                const batch = db.batch();
+                                parsed.forEach(s => {
+                                    const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(s.id);
+                                    batch.set(ref, s);
+                                });
+                                await batch.commit();
+                                alert("서버 업로드 완료!");
+                            } else {
+                                setSchedules(parsed);
+                                if(parsed.length > 0) setTargetSessionId(parsed[0].id);
+                                alert("로컬 로드 완료!");
+                            }
                         }
                     }
                 });
             };
 
-            const processScan = (scannedUid) => {
+            const processScan = async (scannedUid) => {
                 const user = users.find(u => u.uid === scannedUid);
                 if (!user) return setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `ID: ${scannedUid}` });
 
@@ -333,15 +433,10 @@
                     const deduction = user.penaltyTotal || 0;
                     finalAmount = Math.max(0, baseAmount - deduction);
                     penaltyApplied = (baseAmount - finalAmount);
-
-                    if (penaltyApplied > 0) {
-                        const updatedUsers = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u);
-                        setUsers(updatedUsers);
-                    }
                 }
 
                 const newLog = {
-                    id: `LOG_${Date.now()}`,
+                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`,
                     timestamp: new Date().toISOString(),
                     uid: user.uid,
                     name: user.name,
@@ -355,22 +450,27 @@
                     finalAmount: finalAmount
                 };
 
-                setLogs([newLog, ...logs]);
+                if (db) {
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog);
+                    if (penaltyApplied > 0) {
+                        const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
+                        await userRef.update({ penaltyTotal: user.penaltyTotal - penaltyApplied });
+                    }
+                } else {
+                    setLogs([newLog, ...logs]);
+                    if (penaltyApplied > 0) {
+                        const updatedUsers = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u);
+                        setUsers(updatedUsers);
+                    }
+                }
+                
                 setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog });
             };
 
-            const handleUserUpdate = () => {
+            const handleUserUpdate = async () => {
                 if (!selectedUser || !editForm.optKey) return;
                 
-                const updatedUsers = users.map(u => {
-                    if (u.uid === selectedUser.uid) {
-                        const newOptions = { ...u.options, [editForm.optKey]: editForm.optVal };
-                        const newPenalty = (u.penaltyTotal || 0) + parseInt(editForm.penalty || 0);
-                        return { ...u, options: newOptions, penaltyTotal: newPenalty };
-                    }
-                    return u;
-                });
-                
+                const newPenalty = parseInt(editForm.penalty || 0);
                 const changeLog = {
                     id: `CHG_${Date.now()}`,
                     timestamp: new Date().toLocaleString(),
@@ -379,14 +479,32 @@
                     targetOption: editForm.optKey,
                     oldVal: selectedUser.options[editForm.optKey],
                     newVal: editForm.optVal,
-                    penalty: parseInt(editForm.penalty || 0),
+                    penalty: newPenalty,
                     reason: editForm.reason
                 };
 
-                setUsers(updatedUsers);
-                setChangeLogs([changeLog, ...changeLogs]);
-                alert("변경 및 패널티 적용이 완료되었습니다.");
+                if (db) {
+                    const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(selectedUser.uid));
+                    const updatedOptions = { ...selectedUser.options, [editForm.optKey]: editForm.optVal };
+                    await userRef.update({ 
+                        options: updatedOptions,
+                        penaltyTotal: (selectedUser.penaltyTotal || 0) + newPenalty
+                    });
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
+                } else {
+                    const updatedUsers = users.map(u => {
+                        if (u.uid === selectedUser.uid) {
+                            const newOptions = { ...u.options, [editForm.optKey]: editForm.optVal };
+                            const totalPenalty = (u.penaltyTotal || 0) + newPenalty;
+                            return { ...u, options: newOptions, penaltyTotal: totalPenalty };
+                        }
+                        return u;
+                    });
+                    setUsers(updatedUsers);
+                    setChangeLogs([changeLog, ...changeLogs]);
+                }
                 
+                alert("변경 및 패널티 적용이 완료되었습니다.");
                 setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' });
                 setSelectedUser(null);
                 setSearchQuery('');
@@ -720,67 +838,12 @@
                                     {config?.bgImage ? (
                                         <>
                                             <img src={config.bgImage} className="absolute inset-0 w-full h-full object-cover z-0 print:block" />
-                                            
-                                            {/* QR Code Layer */}
-                                            <div style={{ 
-                                                position: 'absolute', 
-                                                top: `${config.qr.y}%`, 
-                                                left: `${config.qr.x}%`, 
-                                                transform: 'translate(-50%, -50%)', 
-                                                zIndex: 10 
-                                            }}>
+                                            <div style={{ position: 'absolute', top: `${config.qr.y}%`, left: `${config.qr.x}%`, transform: 'translate(-50%, -50%)', zIndex: 10 }}>
                                                 <QRCodeCanvas text={u.uid} size={config.qr.size} transparent={true} />
                                             </div>
-
-                                            {/* Text Layer: Organization */}
-                                            {config.org.show && (
-                                                <div style={{ 
-                                                    position: 'absolute', 
-                                                    top: `${config.org.y}%`, 
-                                                    left: `${config.org.x}%`, 
-                                                    transform: 'translate(-50%, -50%)',
-                                                    color: config.org.color, 
-                                                    fontSize: `${config.org.size}px`,
-                                                    fontWeight: 'bold',
-                                                    whiteSpace: 'nowrap',
-                                                    zIndex: 10 
-                                                }}>
-                                                    {u.org}
-                                                </div>
-                                            )}
-
-                                            {/* Text Layer: Name */}
-                                            {config.name.show && (
-                                                <div style={{ 
-                                                    position: 'absolute', 
-                                                    top: `${config.name.y}%`, 
-                                                    left: `${config.name.x}%`, 
-                                                    transform: 'translate(-50%, -50%)',
-                                                    color: config.name.color, 
-                                                    fontSize: `${config.name.size}px`,
-                                                    fontWeight: '900',
-                                                    whiteSpace: 'nowrap',
-                                                    zIndex: 10 
-                                                }}>
-                                                    {u.name}
-                                                </div>
-                                            )}
-
-                                            {/* Text Layer: UID */}
-                                            {config.uid.show && (
-                                                <div style={{ 
-                                                    position: 'absolute', 
-                                                    top: `${config.uid.y}%`, 
-                                                    left: `${config.uid.x}%`, 
-                                                    transform: 'translate(-50%, -50%)',
-                                                    color: config.uid.color, 
-                                                    fontSize: `${config.uid.size}px`,
-                                                    fontFamily: 'monospace',
-                                                    zIndex: 10 
-                                                }}>
-                                                    {u.uid}
-                                                </div>
-                                            )}
+                                            {config.org.show && <div style={{ position: 'absolute', top: `${config.org.y}%`, left: `${config.org.x}%`, transform: 'translate(-50%, -50%)', color: config.org.color, fontSize: `${config.org.size}px`, fontWeight: 'bold', whiteSpace: 'nowrap', zIndex: 10 }}>{u.org}</div>}
+                                            {config.name.show && <div style={{ position: 'absolute', top: `${config.name.y}%`, left: `${config.name.x}%`, transform: 'translate(-50%, -50%)', color: config.name.color, fontSize: `${config.name.size}px`, fontWeight: '900', whiteSpace: 'nowrap', zIndex: 10 }}>{u.name}</div>}
+                                            {config.uid.show && <div style={{ position: 'absolute', top: `${config.uid.y}%`, left: `${config.uid.x}%`, transform: 'translate(-50%, -50%)', color: config.uid.color, fontSize: `${config.uid.size}px`, fontFamily: 'monospace', zIndex: 10 }}>{u.uid}</div>}
                                         </>
                                     ) : (
                                         <div className="flex flex-col items-center justify-center h-full p-6 text-center">
@@ -854,6 +917,23 @@
 
                 return (
                     <div className="space-y-6 animate-slide-up no-print">
+                        {/* Firebase Status Section */}
+                        <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-card">
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <h3 className="font-bold text-lg flex items-center gap-2">
+                                        <div className={`w-3 h-3 rounded-full ${db ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></div> 
+                                        {db ? '서버 연결 정상' : '로컬 모드 (서버 미연결)'}
+                                    </h3>
+                                    <p className="text-xs text-slate-400 mt-1">
+                                        {db ? '모든 데이터가 클라우드에 실시간으로 저장됩니다.' : 
+                                            serverError ? `오류: ${serverError}` : '현재 기기에만 데이터가 저장됩니다. (공유 불가)'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 명찰 디자인 설정 섹션 */}
                         <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
                             <h3 className="font-bold text-lg mb-4 text-slate-800 flex items-center gap-2"><Icon name="edit" className="text-incar"/> 명찰 디자인 설정</h3>
                             <div className="flex flex-col md:flex-row gap-8">
