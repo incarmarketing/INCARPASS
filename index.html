@@ -61,16 +61,63 @@
         .data-table td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; font-weight: 500; color: #334155; }
         .data-table tr:hover td { background-color: #f8fafc; }
 
+        /* [수정] 인쇄 스타일 대폭 개선 */
         @media print {
             @page { size: A4 portrait; margin: 0; }
-            body { background-color: white; margin: 0; padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            body * { visibility: hidden; height: 0; overflow: hidden; }
-            .print-only-container, .print-only-container * { visibility: visible; height: auto; overflow: visible; }
-            .print-only-container { position: absolute; top: 0; left: 0; width: 100%; z-index: 9999; background: white; }
+            
+            /* 모든 스크롤과 높이 제한 해제 */
+            html, body, #root, main, .overflow-y-auto {
+                width: 100%;
+                height: auto !important;
+                overflow: visible !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+            }
+
+            /* 화면에 있는 모든 요소 숨김 처리 (visibility 사용으로 레이아웃 유지하되 안보이게) */
+            body * {
+                visibility: hidden;
+            }
+
+            /* 인쇄 컨테이너만 보이게 설정 */
+            .print-only-container, .print-only-container * {
+                visibility: visible;
+            }
+
+            /* 인쇄 컨테이너를 문서 최상단에 절대 배치하여 스크롤 영향 제거 */
+            .print-only-container {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: auto;
+                background: white;
+                z-index: 9999;
+                display: block !important;
+            }
+
+            /* 인쇄 시 숨겨야 할 요소들 */
             .no-print { display: none !important; }
 
-            .page-wrapper { width: 100vw; height: 100vh; display: flex !important; justify-content: center; align-items: center; page-break-after: always; break-after: page; margin: 0; padding: 0; background: white; }
-            .badge-card { border: none !important; box-shadow: none !important; }
+            /* 페이지 넘김 설정 */
+            .page-wrapper {
+                width: 100%;
+                height: 100vh; /* 한 페이지 꽉 채우기 */
+                display: flex !important;
+                justify-content: center;
+                align-items: center;
+                page-break-after: always;
+                break-after: page;
+                margin: 0;
+                padding: 0;
+            }
+            
+            .badge-card {
+                border: none !important;
+                box-shadow: none !important;
+                page-break-inside: avoid;
+            }
         }
         .print-only { display: none; }
         
@@ -518,6 +565,18 @@
         const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules }) => {
             const [manualInput, setManualInput] = useState(false);
 
+            // [추가] 선택된 유저의 여행 일정 필터링 및 정렬
+            const userSchedules = useMemo(() => {
+                if (!selectedUser || !schedules) return [];
+                return schedules.filter(s => {
+                    if (s.targetKey === 'ALL') return true;
+                    // 유저 옵션 확인 (Target Key가 유저 옵션에 있고, Target Value가 포함되어 있는지)
+                    const userOpt = selectedUser.options?.[s.targetKey];
+                    if (!userOpt) return false;
+                    return s.targetVal === 'ALL' || userOpt.includes(s.targetVal);
+                }).sort((a,b) => a.date > b.date ? 1 : -1);
+            }, [selectedUser, schedules]);
+
             const uniqueValues = useMemo(() => {
                 if (!editForm.optKey) return [];
                 const values = new Set();
@@ -605,6 +664,31 @@
                                         <p className="text-[10px] font-bold text-slate-400">QR 데이터: {selectedUser.uid}</p>
                                     </div>
                                 </div>
+
+                                {/* [추가] 해당 인원의 여행 일정 리스트 */}
+                                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 mb-4">
+                                    <h4 className="font-bold text-incar mb-3 flex items-center gap-2"><Icon name="dashboard" size={16}/> {selectedUser.name}님의 전체 여행 일정</h4>
+                                    {userSchedules.length === 0 ? (
+                                        <div className="text-center text-slate-400 text-xs py-4">배정된 일정이 없습니다.</div>
+                                    ) : (
+                                        <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                            {userSchedules.map((s, idx) => (
+                                                <div key={idx} className="bg-white p-3 rounded-xl border border-indigo-100 shadow-sm flex justify-between items-center">
+                                                    <div>
+                                                        <span className="text-[10px] font-bold text-slate-400 block">{s.displayDate}</span>
+                                                        <span className="font-bold text-slate-800">{s.title}</span>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-slate-100 text-slate-500'}`}>
+                                                            {s.type==='PAYMENT' ? `지급 ${CURRENCY}${s.price}` : '탑승'}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div><label className="block text-xs font-bold text-slate-400 mb-1">변경할 옵션 (Key)</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{key} (현재: {selectedUser.options[key]})</option>)}</select></div>
                                     
@@ -720,7 +804,7 @@
                                                     width: config.role.width ? `${config.role.width}px` : 'auto',
                                                     textAlign: config.role.textAlign || 'center',
                                                     overflow: 'hidden'
-                                                 }}>
+                                                }}>
                                                 {u.options && (u.options['직책'] || u.options['Role'] || u.options['Job'] || '-')}
                                             </div>
                                         )}
