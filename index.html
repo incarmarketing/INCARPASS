@@ -17,8 +17,8 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     
-    <!-- 한글 폰트 로드 (명찰 디자인용) -->
-    <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=Nanum+Brush+Script&family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- [수정] 폰트 다양화 (구기체, 감자꽃, 하이멜로디 등 추가) -->
+    <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=Nanum+Brush+Script&family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@100;300;400;500;700;900&family=Gugi&family=Gamja+Flower&family=Hi+Melody&family=Sunflower:wght@300;500;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
     
     <script>
         tailwind.config = {
@@ -102,7 +102,7 @@
                 background: white;
             }
             .badge-card {
-                border: none !important; /* 인쇄 시 테두리 제거 */
+                border: none !important; 
                 box-shadow: none !important;
             }
         }
@@ -114,6 +114,11 @@
         .font-black-han { font-family: 'Black Han Sans', sans-serif; }
         .font-dohyeon { font-family: 'Do Hyeon', sans-serif; }
         .font-brush { font-family: 'Nanum Brush Script', cursive; }
+        .font-gugi { font-family: 'Gugi', cursive; }
+        .font-gamja { font-family: 'Gamja Flower', cursive; }
+        .font-melody { font-family: 'Hi Melody', cursive; }
+        .font-sunflower { font-family: 'Sunflower', sans-serif; }
+        .font-gowun { font-family: 'Gowun Dodum', sans-serif; }
     </style>
 </head>
 <body class="h-screen w-screen flex flex-col md:flex-row bg-slate-50">
@@ -123,7 +128,7 @@
         const { useState, useEffect, useMemo, useRef, Fragment, useCallback } = React;
         const CURRENCY = '$';
 
-        // --- 아이콘 컴포넌트 ---
+        // ... (Icon Component remains same) ...
         const Icon = ({ name, size = 20, className = "" }) => {
             const icons = {
                 menu: <path d="M3 12h18M3 6h18M3 18h18"/>,
@@ -148,15 +153,15 @@
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="2"/>}</svg>;
         };
 
-        // --- 스캔 결과 모달 (타 일정 확인 기능 추가) ---
-        const ResultModal = ({ result, onClose }) => {
+        // --- 스캔 결과 모달 (타 일정 확인 및 즉시 변경 기능 추가) ---
+        const ResultModal = ({ result, onClose, onForceUpdate }) => {
             if (!result) return null;
-            const { status, msg, subMsg, user, logs, relatedLogs } = result; // relatedLogs 추가
+            const { status, msg, subMsg, user, logs, relatedLogs, requiredChoice, session } = result; // session 정보 추가 필요
             const isSuccess = status === 'success';
+            const isTargetMismatch = status === 'error' && msg === '대상자 아님';
             
             useEffect(() => {
                 if(isSuccess) {
-                    // 성공 시 3초 후 닫기 (읽을 시간 확보)
                     const timer = setTimeout(onClose, 3000);
                     return () => clearTimeout(timer);
                 }
@@ -181,7 +186,7 @@
                                         <div className="text-xs text-slate-400 font-medium">{user.org} | {user.uid}</div>
                                     </div>
                                 </div>
-                                {logs && logs.finalAmount !== undefined && (
+                                {isSuccess && logs && logs.finalAmount !== undefined && (
                                     <div className="flex justify-between items-center p-4 bg-emerald-50 rounded-xl border border-emerald-100">
                                         <span className="text-emerald-700 font-bold text-sm">최종 지급액</span>
                                         <div className="text-right">
@@ -190,7 +195,18 @@
                                         </div>
                                     </div>
                                 )}
-                                {/* [NEW] 당일 관련 일정(지급) 확인 알림 */}
+                                
+                                {/* [NEW] 대상자 불일치 시 일정 변경 제안 */}
+                                {isTargetMismatch && (
+                                    <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-center">
+                                        <p className="text-sm font-bold text-rose-600 mb-2">현장에서 바로 변경하시겠습니까?</p>
+                                        <button onClick={() => onForceUpdate(user, session, requiredChoice)} className="w-full py-3 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform text-sm">
+                                            네, 일정 변경 후 승인
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* 당일 관련 일정 확인 알림 */}
                                 {relatedLogs && relatedLogs.length > 0 && (
                                     <div className="mt-4 border-t border-slate-100 pt-4">
                                         <h4 className="text-xs font-bold text-slate-400 mb-2">오늘의 다른 활동 내역</h4>
@@ -213,7 +229,7 @@
         };
 
         // --- 상세 명단 모달 (대시보드용) ---
-        const SessionDetailModal = ({ session, users, logs, onClose }) => {
+        const SessionDetailModal = ({ session, users, logs, onClose, onManualComplete }) => {
             const [tab, setTab] = useState('done'); // 'done' | 'yet'
             
             // 대상자 필터링
@@ -230,7 +246,6 @@
                 const yet = [];
                 targetUsers.forEach(u => {
                     if (doneIds.has(u.uid)) {
-                        // 완료된 경우 로그 정보도 함께 저장
                         const log = logs.find(l => l.sessionId === session.id && l.uid === u.uid);
                         done.push({ ...u, log });
                     } else {
@@ -284,8 +299,11 @@
                                                 <div className="text-[10px] text-slate-400">{new Date(u.log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
                                             </div>
                                         )}
-                                        {tab === 'yet' && session.type === 'PAYMENT' && (
-                                             <div className="text-[10px] font-bold text-rose-400 bg-rose-50 px-2 py-1 rounded">미지급</div>
+                                        {/* [NEW] 미완료 탭: 수동 완료 버튼 */}
+                                        {tab === 'yet' && (
+                                            <button onClick={() => onManualComplete(u, session)} className="px-3 py-1.5 bg-slate-800 text-white text-[10px] font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-sm">
+                                                수동 완료
+                                            </button>
                                         )}
                                     </div>
                                 ))
@@ -296,6 +314,7 @@
             );
         };
 
+        // ... (QRCodeCanvas remains same) ...
         const QRCodeCanvas = ({ text, size = 100, transparent = false }) => {
             const canvasRef = useRef(null);
             useEffect(() => {
@@ -313,9 +332,10 @@
             return <canvas ref={canvasRef} />;
         }
 
-        // [컴포넌트 분리] App 내부에서 정의하지 않고 밖으로 분리하여 재렌더링 시 포커스 유지
+        // ... (DashboardView, ScanView, ChangeView remain same) ...
         const DashboardView = ({ users, logs, scheduleStats, groupedStats, changeLogs, onSessionClick }) => (
             <div className="space-y-6 animate-slide-up">
+                {/* ... (기존 대시보드 내용) ... */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-incar">
                         <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Participants</div>
@@ -370,7 +390,7 @@
                         {scheduleStats.length === 0 && <div className="col-span-full py-10 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">등록된 일정이 없습니다.</div>}
                     </div>
                 </div>
-
+                {/* ... (상세 테이블은 그대로 유지) ... */}
                 <div className="pc-only bg-white rounded-3xl border border-slate-200 shadow-card overflow-hidden mt-8">
                     <div className="p-5 border-b border-slate-100 bg-slate-50/50">
                         <h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="table" className="text-incar"/> 상세 현황 분석표</h3>
@@ -407,8 +427,8 @@
             </div>
         );
 
-        // ... (ScanView, ChangeView - same as before) ...
         const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile }) => {
+            // ... (ScanView implementation - same as before) ...
             const scannerRef = useRef(null);
             const isRunningRef = useRef(false);
             
@@ -545,6 +565,7 @@
 
         const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users }) => (
             <div className="space-y-6 animate-slide-up">
+                {/* ... (ChangeView implementation - same as before) ... */}
                 <div className="bg-white p-6 rounded-3xl shadow-card">
                     <h3 className="font-bold text-lg mb-4 text-slate-800">참가자 일정 변경 및 패널티 관리</h3>
                     <div className="flex gap-2 mb-6">
@@ -560,7 +581,7 @@
                                 <div className="flex-1 bg-slate-50 p-5 rounded-2xl border border-slate-100 flex flex-col justify-center">
                                     <div className="flex justify-between items-start mb-2">
                                         <div>
-                                            <div className="font-bold text-2xl text-slate-800">{selectedUser.name}</div>
+                                            <div className="font-black text-2xl text-slate-800">{selectedUser.name}</div>
                                             <div className="text-sm font-bold text-slate-500">{selectedUser.org}</div>
                                         </div>
                                         <div className="text-right">
@@ -608,71 +629,81 @@
                         <button onClick={onClose} className="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-lg font-bold">닫기</button>
                     </div>
                 </div>
-                <div className="p-8 pt-24 flex flex-col items-center gap-8 max-w-full mx-auto print:p-0 print:block">
+                
+                <div className="print-reset-spacing p-8 pt-24 w-full min-h-screen bg-slate-100 flex flex-col items-center gap-8 print:bg-white">
                     {users.map((u, i) => (
-                        <div key={u.uid} className="page-break relative shadow-sm overflow-hidden print:border-0 print:shadow-none" 
-                                style={{
-                                    width: '545px',
-                                    height: '697px',
-                                    border: config?.bgImage ? 'none' : '2px solid #0f172a',
-                                    borderRadius: '0', 
-                                    flexShrink: 0
-                                }}>
-                            {config?.bgImage ? (
-                                <>
-                                    <img src={config.bgImage} className="absolute inset-0 w-full h-full object-cover z-0 print:block" />
-                                    
-                                    <div style={{ position: 'absolute', top: `${config.qr.y}%`, left: `${config.qr.x}%`, transform: 'translate(-50%, -50%)', zIndex: 10 }}>
-                                        <QRCodeCanvas text={u.uid} size={config.qr.size} transparent={true} />
-                                    </div>
-                                    
-                                    {config.org.show && (
-                                        <div className={`${config.org.font || 'font-sans'}`} 
-                                             style={{ 
-                                                position: 'absolute', top: `${config.org.y}%`, left: `${config.org.x}%`, transform: 'translate(-50%, -50%)', 
-                                                color: config.org.color, fontSize: `${config.org.size}px`, fontWeight: 'bold', whiteSpace: 'nowrap', zIndex: 10,
-                                                textShadow: config.org.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none'
-                                            }}>
-                                            {u.org}
+                        <div key={u.uid} className="page-wrapper relative">
+                            <div className="badge-card relative overflow-hidden bg-white shadow-lg" 
+                                    style={{
+                                        width: '545px',
+                                        height: '697px',
+                                        border: config?.bgImage ? 'none' : '2px solid #0f172a',
+                                        borderRadius: '0', 
+                                        flexShrink: 0
+                                    }}>
+                                {config?.bgImage ? (
+                                    <>
+                                        <img src={config.bgImage} className="absolute inset-0 w-full h-full object-cover z-0" />
+                                        
+                                        <div style={{ position: 'absolute', top: `${config.qr.y}%`, left: `${config.qr.x}%`, transform: 'translate(-50%, -50%)', zIndex: 10 }}>
+                                            <QRCodeCanvas text={u.uid} size={config.qr.size} transparent={true} />
                                         </div>
-                                    )}
-                                    
-                                    {config.name.show && (
-                                        <div className={`${config.name.font || 'font-sans'}`}
-                                             style={{ 
-                                                position: 'absolute', top: `${config.name.y}%`, left: `${config.name.x}%`, transform: 'translate(-50%, -50%)', 
-                                                color: config.name.color, fontSize: `${config.name.size}px`, fontWeight: '900', whiteSpace: 'nowrap', zIndex: 10,
-                                                textShadow: config.name.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none'
-                                            }}>
-                                            {u.name}
-                                        </div>
-                                    )}
+                                        
+                                        {config.org.show && (
+                                            <div className={`${config.org.font || 'font-sans'}`} 
+                                                 style={{ 
+                                                    position: 'absolute', top: `${config.org.y}%`, left: `${config.org.x}%`, transform: 'translate(-50%, -50%)', 
+                                                    color: config.org.color, fontSize: `${config.org.size}px`, fontWeight: 'bold', whiteSpace: 'nowrap', zIndex: 10,
+                                                    textShadow: config.org.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none',
+                                                    backgroundColor: config.org.bgColor || 'transparent',
+                                                    padding: config.org.padding ? `${config.org.padding}px` : '0',
+                                                    borderRadius: config.org.borderRadius ? `${config.org.borderRadius}px` : '0',
+                                                }}>
+                                                {u.org}
+                                            </div>
+                                        )}
+                                        
+                                        {config.name.show && (
+                                            <div className={`${config.name.font || 'font-sans'}`}
+                                                 style={{ 
+                                                    position: 'absolute', top: `${config.name.y}%`, left: `${config.name.x}%`, transform: 'translate(-50%, -50%)', 
+                                                    color: config.name.color, fontSize: `${config.name.size}px`, fontWeight: '900', whiteSpace: 'nowrap', zIndex: 10,
+                                                    textShadow: config.name.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none',
+                                                    backgroundColor: config.name.bgColor || 'transparent',
+                                                    padding: config.name.padding ? `${config.name.padding}px` : '0',
+                                                    borderRadius: config.name.borderRadius ? `${config.name.borderRadius}px` : '0',
+                                                }}>
+                                                {u.name}
+                                            </div>
+                                        )}
 
-                                    {/* [변경] UID -> Role (직책) */}
-                                    {config.role.show && (
-                                        <div className={`${config.role.font || 'font-sans'}`}
-                                             style={{ 
-                                                position: 'absolute', top: `${config.role.y}%`, left: `${config.role.x}%`, transform: 'translate(-50%, -50%)', 
-                                                color: config.role.color, fontSize: `${config.role.size}px`, whiteSpace: 'nowrap', zIndex: 10,
-                                                textShadow: config.role.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none'
-                                             }}>
-                                            {u.options && (u.options['직책'] || u.options['Role'] || u.options['Job'] || '-')}
+                                        {config.role.show && (
+                                            <div className={`${config.role.font || 'font-sans'}`}
+                                                 style={{ 
+                                                    position: 'absolute', top: `${config.role.y}%`, left: `${config.role.x}%`, transform: 'translate(-50%, -50%)', 
+                                                    color: config.role.color, fontSize: `${config.role.size}px`, whiteSpace: 'nowrap', zIndex: 10,
+                                                    textShadow: config.role.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none',
+                                                    backgroundColor: config.role.bgColor || 'transparent',
+                                                    padding: config.role.padding ? `${config.role.padding}px` : '0',
+                                                    borderRadius: config.role.borderRadius ? `${config.role.borderRadius}px` : '0',
+                                                 }}>
+                                                {u.options && (u.options['직책'] || u.options['Role'] || u.options['Job'] || '-')}
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center h-full p-6 text-center border-2 border-slate-900 m-4">
+                                        <div className="w-40 h-40 bg-white mb-6">
+                                            <QRCodeCanvas text={u.uid} size={160} />
                                         </div>
-                                    )}
-                                </>
-                            ) : (
-                                <div className="flex flex-col items-center justify-center h-full p-6 text-center border-2 border-slate-900 m-4">
-                                    <div className="w-40 h-40 bg-white mb-6">
-                                        <QRCodeCanvas text={u.uid} size={160} />
+                                        <div className="overflow-hidden w-full space-y-2">
+                                            <div className="text-2xl font-bold text-slate-500 truncate">{u.org}</div>
+                                            <div className="text-6xl font-black text-slate-900 truncate leading-tight">{u.name}</div>
+                                            <div className="text-xl font-bold text-slate-400 mt-2">{u.options && (u.options['직책'] || u.options['Role'])}</div>
+                                        </div>
                                     </div>
-                                    <div className="overflow-hidden w-full space-y-2">
-                                        <div className="text-2xl font-bold text-slate-500 truncate">{u.org}</div>
-                                        <div className="text-6xl font-black text-slate-900 truncate leading-tight">{u.name}</div>
-                                        {/* 기본 모드에서는 직책도 표시 */}
-                                        <div className="text-xl font-bold text-slate-400 mt-2">{u.options && (u.options['직책'] || u.options['Role'])}</div>
-                                    </div>
-                                </div>
-                            )}
+                                )}
+                            </div>
                         </div>
                     ))}
                 </div>
@@ -680,7 +711,7 @@
         );
 
         const ManageView = ({ users, handleUserUpload, handleScheduleUpload, badgeConfig, setBadgeConfig, db, serverError, schedules, logs, setIsPrintMode }) => {
-            
+            // ... (handleBgImageUpload, downloadTemplate, exportAllData same as before) ...
             const handleBgImageUpload = (e) => {
                 const file = e.target.files[0];
                 if(file){
@@ -694,7 +725,6 @@
                 let content = '';
                 let filename = '';
                 if(type === 'users') {
-                    // [변경] 샘플 양식에 '직책' 추가
                     content = '\uFEFF사번,성명,소속,직책,버스,2일차,3일차\n202401,홍길동,마케팅팀,대리,1호차,힐링코스,투어\n202402,김철수,영업팀,과장,미정,문화탐방,자유일정';
                     filename = '참가자명단_샘플.csv';
                 } else {
@@ -732,7 +762,7 @@
                 link.click();
             };
 
-            // [수정] TextControl 컴포넌트 (폰트, 그림자 포함)
+            // [수정] TextControl 컴포넌트: 박스 스타일(배경색, 둥근모서리, 패딩) 추가
             const TextControl = ({ label, conf, onChange }) => (
                 <div className="p-4 bg-slate-50 rounded-xl space-y-3 border border-slate-100">
                     <div className="flex justify-between items-center">
@@ -754,6 +784,11 @@
                                 <option value="font-black-han">제목용 굵은 고딕 (Black Han Sans)</option>
                                 <option value="font-dohyeon">도현체 (Do Hyeon)</option>
                                 <option value="font-brush">손글씨 (Brush Script)</option>
+                                <option value="font-gugi">구기체 (Retro)</option>
+                                <option value="font-gamja">감자꽃 (Cute)</option>
+                                <option value="font-melody">하이멜로디 (Hand)</option>
+                                <option value="font-sunflower">해바라기 (Clean)</option>
+                                <option value="font-gowun">고운돋움 (Soft)</option>
                             </select>
                         </div>
                         
@@ -762,13 +797,34 @@
                         <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">세로</span><input type="range" min="0" max="100" step="0.5" value={conf.y} onChange={e=>onChange('y', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
                         <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">크기</span><input type="range" min="10" max={100} value={conf.size} onChange={e=>onChange('size', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
                         
-                        {/* 색상 및 그림자 */}
-                        <div className="flex gap-2 justify-between">
-                            <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">색상</span><input type="color" value={conf.color} onChange={e=>onChange('color', e.target.value)} className="w-8 h-6 rounded cursor-pointer border border-slate-200"/></div>
+                        {/* 텍스트 색상 및 그림자 */}
+                        <div className="flex gap-2 justify-between items-center border-t border-slate-200 pt-2">
+                            <span className="text-[10px] font-bold text-slate-500">텍스트</span>
+                            <div className="flex gap-2 items-center">
+                                <span className="text-[9px] text-slate-400">색상</span>
+                                <input type="color" value={conf.color} onChange={e=>onChange('color', e.target.value)} className="w-6 h-6 rounded cursor-pointer border border-slate-200"/>
+                            </div>
                             <label className="flex items-center gap-1 cursor-pointer">
-                                <span className="text-[10px] text-slate-400 font-bold">그림자</span>
+                                <span className="text-[9px] text-slate-400">그림자</span>
                                 <input type="checkbox" checked={conf.shadow} onChange={e => onChange('shadow', e.target.checked)} className="w-3 h-3 rounded text-incar focus:ring-incar"/>
                             </label>
+                        </div>
+
+                        {/* [NEW] 박스 스타일 (배경색, 둥근모서리, 패딩) */}
+                        <div className="flex gap-2 justify-between items-center border-t border-slate-200 pt-2">
+                            <span className="text-[10px] font-bold text-slate-500">박스</span>
+                            <div className="flex gap-2 items-center">
+                                <span className="text-[9px] text-slate-400">배경</span>
+                                <input type="color" value={conf.bgColor || '#ffffff'} onChange={e=>onChange('bgColor', e.target.value)} className="w-6 h-6 rounded cursor-pointer border border-slate-200"/>
+                            </div>
+                            <div className="flex gap-1 items-center">
+                                <span className="text-[9px] text-slate-400">R</span>
+                                <input type="number" min="0" max="50" value={conf.borderRadius || 0} onChange={e=>onChange('borderRadius', e.target.value)} className="w-8 h-6 text-[10px] text-center border rounded"/>
+                            </div>
+                            <div className="flex gap-1 items-center">
+                                <span className="text-[9px] text-slate-400">P</span>
+                                <input type="number" min="0" max="50" value={conf.padding || 0} onChange={e=>onChange('padding', e.target.value)} className="w-8 h-6 text-[10px] text-center border rounded"/>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -813,12 +869,16 @@
                                             <img src={badgeConfig.bgImage} className="absolute inset-0 w-full h-full object-cover" />
                                             <div style={{ position: 'absolute', top: `${badgeConfig.qr.y}%`, left: `${badgeConfig.qr.x}%`, width: `${badgeConfig.qr.size}px`, height: `${badgeConfig.qr.size}px`, transform: 'translate(-50%, -50%)', border: '2px dashed red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'red', fontWeight: 'bold' }}>QR</div>
                                             
-                                            {/* Preview Text Layers with Font & Shadow */}
+                                            {/* Preview Text Layers with Font & Shadow & Box Style */}
                                             {badgeConfig.org.show && (
                                                 <div className={badgeConfig.org.font} 
                                                      style={{ position: 'absolute', top: `${badgeConfig.org.y}%`, left: `${badgeConfig.org.x}%`, transform: 'translate(-50%, -50%)', 
                                                      color: badgeConfig.org.color, fontSize: `${badgeConfig.org.size}px`, fontWeight: 'bold', border: '1px dashed blue', whiteSpace: 'nowrap',
-                                                     textShadow: badgeConfig.org.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none' }}>
+                                                     textShadow: badgeConfig.org.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none',
+                                                     backgroundColor: badgeConfig.org.bgColor || 'transparent',
+                                                     padding: badgeConfig.org.padding ? `${badgeConfig.org.padding}px` : '0',
+                                                     borderRadius: badgeConfig.org.borderRadius ? `${badgeConfig.org.borderRadius}px` : '0'
+                                                }}>
                                                     소속 (Organization)
                                                 </div>
                                             )}
@@ -827,7 +887,11 @@
                                                 <div className={badgeConfig.name.font}
                                                      style={{ position: 'absolute', top: `${badgeConfig.name.y}%`, left: `${badgeConfig.name.x}%`, transform: 'translate(-50%, -50%)', 
                                                      color: badgeConfig.name.color, fontSize: `${badgeConfig.name.size}px`, fontWeight: '900', border: '1px dashed blue', whiteSpace: 'nowrap',
-                                                     textShadow: badgeConfig.name.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none' }}>
+                                                     textShadow: badgeConfig.name.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none',
+                                                     backgroundColor: badgeConfig.name.bgColor || 'transparent',
+                                                     padding: badgeConfig.name.padding ? `${badgeConfig.name.padding}px` : '0',
+                                                     borderRadius: badgeConfig.name.borderRadius ? `${badgeConfig.name.borderRadius}px` : '0'
+                                                }}>
                                                     성 명 (Name)
                                                 </div>
                                             )}
@@ -836,7 +900,11 @@
                                                 <div className={badgeConfig.role.font}
                                                      style={{ position: 'absolute', top: `${badgeConfig.role.y}%`, left: `${badgeConfig.role.x}%`, transform: 'translate(-50%, -50%)', 
                                                      color: badgeConfig.role.color, fontSize: `${badgeConfig.role.size}px`, border: '1px dashed blue', whiteSpace: 'nowrap',
-                                                     textShadow: badgeConfig.role.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none' }}>
+                                                     textShadow: badgeConfig.role.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none',
+                                                     backgroundColor: badgeConfig.role.bgColor || 'transparent',
+                                                     padding: badgeConfig.role.padding ? `${badgeConfig.role.padding}px` : '0',
+                                                     borderRadius: badgeConfig.role.borderRadius ? `${badgeConfig.role.borderRadius}px` : '0'
+                                                }}>
                                                     직책 (Role)
                                                 </div>
                                             )}
@@ -963,13 +1031,14 @@
             const [activeTab, setActiveTab] = useState('dashboard');
             const [isPrintMode, setIsPrintMode] = useState(false);
             
-            // [수정] Badge Config - UID 제거, Role 추가
+            // [수정] Badge Config - 초기값 폰트 변경 (Black Han Sans 제거)
             const [badgeConfig, setBadgeConfig] = useState({
                 bgImage: null,
                 qr: { x: 50, y: 20, size: 100 },
-                name: { x: 50, y: 65, size: 40, color: '#000000', show: true, font: 'font-black-han', shadow: false },
-                org: { x: 50, y: 40, size: 20, color: '#475569', show: true, font: 'font-noto', shadow: false },
-                role: { x: 50, y: 50, size: 18, color: '#000000', show: true, font: 'font-noto', shadow: false },
+                // name: x, y, size, color, show, font, shadow, bgColor, borderRadius, padding
+                name: { x: 50, y: 65, size: 40, color: '#000000', show: true, font: 'font-noto', shadow: false, bgColor: 'transparent', borderRadius: 0, padding: 0 },
+                org: { x: 50, y: 40, size: 20, color: '#475569', show: true, font: 'font-noto', shadow: false, bgColor: 'transparent', borderRadius: 0, padding: 0 },
+                role: { x: 50, y: 50, size: 18, color: '#000000', show: true, font: 'font-noto', shadow: false, bgColor: 'transparent', borderRadius: 0, padding: 0 },
                 uid: { x: 50, y: 85, size: 14, color: '#94a3b8', show: false } 
             });
 
@@ -1000,7 +1069,7 @@
             const SYSTEM_APP_ID = 'inca-prod-v1';
 
             // [사용자 설정 영역] 파이어베이스 키
-           const firebaseConfig = {
+            const firebaseConfig = {
   apiKey: "AIzaSyAh1dsSNobeF6Wz-0euP5AUggdqJANJ3dQ",
   authDomain: "incarpass.firebaseapp.com",
   projectId: "incarpass",
@@ -1083,7 +1152,7 @@
 
                 initSystem();
 
-                const loadedBadgeConfig = JSON.parse(localStorage.getItem('incar_pro_badge_config_v2_3') || 'null'); // Version 2.3
+                const loadedBadgeConfig = JSON.parse(localStorage.getItem('incar_pro_badge_config_v2_9') || 'null'); // Version 2.9
                 if(loadedBadgeConfig && loadedBadgeConfig.name && loadedBadgeConfig.org) {
                     setBadgeConfig(loadedBadgeConfig);
                 }
@@ -1093,10 +1162,95 @@
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_schedules', JSON.stringify(schedules)); }, [schedules, db]);
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_logs', JSON.stringify(logs)); }, [logs, db]);
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
-            // [수정] 버전 업그레이드 (v2.3)
-            useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_3', JSON.stringify(badgeConfig)); }, [badgeConfig]);
+            // [수정] 버전 업그레이드 (v2.9)
+            useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_9', JSON.stringify(badgeConfig)); }, [badgeConfig]);
 
-            // ... (Handlers) ...
+            // [NEW] 수동 완료 처리 함수
+            const handleManualComplete = async (user, session) => {
+                if(!confirm(`${user.name}님을 수동으로 [${session.type==='PAYMENT'?'지급완료':'탑승완료'}] 처리하시겠습니까?`)) return;
+                
+                const newLog = {
+                    id: `LOG_${Date.now()}_MANUAL`,
+                    timestamp: new Date().toISOString(),
+                    uid: user.uid,
+                    name: user.name,
+                    org: user.org,
+                    action: session.type === 'PAYMENT' ? '지급' : '탑승',
+                    sessionId: session.id,
+                    sessionTitle: session.title,
+                    bus: '수동처리', // 수동처리임을 명시
+                    amount: session.type === 'PAYMENT' ? session.price : 0,
+                    penaltyApplied: 0,
+                    finalAmount: session.type === 'PAYMENT' ? session.price : 0
+                };
+
+                if(db) {
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog);
+                } else {
+                    setLogs([newLog, ...logs]);
+                }
+                alert("처리되었습니다.");
+            };
+
+            // [NEW] 강제 일정 변경 및 탑승 처리 함수
+            const handleForceUpdateAndProcess = async (user, session, requiredChoice) => {
+                if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
+                
+                // 1. 유저 정보 업데이트 (옵션 변경)
+                if(db) {
+                    const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
+                    const updatedOptions = { ...user.options, [session.targetKey]: requiredChoice };
+                    await userRef.update({ options: updatedOptions });
+                } else {
+                    const updatedUsers = users.map(u => {
+                        if (u.uid === user.uid) {
+                            const newOptions = { ...u.options, [session.targetKey]: requiredChoice };
+                            return { ...u, options: newOptions };
+                        }
+                        return u;
+                    });
+                    setUsers(updatedUsers);
+                }
+
+                // 2. 변경 로그 기록
+                const changeLog = {
+                    id: `CHG_${Date.now()}`,
+                    timestamp: new Date().toLocaleString(),
+                    uid: user.uid,
+                    name: user.name,
+                    targetOption: session.targetKey,
+                    oldVal: user.options[session.targetKey] || '미선택',
+                    newVal: requiredChoice,
+                    penalty: 0,
+                    reason: '현장 스캔 시 즉시 변경'
+                };
+                if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
+                else setChangeLogs([changeLog, ...changeLogs]);
+
+                // 3. 탑승 로그 기록 (정상 처리)
+                const newLog = {
+                    id: `LOG_${Date.now()}_FORCE`,
+                    timestamp: new Date().toISOString(),
+                    uid: user.uid,
+                    name: user.name,
+                    org: user.org,
+                    action: session.type === 'PAYMENT' ? '지급' : '탑승',
+                    sessionId: session.id,
+                    sessionTitle: session.title,
+                    bus: targetBus,
+                    amount: session.type === 'PAYMENT' ? session.price : 0,
+                    penaltyApplied: 0,
+                    finalAmount: session.type === 'PAYMENT' ? session.price : 0
+                };
+
+                if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog);
+                else setLogs([newLog, ...logs]);
+
+                setScanResult(null); // 모달 닫기
+                alert(`${user.name}님의 일정이 [${requiredChoice}]로 변경되고 탑승 처리되었습니다.`);
+            };
+
+            // ... (Handlers - UserUpload, ScheduleUpload, processScan, handleUserUpdate) ...
             const handleUserUpload = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -1110,6 +1264,8 @@
                             const org = row['소속'] || row['부서'] || row['Org'] || '-';
                             const bus = row['버스'] || row['탑승버스'] || row['Bus'] || '미정';
                             const options = {};
+                            
+                            // [수정] 모든 열을 옵션에 저장 (직책 포함)
                             Object.keys(row).forEach(key => {
                                 if(!['사번','ID','uid','성명','이름','Name','소속','부서','Org','버스','탑승버스','Bus'].includes(key)) {
                                     if(row[key]) options[key] = row[key];
@@ -1196,11 +1352,19 @@
                 const isDuplicate = logs.some(l => l.uid === user.uid && l.sessionId === session.id);
                 if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user });
 
+                // [수정] 대상자 아님 처리 시, 필요한 옵션 정보(requiredChoice)와 세션 정보(session)를 함께 전달
                 if (session.targetKey !== 'ALL') {
                     const userChoice = user.options[session.targetKey];
                     const requiredChoice = session.targetVal;
                     if (!userChoice || (requiredChoice !== 'ALL' && !userChoice.includes(requiredChoice))) {
-                        return setScanResult({ status: 'error', msg: '대상자 아님', subMsg: `필요: ${requiredChoice} / 본인: ${userChoice || '선택없음'}`, user });
+                        return setScanResult({ 
+                            status: 'error', 
+                            msg: '대상자 아님', 
+                            subMsg: `필요: ${requiredChoice} / 본인: ${userChoice || '선택없음'}`, 
+                            user,
+                            requiredChoice, // 추가
+                            session // 추가
+                        });
                     }
                 }
 
@@ -1363,10 +1527,11 @@
                                 users={users} 
                                 logs={logs} 
                                 onClose={() => setSelectedSession(null)} 
+                                onManualComplete={handleManualComplete} // 함수 전달
                             />
                         )}
                     </main>
-                    <ResultModal result={scanResult} onClose={() => setScanResult(null)} />
+                    <ResultModal result={scanResult} onClose={() => setScanResult(null)} onForceUpdate={handleForceUpdateAndProcess} />
                 </div>
             );
         };
