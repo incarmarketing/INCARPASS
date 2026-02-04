@@ -17,8 +17,9 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     
-    <!-- 스타일 -->
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <!-- 한글 폰트 로드 (명찰 디자인용) -->
+    <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=Nanum+Brush+Script&family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    
     <script>
         tailwind.config = {
             theme: {
@@ -31,7 +32,10 @@
                         warning: '#f59e0b',
                         danger: '#ef4444'
                     },
-                    boxShadow: { 'card': '0 4px 20px rgba(39, 57, 140, 0.08)' }
+                    boxShadow: { 'card': '0 4px 20px rgba(39, 57, 140, 0.08)' },
+                    fontFamily: {
+                        'sans': ['Noto Sans KR', 'sans-serif'], // 앱 기본 폰트
+                    }
                 }
             }
         }
@@ -53,8 +57,8 @@
             .pc-only { display: block; }
         }
         
-        .data-table th { background-color: #f8fafc; color: #64748b; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; padding: 12px 16px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
-        .data-table td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; font-weight: 600; color: #334155; }
+        .data-table th { background-color: #f8fafc; color: #64748b; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; padding: 12px 16px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+        .data-table td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; font-weight: 500; color: #334155; }
         .data-table tr:hover td { background-color: #f8fafc; }
 
         @media print {
@@ -98,11 +102,18 @@
                 background: white;
             }
             .badge-card {
-                border: 1px solid #ddd; 
+                border: none !important; /* 인쇄 시 테두리 제거 */
                 box-shadow: none !important;
             }
         }
         .print-only { display: none; }
+        
+        /* 명찰용 폰트 클래스 */
+        .font-noto { font-family: 'Noto Sans KR', sans-serif; }
+        .font-serif { font-family: 'Nanum Myeongjo', serif; }
+        .font-black-han { font-family: 'Black Han Sans', sans-serif; }
+        .font-dohyeon { font-family: 'Do Hyeon', sans-serif; }
+        .font-brush { font-family: 'Nanum Brush Script', cursive; }
     </style>
 </head>
 <body class="h-screen w-screen flex flex-col md:flex-row bg-slate-50">
@@ -137,14 +148,16 @@
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="2"/>}</svg>;
         };
 
+        // --- 스캔 결과 모달 (타 일정 확인 기능 추가) ---
         const ResultModal = ({ result, onClose }) => {
             if (!result) return null;
-            const { status, msg, subMsg, user, logs } = result;
+            const { status, msg, subMsg, user, logs, relatedLogs } = result; // relatedLogs 추가
             const isSuccess = status === 'success';
             
             useEffect(() => {
                 if(isSuccess) {
-                    const timer = setTimeout(onClose, 2000);
+                    // 성공 시 3초 후 닫기 (읽을 시간 확보)
+                    const timer = setTimeout(onClose, 3000);
                     return () => clearTimeout(timer);
                 }
             }, [isSuccess]);
@@ -156,7 +169,7 @@
                             <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${isSuccess ? 'bg-emerald-100 text-emerald-600' : (status==='duplicate'?'bg-amber-100 text-amber-600':'bg-rose-100 text-rose-600')}`}>
                                 <Icon name={isSuccess ? 'check' : (status==='duplicate'?'alert':'x')} size={40} />
                             </div>
-                            <h2 className={`text-2xl font-black mb-1 ${isSuccess ? 'text-emerald-800' : (status==='duplicate'?'text-amber-800':'text-rose-800')}`}>{msg}</h2>
+                            <h2 className={`text-2xl font-bold mb-1 ${isSuccess ? 'text-emerald-800' : (status==='duplicate'?'text-amber-800':'text-rose-800')}`}>{msg}</h2>
                             <p className="text-slate-500 font-medium">{subMsg}</p>
                         </div>
                         {user && (
@@ -165,21 +178,119 @@
                                     <div className="w-12 h-12 rounded-full bg-incar text-white flex items-center justify-center font-bold text-lg">{user.name[0]}</div>
                                     <div>
                                         <div className="font-bold text-lg text-slate-900">{user.name}</div>
-                                        <div className="text-xs text-slate-400 font-bold">{user.org} | {user.uid}</div>
+                                        <div className="text-xs text-slate-400 font-medium">{user.org} | {user.uid}</div>
                                     </div>
                                 </div>
                                 {logs && logs.finalAmount !== undefined && (
                                     <div className="flex justify-between items-center p-4 bg-emerald-50 rounded-xl border border-emerald-100">
                                         <span className="text-emerald-700 font-bold text-sm">최종 지급액</span>
                                         <div className="text-right">
-                                            <span className="text-2xl font-black text-emerald-600">{CURRENCY}{logs.finalAmount}</span>
-                                            {logs.penaltyApplied > 0 && <div className="text-[10px] text-rose-500 font-bold">(-패널티 {CURRENCY}{logs.penaltyApplied} 적용됨)</div>}
+                                            <span className="text-2xl font-bold text-emerald-600">{CURRENCY}{logs.finalAmount}</span>
+                                            {logs.penaltyApplied > 0 && <div className="text-[10px] text-rose-500 font-bold">(-패널티 {CURRENCY}{logs.penaltyApplied})</div>}
+                                        </div>
+                                    </div>
+                                )}
+                                {/* [NEW] 당일 관련 일정(지급) 확인 알림 */}
+                                {relatedLogs && relatedLogs.length > 0 && (
+                                    <div className="mt-4 border-t border-slate-100 pt-4">
+                                        <h4 className="text-xs font-bold text-slate-400 mb-2">오늘의 다른 활동 내역</h4>
+                                        <div className="space-y-2">
+                                            {relatedLogs.map((log, idx) => (
+                                                <div key={idx} className="flex items-center justify-between text-xs p-2 bg-slate-50 rounded-lg">
+                                                    <span className="text-slate-600 font-medium">{log.sessionTitle}</span>
+                                                    <span className="text-emerald-600 font-bold">{log.action === '지급' ? '지급완료' : '탑승완료'}</span>
+                                                </div>
+                                            ))}
                                         </div>
                                     </div>
                                 )}
                             </div>
                         )}
                         <button onClick={onClose} className="w-full py-5 bg-slate-900 text-white font-bold text-lg hover:bg-slate-800 transition-colors">닫기</button>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- 상세 명단 모달 (대시보드용) ---
+        const SessionDetailModal = ({ session, users, logs, onClose }) => {
+            const [tab, setTab] = useState('done'); // 'done' | 'yet'
+            
+            // 대상자 필터링
+            const targetUsers = useMemo(() => {
+                if (!session) return [];
+                if (session.targetKey === 'ALL') return users;
+                return users.filter(u => u.options && u.options[session.targetKey] && u.options[session.targetKey].includes(session.targetVal));
+            }, [session, users]);
+
+            // 완료/미완료 분류
+            const { doneList, yetList } = useMemo(() => {
+                const doneIds = new Set(logs.filter(l => l.sessionId === session.id).map(l => l.uid));
+                const done = [];
+                const yet = [];
+                targetUsers.forEach(u => {
+                    if (doneIds.has(u.uid)) {
+                        // 완료된 경우 로그 정보도 함께 저장
+                        const log = logs.find(l => l.sessionId === session.id && l.uid === u.uid);
+                        done.push({ ...u, log });
+                    } else {
+                        yet.push(u);
+                    }
+                });
+                return { doneList: done, yetList: yet };
+            }, [targetUsers, logs, session]);
+
+            const currentList = tab === 'done' ? doneList : yetList;
+
+            return (
+                <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in no-print" onClick={onClose}>
+                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
+                            <div>
+                                <span className={`inline-block px-2 py-1 rounded text-[10px] font-bold mb-1 ${session.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-indigo-100 text-incar'}`}>{session.type==='PAYMENT'?'지급':'탑승'}</span>
+                                <h3 className="font-bold text-lg text-slate-800 leading-tight">{session.title}</h3>
+                                <p className="text-xs text-slate-500 mt-1">{session.displayDate} | 대상 {targetUsers.length}명</p>
+                            </div>
+                            <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600"><Icon name="x" size={24}/></button>
+                        </div>
+                        
+                        <div className="flex border-b border-slate-100">
+                            <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>
+                                완료 ({doneList.length})
+                            </button>
+                            <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>
+                                미완료 ({yetList.length})
+                            </button>
+                        </div>
+
+                        <div className="overflow-y-auto flex-1 p-4 space-y-2">
+                            {currentList.length === 0 ? (
+                                <div className="py-10 text-center text-slate-400 text-sm">해당 인원이 없습니다.</div>
+                            ) : (
+                                currentList.map(u => (
+                                    <div key={u.uid} className="flex justify-between items-center p-3 rounded-xl border border-slate-100 hover:border-slate-300 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${tab==='done'?'bg-emerald-500':'bg-slate-300'}`}>{u.name[0]}</div>
+                                            <div>
+                                                <div className="font-bold text-slate-800 text-sm">{u.name} <span className="text-xs font-normal text-slate-500">({u.options && (u.options['직책'] || u.org)})</span></div>
+                                                <div className="text-[10px] text-slate-400 font-mono">{u.uid}</div>
+                                            </div>
+                                        </div>
+                                        {tab === 'done' && u.log && (
+                                            <div className="text-right">
+                                                {session.type === 'PAYMENT' && (
+                                                    <div className="font-bold text-emerald-600 text-sm">{CURRENCY}{u.log.finalAmount}</div>
+                                                )}
+                                                <div className="text-[10px] text-slate-400">{new Date(u.log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                                            </div>
+                                        )}
+                                        {tab === 'yet' && session.type === 'PAYMENT' && (
+                                             <div className="text-[10px] font-bold text-rose-400 bg-rose-50 px-2 py-1 rounded">미지급</div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
                     </div>
                 </div>
             );
@@ -203,26 +314,26 @@
         }
 
         // [컴포넌트 분리] App 내부에서 정의하지 않고 밖으로 분리하여 재렌더링 시 포커스 유지
-        const DashboardView = ({ users, logs, scheduleStats, groupedStats, changeLogs }) => (
+        const DashboardView = ({ users, logs, scheduleStats, groupedStats, changeLogs, onSessionClick }) => (
             <div className="space-y-6 animate-slide-up">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-incar">
                         <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Participants</div>
-                        <div className="text-4xl font-black text-slate-800">{users.length}</div>
+                        <div className="text-4xl font-bold text-slate-800">{users.length}</div>
                     </div>
                     <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-emerald-500">
                         <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Payout</div>
-                        <div className="text-4xl font-black text-slate-800">{CURRENCY}{logs.reduce((sum, l) => sum + (l.finalAmount||0), 0).toLocaleString()}</div>
+                        <div className="text-4xl font-bold text-slate-800">{CURRENCY}{logs.reduce((sum, l) => sum + (l.finalAmount||0), 0).toLocaleString()}</div>
                     </div>
                     <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-indigo-400 hidden md:block">
                         <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Completion Rate</div>
-                        <div className="text-4xl font-black text-slate-800">
+                        <div className="text-4xl font-bold text-slate-800">
                             {scheduleStats.length > 0 ? Math.round(scheduleStats.reduce((acc, s) => acc + s.percent, 0) / scheduleStats.length) : 0}%
                         </div>
                     </div>
                     <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-rose-400 hidden md:block">
                         <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Penalties</div>
-                        <div className="text-4xl font-black text-slate-800">{changeLogs.length}건</div>
+                        <div className="text-4xl font-bold text-slate-800">{changeLogs.length}건</div>
                     </div>
                 </div>
 
@@ -232,16 +343,16 @@
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {scheduleStats.map(stat => (
-                            <div key={stat.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow">
+                            <div key={stat.id} onClick={() => onSessionClick(stat)} className="cursor-pointer bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow active:scale-[0.98] transition-transform">
                                 <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><Icon name={stat.type === 'PAYMENT' ? 'money' : 'bus'} size={60} /></div>
                                 <div className="relative z-10">
                                     <div className="flex justify-between items-start mb-2">
-                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded ${stat.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-indigo-50 text-incar'}`}>{stat.type==='PAYMENT'?'지급':'탑승'}</span>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${stat.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-indigo-50 text-incar'}`}>{stat.type==='PAYMENT'?'지급':'탑승'}</span>
                                         <span className="text-xs font-bold text-slate-400">{stat.displayDate}</span>
                                     </div>
                                     <h4 className="font-bold text-slate-800 mb-4 truncate pr-8">{stat.title}</h4>
                                     <div className="flex justify-between items-end mb-1">
-                                        <span className="text-3xl font-black text-slate-800">{stat.doneCount}<span className="text-sm text-slate-400 font-medium ml-1">/ {stat.targetCount}</span></span>
+                                        <span className="text-3xl font-bold text-slate-800">{stat.doneCount}<span className="text-sm text-slate-400 font-medium ml-1">/ {stat.targetCount}</span></span>
                                         <span className={`text-xl font-bold ${stat.percent === 100 ? 'text-emerald-500' : 'text-incar'}`}>{stat.percent}%</span>
                                     </div>
                                     <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
@@ -268,15 +379,15 @@
                         <div className="p-6 space-y-8">
                             {Object.entries(groupedStats).sort().map(([date, stats]) => (
                                 <div key={date}>
-                                    <h4 className="text-xs font-black text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-3">{date}</h4>
+                                    <h4 className="text-xs font-bold text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-3">{date}</h4>
                                     <div className="overflow-hidden rounded-xl border border-slate-200">
                                         <table className="w-full text-left data-table">
                                             <thead><tr><th className="w-1/3">일정명</th><th className="text-center">구분</th><th className="text-right">대상(Target)</th><th className="text-right">완료(Done)</th><th className="text-center border-l border-slate-200">미완료</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
                                             <tbody>
                                                 {stats.map(s => (
-                                                    <tr key={s.id}>
-                                                        <td className="font-bold">{s.title}</td>
-                                                        <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-black border ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':'탑승'}</span></td>
+                                                    <tr key={s.id} onClick={() => onSessionClick(s)} className="cursor-pointer hover:bg-slate-50 transition-colors">
+                                                        <td className="font-bold text-slate-700">{s.title}</td>
+                                                        <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':'탑승'}</span></td>
                                                         <td className="text-right text-slate-500">{s.targetCount}</td>
                                                         <td className="text-right font-bold text-slate-900">{s.doneCount}</td>
                                                         <td className="text-center border-l border-slate-50">{s.targetCount - s.doneCount === 0 ? <span className="text-emerald-500 font-bold text-xs">Complete</span> : <span className="text-rose-500 font-bold text-xs">{s.targetCount - s.doneCount}명 남음</span>}</td>
@@ -296,6 +407,7 @@
             </div>
         );
 
+        // ... (ScanView, ChangeView - same as before) ...
         const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile }) => {
             const scannerRef = useRef(null);
             const isRunningRef = useRef(false);
@@ -306,7 +418,6 @@
 
             useEffect(() => {
                 if (filteredSchedules.length > 0) {
-                    // 현재 선택된 세션이 필터링된 목록에 없으면 첫번째꺼 선택
                     const exists = filteredSchedules.find(s => s.id === targetSessionId);
                     if (!exists) setTargetSessionId(filteredSchedules[0].id);
                 } else {
@@ -324,10 +435,9 @@
                 if (isRunningRef.current) return;
                 setIsScanning(true);
                 
-                // [수정] 스캐너 렌더링 후 실행을 위해 딜레이 및 DOM 체크
                 setTimeout(() => {
                     const element = document.getElementById("reader");
-                    if (!element) return; // 요소가 없으면 중단
+                    if (!element) return;
 
                     if (!scannerRef.current) {
                         scannerRef.current = new Html5Qrcode("reader");
@@ -366,8 +476,8 @@
                 <div className="space-y-6 h-full flex flex-col animate-slide-up">
                     <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
                         <div className="flex items-center gap-2 mb-4">
-                            <span className={`px-2 py-1 rounded-lg text-xs font-black ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING' ? 'STEP 1' : '지급'}</span>
-                            <h3 className="text-lg font-black text-slate-800">{mode==='BOARDING' ? '탑승 일정 선택' : '지급 항목 선택'}</h3>
+                            <span className={`px-2 py-1 rounded-lg text-xs font-bold ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING' ? 'STEP 1' : '지급'}</span>
+                            <h3 className="text-lg font-bold text-slate-800">{mode==='BOARDING' ? '탑승 일정 선택' : '지급 항목 선택'}</h3>
                         </div>
                         <div className="mb-6">
                             <select value={targetSessionId} onChange={(e) => setTargetSessionId(e.target.value)} className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-lg outline-none focus:ring-4 transition-all ${mode==='BOARDING'?'focus:ring-incar/20':'focus:ring-emerald-500/20'}`}>
@@ -378,9 +488,9 @@
                         {mode === 'BOARDING' && (
                             <div className="animate-slide-up">
                                 <div className="flex items-center gap-2 mb-3">
-                                    <span className="px-2 py-1 rounded-lg text-xs font-black bg-slate-800 text-white">STEP 2</span>
+                                    <span className="px-2 py-1 rounded-lg text-xs font-bold bg-slate-800 text-white">STEP 2</span>
                                     <div className="flex justify-between items-center flex-1">
-                                        <h3 className="text-lg font-black text-slate-800">차량 번호 선택</h3>
+                                        <h3 className="text-lg font-bold text-slate-800">차량 번호 선택</h3>
                                         <button onClick={()=>setManualBus(!manualBus)} className="text-xs font-bold text-slate-400 underline decoration-slate-300">{manualBus ? '목록에서 선택' : '직접 입력'}</button>
                                     </div>
                                 </div>
@@ -388,7 +498,7 @@
                                     <input type="text" value={targetBus} onChange={e=>setTargetBus(e.target.value)} className="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl font-bold text-center text-lg focus:border-incar outline-none" placeholder="차량 번호 입력" /> :
                                     <div className="grid grid-cols-4 gap-2">
                                         {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
-                                            <button key={n} onClick={()=>setTargetBus(`${n}호차`)} className={`py-3 rounded-xl text-sm font-black transition-all ${targetBus===`${n}호차`?'bg-incar text-white shadow-lg scale-105':'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{n}호차</button>
+                                            <button key={n} onClick={()=>setTargetBus(`${n}호차`)} className={`py-3 rounded-xl text-sm font-bold transition-all ${targetBus===`${n}호차`?'bg-incar text-white shadow-lg scale-105':'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{n}호차</button>
                                         ))}
                                     </div>
                                 }
@@ -397,13 +507,13 @@
                     </div>
 
                     <div className="flex-1 flex flex-col justify-end">
-                        <button onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-black text-xl shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${mode==='BOARDING'?'bg-incar shadow-incar/30':'bg-emerald-500 shadow-emerald-500/30'}`}>
+                        <button onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${mode==='BOARDING'?'bg-incar shadow-incar/30':'bg-emerald-500 shadow-emerald-500/30'}`}>
                             <Icon name="qr" size={28}/> {mode==='BOARDING' ? '탑승 스캔 시작' : '지급 스캔 시작'}
                         </button>
                         {!isMobile && users.length > 0 && <button onClick={()=>processScan(users[0].uid)} className="mt-4 text-xs text-slate-400 underline text-center">테스트: 첫번째 유저 강제 인식</button>}
                     </div>
 
-                    {/* [수정] 스캐너 오버레이 (조건부 렌더링, Portal 역할) */}
+                    {/* 스캐너 오버레이 */}
                     {isScanning && (
                         <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-fade-in" style={{ touchAction: 'none' }}>
                             <button onClick={stopScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full hover:bg-white/20 transition-colors z-[101]">
@@ -450,7 +560,7 @@
                                 <div className="flex-1 bg-slate-50 p-5 rounded-2xl border border-slate-100 flex flex-col justify-center">
                                     <div className="flex justify-between items-start mb-2">
                                         <div>
-                                            <div className="font-black text-2xl text-slate-800">{selectedUser.name}</div>
+                                            <div className="font-bold text-2xl text-slate-800">{selectedUser.name}</div>
                                             <div className="text-sm font-bold text-slate-500">{selectedUser.org}</div>
                                         </div>
                                         <div className="text-right">
@@ -483,6 +593,7 @@
             </div>
         );
 
+        // [수정] BadgePrintView: 텍스트 렌더링 스타일 개선 (폰트, 그림자, 가운데 정렬)
         const BadgePrintView = ({ users, onClose, config }) => (
             <div className="fixed inset-0 bg-white z-[100] overflow-auto animate-fade-in print-only-container">
                 <div className="no-print fixed top-0 left-0 w-full bg-slate-900 text-white p-4 flex justify-between items-center shadow-xl z-50">
@@ -503,20 +614,51 @@
                                 style={{
                                     width: '545px',
                                     height: '697px',
-                                    border: config?.bgImage ? '1px solid #eee' : '2px solid #0f172a',
-                                    borderRadius: '0.75rem',
-                                    backgroundColor: 'white',
-                                    marginBottom: '20px'
+                                    border: config?.bgImage ? 'none' : '2px solid #0f172a',
+                                    borderRadius: '0', 
+                                    flexShrink: 0
                                 }}>
                             {config?.bgImage ? (
                                 <>
                                     <img src={config.bgImage} className="absolute inset-0 w-full h-full object-cover z-0 print:block" />
+                                    
                                     <div style={{ position: 'absolute', top: `${config.qr.y}%`, left: `${config.qr.x}%`, transform: 'translate(-50%, -50%)', zIndex: 10 }}>
                                         <QRCodeCanvas text={u.uid} size={config.qr.size} transparent={true} />
                                     </div>
-                                    {config.org.show && <div style={{ position: 'absolute', top: `${config.org.y}%`, left: `${config.org.x}%`, transform: 'translate(-50%, -50%)', color: config.org.color, fontSize: `${config.org.size}px`, fontWeight: 'bold', whiteSpace: 'nowrap', zIndex: 10 }}>{u.org}</div>}
-                                    {config.name.show && <div style={{ position: 'absolute', top: `${config.name.y}%`, left: `${config.name.x}%`, transform: 'translate(-50%, -50%)', color: config.name.color, fontSize: `${config.name.size}px`, fontWeight: '900', whiteSpace: 'nowrap', zIndex: 10 }}>{u.name}</div>}
-                                    {config.uid.show && <div style={{ position: 'absolute', top: `${config.uid.y}%`, left: `${config.uid.x}%`, transform: 'translate(-50%, -50%)', color: config.uid.color, fontSize: `${config.uid.size}px`, fontFamily: 'monospace', zIndex: 10 }}>{u.uid}</div>}
+                                    
+                                    {config.org.show && (
+                                        <div className={`${config.org.font || 'font-sans'}`} 
+                                             style={{ 
+                                                position: 'absolute', top: `${config.org.y}%`, left: `${config.org.x}%`, transform: 'translate(-50%, -50%)', 
+                                                color: config.org.color, fontSize: `${config.org.size}px`, fontWeight: 'bold', whiteSpace: 'nowrap', zIndex: 10,
+                                                textShadow: config.org.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none'
+                                            }}>
+                                            {u.org}
+                                        </div>
+                                    )}
+                                    
+                                    {config.name.show && (
+                                        <div className={`${config.name.font || 'font-sans'}`}
+                                             style={{ 
+                                                position: 'absolute', top: `${config.name.y}%`, left: `${config.name.x}%`, transform: 'translate(-50%, -50%)', 
+                                                color: config.name.color, fontSize: `${config.name.size}px`, fontWeight: '900', whiteSpace: 'nowrap', zIndex: 10,
+                                                textShadow: config.name.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none'
+                                            }}>
+                                            {u.name}
+                                        </div>
+                                    )}
+
+                                    {/* [변경] UID -> Role (직책) */}
+                                    {config.role.show && (
+                                        <div className={`${config.role.font || 'font-sans'}`}
+                                             style={{ 
+                                                position: 'absolute', top: `${config.role.y}%`, left: `${config.role.x}%`, transform: 'translate(-50%, -50%)', 
+                                                color: config.role.color, fontSize: `${config.role.size}px`, whiteSpace: 'nowrap', zIndex: 10,
+                                                textShadow: config.role.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none'
+                                             }}>
+                                            {u.options && (u.options['직책'] || u.options['Role'] || u.options['Job'] || '-')}
+                                        </div>
+                                    )}
                                 </>
                             ) : (
                                 <div className="flex flex-col items-center justify-center h-full p-6 text-center border-2 border-slate-900 m-4">
@@ -526,6 +668,8 @@
                                     <div className="overflow-hidden w-full space-y-2">
                                         <div className="text-2xl font-bold text-slate-500 truncate">{u.org}</div>
                                         <div className="text-6xl font-black text-slate-900 truncate leading-tight">{u.name}</div>
+                                        {/* 기본 모드에서는 직책도 표시 */}
+                                        <div className="text-xl font-bold text-slate-400 mt-2">{u.options && (u.options['직책'] || u.options['Role'])}</div>
                                     </div>
                                 </div>
                             )}
@@ -550,7 +694,8 @@
                 let content = '';
                 let filename = '';
                 if(type === 'users') {
-                    content = '\uFEFF사번,성명,소속,버스,2일차,3일차\n202401,홍길동,마케팅팀,1호차,힐링코스,투어\n202402,김철수,영업팀,미정,문화탐방,자유일정';
+                    // [변경] 샘플 양식에 '직책' 추가
+                    content = '\uFEFF사번,성명,소속,직책,버스,2일차,3일차\n202401,홍길동,마케팅팀,대리,1호차,힐링코스,투어\n202402,김철수,영업팀,과장,미정,문화탐방,자유일정';
                     filename = '참가자명단_샘플.csv';
                 } else {
                     content = '\uFEFF일정,장소,타입,지급,타겟옵션,타겟값\n1일차,공항미팅,관광,0,ALL,ALL\n2일차,자유식비,지급,30,2일차,자유일정\n2일차,힐링코스탑승,관광,0,2일차,힐링코스';
@@ -563,7 +708,6 @@
                 link.click();
             };
 
-            // [NEW] 전체 데이터 엑셀 내보내기 기능
             const exportAllData = () => {
                 if(logs.length === 0) return alert("내보낼 데이터가 없습니다.");
                 
@@ -572,7 +716,7 @@
                     '사번': l.uid,
                     '성명': l.name,
                     '소속': l.org,
-                    '구분': l.action, // 탑승/지급
+                    '구분': l.action, 
                     '일정명': l.sessionTitle,
                     '탑승차량': l.bus,
                     '금액': l.amount,
@@ -588,7 +732,8 @@
                 link.click();
             };
 
-            const SliderGroup = ({ label, conf, onChange, colorPicker = false }) => (
+            // [수정] TextControl 컴포넌트 (폰트, 그림자 포함)
+            const TextControl = ({ label, conf, onChange }) => (
                 <div className="p-4 bg-slate-50 rounded-xl space-y-3 border border-slate-100">
                     <div className="flex justify-between items-center">
                         <span className="text-xs font-bold text-slate-700">{label}</span>
@@ -600,13 +745,42 @@
                         )}
                     </div>
                     <div className="grid grid-cols-1 gap-2">
+                        {/* 폰트 선택 */}
+                        <div className="flex gap-2 items-center">
+                            <span className="w-6 text-[10px] text-slate-400 font-bold">폰트</span>
+                            <select value={conf.font} onChange={e=>onChange('font', e.target.value)} className="flex-1 text-[10px] p-1 border rounded bg-white">
+                                <option value="font-noto">기본 고딕 (Noto Sans)</option>
+                                <option value="font-serif">명조체 (Nanum Myeongjo)</option>
+                                <option value="font-black-han">제목용 굵은 고딕 (Black Han Sans)</option>
+                                <option value="font-dohyeon">도현체 (Do Hyeon)</option>
+                                <option value="font-brush">손글씨 (Brush Script)</option>
+                            </select>
+                        </div>
+                        
+                        {/* 위치 조정 */}
                         <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">가로</span><input type="range" min="0" max="100" step="0.5" value={conf.x} onChange={e=>onChange('x', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
                         <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">세로</span><input type="range" min="0" max="100" step="0.5" value={conf.y} onChange={e=>onChange('y', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
-                        <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">크기</span><input type="range" min="10" max={label==='QR코드'?250:100} value={conf.size} onChange={e=>onChange('size', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
-                        {colorPicker && (
-                            <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">색상</span><input type="color" value={conf.color} onChange={e=>onChange('color', e.target.value)} className="w-full h-6 rounded cursor-pointer border border-slate-200"/></div>
-                        )}
+                        <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">크기</span><input type="range" min="10" max={100} value={conf.size} onChange={e=>onChange('size', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
+                        
+                        {/* 색상 및 그림자 */}
+                        <div className="flex gap-2 justify-between">
+                            <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">색상</span><input type="color" value={conf.color} onChange={e=>onChange('color', e.target.value)} className="w-8 h-6 rounded cursor-pointer border border-slate-200"/></div>
+                            <label className="flex items-center gap-1 cursor-pointer">
+                                <span className="text-[10px] text-slate-400 font-bold">그림자</span>
+                                <input type="checkbox" checked={conf.shadow} onChange={e => onChange('shadow', e.target.checked)} className="w-3 h-3 rounded text-incar focus:ring-incar"/>
+                            </label>
+                        </div>
                     </div>
+                </div>
+            );
+
+            // [수정] QR 컨트롤 (단순형)
+            const QrControl = ({ label, conf, onChange }) => (
+                <div className="p-4 bg-slate-50 rounded-xl space-y-3 border border-slate-100">
+                    <div className="flex justify-between items-center"><span className="text-xs font-bold text-slate-700">{label}</span></div>
+                    <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">가로</span><input type="range" min="0" max="100" step="0.5" value={conf.x} onChange={e=>onChange('x', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
+                    <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">세로</span><input type="range" min="0" max="100" step="0.5" value={conf.y} onChange={e=>onChange('y', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
+                    <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">크기</span><input type="range" min="50" max="250" value={conf.size} onChange={e=>onChange('size', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
                 </div>
             );
 
@@ -629,37 +803,62 @@
 
                     <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
                         <h3 className="font-bold text-lg mb-4 text-slate-800 flex items-center gap-2"><Icon name="edit" className="text-incar"/> 명찰 디자인 설정</h3>
-                        <div className="flex flex-col md:flex-row gap-8">
-                            {/* [수정] 미리보기 컨테이너 스크롤 제거 및 자동 맞춤 */}
-                            <div className="flex-1 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 relative overflow-hidden flex items-center justify-center" style={{ minHeight: '400px' }}>
-                                <div style={{ transform: 'scale(0.5)', transformOrigin: 'center', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', borderRadius: '10px' }}>
-                                    <div className="relative overflow-hidden bg-white" 
-                                            style={{ width: '545px', height: '697px' }}>
-                                        {badgeConfig.bgImage ? (
-                                            <>
-                                                <img src={badgeConfig.bgImage} className="absolute inset-0 w-full h-full object-cover" />
-                                                <div style={{ position: 'absolute', top: `${badgeConfig.qr.y}%`, left: `${badgeConfig.qr.x}%`, width: `${badgeConfig.qr.size}px`, height: `${badgeConfig.qr.size}px`, transform: 'translate(-50%, -50%)', border: '2px dashed red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'red', fontWeight: 'bold' }}>QR</div>
-                                                {badgeConfig.org.show && <div style={{ position: 'absolute', top: `${badgeConfig.org.y}%`, left: `${badgeConfig.org.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.org.color, fontSize: `${badgeConfig.org.size}px`, fontWeight: 'bold', border: '1px dashed blue', whiteSpace: 'nowrap' }}>소속 (Organization)</div>}
-                                                {badgeConfig.name.show && <div style={{ position: 'absolute', top: `${badgeConfig.name.y}%`, left: `${badgeConfig.name.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.name.color, fontSize: `${badgeConfig.name.size}px`, fontWeight: '900', border: '1px dashed blue', whiteSpace: 'nowrap' }}>성 명 (Name)</div>}
-                                                {badgeConfig.uid.show && <div style={{ position: 'absolute', top: `${badgeConfig.uid.y}%`, left: `${badgeConfig.uid.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.uid.color, fontSize: `${badgeConfig.uid.size}px`, fontFamily: 'monospace', border: '1px dashed blue', whiteSpace: 'nowrap' }}>12345678</div>}
-                                            </>
-                                        ) : (
-                                            <div className="flex items-center justify-center h-full text-slate-400 text-sm flex-col gap-2"><Icon name="upload" size={32}/><span>배경 이미지를 업로드해주세요</span></div>
-                                        )}
-                                    </div>
+                        <div className="flex flex-col md:flex-row gap-8 items-start">
+                            {/* [수정] 미리보기 화면 원본 크기 유지 (스크롤 없음, fit) */}
+                            <div className="flex-none bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 p-4 flex justify-center">
+                                <div className="relative overflow-hidden shadow-2xl bg-white" 
+                                        style={{ width: '545px', height: '697px', borderRadius: '10px' }}>
+                                    {badgeConfig.bgImage ? (
+                                        <>
+                                            <img src={badgeConfig.bgImage} className="absolute inset-0 w-full h-full object-cover" />
+                                            <div style={{ position: 'absolute', top: `${badgeConfig.qr.y}%`, left: `${badgeConfig.qr.x}%`, width: `${badgeConfig.qr.size}px`, height: `${badgeConfig.qr.size}px`, transform: 'translate(-50%, -50%)', border: '2px dashed red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'red', fontWeight: 'bold' }}>QR</div>
+                                            
+                                            {/* Preview Text Layers with Font & Shadow */}
+                                            {badgeConfig.org.show && (
+                                                <div className={badgeConfig.org.font} 
+                                                     style={{ position: 'absolute', top: `${badgeConfig.org.y}%`, left: `${badgeConfig.org.x}%`, transform: 'translate(-50%, -50%)', 
+                                                     color: badgeConfig.org.color, fontSize: `${badgeConfig.org.size}px`, fontWeight: 'bold', border: '1px dashed blue', whiteSpace: 'nowrap',
+                                                     textShadow: badgeConfig.org.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none' }}>
+                                                    소속 (Organization)
+                                                </div>
+                                            )}
+                                            
+                                            {badgeConfig.name.show && (
+                                                <div className={badgeConfig.name.font}
+                                                     style={{ position: 'absolute', top: `${badgeConfig.name.y}%`, left: `${badgeConfig.name.x}%`, transform: 'translate(-50%, -50%)', 
+                                                     color: badgeConfig.name.color, fontSize: `${badgeConfig.name.size}px`, fontWeight: '900', border: '1px dashed blue', whiteSpace: 'nowrap',
+                                                     textShadow: badgeConfig.name.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none' }}>
+                                                    성 명 (Name)
+                                                </div>
+                                            )}
+                                            
+                                            {badgeConfig.role.show && (
+                                                <div className={badgeConfig.role.font}
+                                                     style={{ position: 'absolute', top: `${badgeConfig.role.y}%`, left: `${badgeConfig.role.x}%`, transform: 'translate(-50%, -50%)', 
+                                                     color: badgeConfig.role.color, fontSize: `${badgeConfig.role.size}px`, border: '1px dashed blue', whiteSpace: 'nowrap',
+                                                     textShadow: badgeConfig.role.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none' }}>
+                                                    직책 (Role)
+                                                </div>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-slate-400 text-sm flex-col gap-2"><Icon name="upload" size={32}/><span>배경 이미지를 업로드해주세요</span></div>
+                                    )}
                                 </div>
                             </div>
-                            <div className="flex-1 space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+
+                            {/* [수정] 컨트롤 패널 (스크롤 제거, 높이 자동) */}
+                            <div className="flex-1 space-y-4 w-full">
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 mb-2">배경 이미지 업로드</label>
                                     <input type="file" accept="image/*" onChange={handleBgImageUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-incar-light file:text-incar hover:file:bg-indigo-100"/>
                                 </div>
                                 {badgeConfig.bgImage && (
-                                    <div className="space-y-3">
-                                        <SliderGroup label="QR코드" conf={badgeConfig.qr} onChange={(k,v)=>setBadgeConfig(p=>({...p, qr:{...p.qr, [k]:v}}))} />
-                                        <SliderGroup label="소속 (상단)" conf={badgeConfig.org} onChange={(k,v)=>setBadgeConfig(p=>({...p, org:{...p.org, [k]:v}}))} colorPicker={true} />
-                                        <SliderGroup label="성명 (중앙)" conf={badgeConfig.name} onChange={(k,v)=>setBadgeConfig(p=>({...p, name:{...p.name, [k]:v}}))} colorPicker={true} />
-                                        <SliderGroup label="사번 (하단)" conf={badgeConfig.uid} onChange={(k,v)=>setBadgeConfig(p=>({...p, uid:{...p.uid, [k]:v}}))} colorPicker={true} />
+                                    <div className="grid grid-cols-1 gap-3">
+                                        <QrControl label="QR코드" conf={badgeConfig.qr} onChange={(k,v)=>setBadgeConfig(p=>({...p, qr:{...p.qr, [k]:v}}))} />
+                                        <TextControl label="소속 (상단)" conf={badgeConfig.org} onChange={(k,v)=>setBadgeConfig(p=>({...p, org:{...p.org, [k]:v}}))} />
+                                        <TextControl label="직책 (중단)" conf={badgeConfig.role} onChange={(k,v)=>setBadgeConfig(p=>({...p, role:{...p.role, [k]:v}}))} />
+                                        <TextControl label="성명 (하단)" conf={badgeConfig.name} onChange={(k,v)=>setBadgeConfig(p=>({...p, name:{...p.name, [k]:v}}))} />
                                     </div>
                                 )}
                             </div>
@@ -673,7 +872,7 @@
                             <div className="space-y-4">
                                 <div className="bg-white/10 rounded-2xl border border-white/20 p-4">
                                     <div className="flex justify-between items-center mb-3">
-                                        <div className="flex items-center gap-3"><Icon name="users" className="text-blue-200"/><div><div className="font-bold text-sm">1. 참가자 명단 (Users.csv)</div><div className="text-[10px] text-blue-300">사번, 성명, 옵션(2일차 등) 포함</div></div></div>
+                                        <div className="flex items-center gap-3"><Icon name="users" className="text-blue-200"/><div><div className="font-bold text-sm">1. 참가자 명단 (Users.csv)</div><div className="text-[10px] text-blue-300">사번, 성명, 직책, 옵션 포함</div></div></div>
                                         <button onClick={()=>downloadTemplate('users')} className="text-[10px] bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"><Icon name="download" size={12} /> 양식 다운로드</button>
                                     </div>
                                     <label className="flex items-center justify-center w-full p-3 bg-white text-incar font-bold rounded-xl cursor-pointer hover:bg-slate-100 transition-colors text-sm"><input type="file" accept=".csv" onChange={handleUserUpload} className="hidden" /><Icon name="upload" size={16} className="mr-2" /> 파일 업로드</label>
@@ -764,14 +963,17 @@
             const [activeTab, setActiveTab] = useState('dashboard');
             const [isPrintMode, setIsPrintMode] = useState(false);
             
+            // [수정] Badge Config - UID 제거, Role 추가
             const [badgeConfig, setBadgeConfig] = useState({
                 bgImage: null,
-                qr: { x: 50, y: 70, size: 150 },
-                name: { x: 50, y: 45, size: 40, color: '#000000', show: true },
-                org: { x: 50, y: 35, size: 20, color: '#475569', show: true },
+                qr: { x: 50, y: 20, size: 100 },
+                name: { x: 50, y: 65, size: 40, color: '#000000', show: true, font: 'font-black-han', shadow: false },
+                org: { x: 50, y: 40, size: 20, color: '#475569', show: true, font: 'font-noto', shadow: false },
+                role: { x: 50, y: 50, size: 18, color: '#000000', show: true, font: 'font-noto', shadow: false },
                 uid: { x: 50, y: 85, size: 14, color: '#94a3b8', show: false } 
             });
 
+            // ... (기존 state) ...
             const [user, setUser] = useState(null); 
             const [db, setDb] = useState(null);    
             const [isLoading, setIsLoading] = useState(true);
@@ -783,6 +985,9 @@
             const [changeLogs, setChangeLogs] = useState([]);
             const [scanResult, setScanResult] = useState(null);
             
+            // [NEW] 세션 상세 모달 상태
+            const [selectedSession, setSelectedSession] = useState(null);
+
             const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
             const [isScanning, setIsScanning] = useState(false);
             const [targetSessionId, setTargetSessionId] = useState('');
@@ -795,7 +1000,7 @@
             const SYSTEM_APP_ID = 'inca-prod-v1';
 
             // [사용자 설정 영역] 파이어베이스 키
-            const firebaseConfig = {
+           const firebaseConfig = {
   apiKey: "AIzaSyAh1dsSNobeF6Wz-0euP5AUggdqJANJ3dQ",
   authDomain: "incarpass.firebaseapp.com",
   projectId: "incarpass",
@@ -878,7 +1083,7 @@
 
                 initSystem();
 
-                const loadedBadgeConfig = JSON.parse(localStorage.getItem('incar_pro_badge_config_v2_1') || 'null');
+                const loadedBadgeConfig = JSON.parse(localStorage.getItem('incar_pro_badge_config_v2_3') || 'null'); // Version 2.3
                 if(loadedBadgeConfig && loadedBadgeConfig.name && loadedBadgeConfig.org) {
                     setBadgeConfig(loadedBadgeConfig);
                 }
@@ -888,7 +1093,8 @@
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_schedules', JSON.stringify(schedules)); }, [schedules, db]);
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_logs', JSON.stringify(logs)); }, [logs, db]);
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
-            useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_1', JSON.stringify(badgeConfig)); }, [badgeConfig]);
+            // [수정] 버전 업그레이드 (v2.3)
+            useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_3', JSON.stringify(badgeConfig)); }, [badgeConfig]);
 
             // ... (Handlers) ...
             const handleUserUpload = async (e) => {
@@ -1037,7 +1243,21 @@
                     }
                 }
                 
-                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog });
+                // [NEW] 당일 다른 일정 지급 확인
+                const todayLogs = logs.filter(l => 
+                    l.uid === user.uid && 
+                    l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) &&
+                    l.action === '지급'
+                );
+
+                setScanResult({ 
+                    status: 'success', 
+                    msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', 
+                    subMsg: session.title, 
+                    user, 
+                    logs: newLog,
+                    relatedLogs: todayLogs // 관련 로그 전달
+                });
             };
 
             const handleUserUpdate = async () => {
@@ -1126,15 +1346,25 @@
                         )}
                         <div className="flex-1 overflow-y-auto p-4 pb-24 md:p-8 md:pb-8 w-full no-print-scroll">
                             <div className="max-w-5xl mx-auto w-full">
-                                {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} changeLogs={changeLogs} />}
+                                {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
                                 {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} />}
                                 {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} />}
                                 {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} />}
-                                {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} badgeConfig={badgeConfig} setBadgeConfig={setBadgeConfig} db={db} serverError={serverError} schedules={schedules} logs={logs} setIsPrintMode={setIsPrintMode} />} {/* [수정] setIsPrintMode 추가 */}
+                                {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} badgeConfig={badgeConfig} setBadgeConfig={setBadgeConfig} db={db} serverError={serverError} schedules={schedules} logs={logs} setIsPrintMode={setIsPrintMode} />} 
                             </div>
                         </div>
                         { isMobile && <MobileTab activeTab={activeTab} setActiveTab={setActiveTab} /> }
                         {isPrintMode && <BadgePrintView users={users} config={badgeConfig} onClose={() => setIsPrintMode(false)} />}
+                        
+                        {/* [NEW] 세션 상세 모달 */}
+                        {selectedSession && (
+                            <SessionDetailModal 
+                                session={selectedSession} 
+                                users={users} 
+                                logs={logs} 
+                                onClose={() => setSelectedSession(null)} 
+                            />
+                        )}
                     </main>
                     <ResultModal result={scanResult} onClose={() => setScanResult(null)} />
                 </div>
