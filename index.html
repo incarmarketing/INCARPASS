@@ -12,9 +12,7 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
-    <!-- 로컬 QR 생성을 위한 라이브러리 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- Firebase SDK -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
@@ -48,7 +46,6 @@
         .scan-line { width: 100%; height: 2px; background: #ef4444; position: absolute; top: 0; left: 0; animation: scan 2s infinite linear; z-index: 20; box-shadow: 0 0 4px #ef4444; }
         @keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }
         
-        /* PC/Mobile Layout Utilities */
         .mobile-only { display: block; }
         .pc-only { display: none; }
         @media (min-width: 768px) {
@@ -56,12 +53,10 @@
             .pc-only { display: block; }
         }
         
-        /* Table Styles */
         .data-table th { background-color: #f8fafc; color: #64748b; font-weight: 800; font-size: 0.75rem; text-transform: uppercase; padding: 12px 16px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
         .data-table td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; font-weight: 600; color: #334155; }
         .data-table tr:hover td { background-color: #f8fafc; }
 
-        /* Print Styles */
         @media print {
             body { background-color: white; overflow: visible; }
             .no-print { display: none !important; }
@@ -77,7 +72,7 @@
     <div id="root" class="h-full w-full"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef, Fragment } = React;
+        const { useState, useEffect, useMemo, useRef, Fragment, useCallback } = React;
         const CURRENCY = '$';
 
         // --- 아이콘 컴포넌트 ---
@@ -105,7 +100,6 @@
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="2"/>}</svg>;
         };
 
-        // --- 스캔 결과 모달 ---
         const ResultModal = ({ result, onClose }) => {
             if (!result) return null;
             const { status, msg, subMsg, user, logs } = result;
@@ -154,35 +148,564 @@
             );
         };
 
-        // --- QR 생성 컴포넌트 ---
         const QRCodeCanvas = ({ text, size = 100, transparent = false }) => {
-            const ref = useRef();
+            const canvasRef = useRef(null);
             useEffect(() => {
-                if(ref.current) {
-                    ref.current.innerHTML = '';
-                    try {
-                        new QRCode(ref.current, {
-                            text: text,
-                            width: size,
-                            height: size,
-                            colorDark : "#000000",
-                            colorLight : transparent ? "rgba(255,255,255,0)" : "#ffffff",
-                            correctLevel : QRCode.CorrectLevel.M
-                        });
-                    } catch(e) {
-                        console.error("QR Gen Error", e);
-                    }
+                if (canvasRef.current && window.QRious) {
+                    new QRious({
+                        element: canvasRef.current,
+                        value: text,
+                        size: size,
+                        level: 'H',
+                        background: transparent ? 'transparent' : 'white',
+                        foreground: 'black'
+                    });
                 }
             }, [text, size, transparent]);
-            return <div ref={ref}></div>
+            return <canvas ref={canvasRef} />;
         }
 
-        // --- 메인 앱 ---
+        // [컴포넌트 분리] App 내부에서 정의하지 않고 밖으로 분리하여 재렌더링 시 포커스 유지
+        const DashboardView = ({ users, logs, scheduleStats, groupedStats, changeLogs }) => (
+            <div className="space-y-6 animate-slide-up">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-incar">
+                        <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Participants</div>
+                        <div className="text-4xl font-black text-slate-800">{users.length}</div>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-emerald-500">
+                        <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Payout</div>
+                        <div className="text-4xl font-black text-slate-800">{CURRENCY}{logs.reduce((sum, l) => sum + (l.finalAmount||0), 0).toLocaleString()}</div>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-indigo-400 hidden md:block">
+                        <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Completion Rate</div>
+                        <div className="text-4xl font-black text-slate-800">
+                            {scheduleStats.length > 0 ? Math.round(scheduleStats.reduce((acc, s) => acc + s.percent, 0) / scheduleStats.length) : 0}%
+                        </div>
+                    </div>
+                    <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-rose-400 hidden md:block">
+                        <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Penalties</div>
+                        <div className="text-4xl font-black text-slate-800">{changeLogs.length}건</div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
+                        <Icon name="dashboard" className="text-incar"/> 일정별 진행률 (요약)
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {scheduleStats.map(stat => (
+                            <div key={stat.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow">
+                                <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><Icon name={stat.type === 'PAYMENT' ? 'money' : 'bus'} size={60} /></div>
+                                <div className="relative z-10">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded ${stat.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-indigo-50 text-incar'}`}>{stat.type==='PAYMENT'?'지급':'탑승'}</span>
+                                        <span className="text-xs font-bold text-slate-400">{stat.displayDate}</span>
+                                    </div>
+                                    <h4 className="font-bold text-slate-800 mb-4 truncate pr-8">{stat.title}</h4>
+                                    <div className="flex justify-between items-end mb-1">
+                                        <span className="text-3xl font-black text-slate-800">{stat.doneCount}<span className="text-sm text-slate-400 font-medium ml-1">/ {stat.targetCount}</span></span>
+                                        <span className={`text-xl font-bold ${stat.percent === 100 ? 'text-emerald-500' : 'text-incar'}`}>{stat.percent}%</span>
+                                    </div>
+                                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
+                                        <div className={`h-full rounded-full transition-all duration-1000 ${stat.percent===100?'bg-emerald-500':'bg-incar'}`} style={{width: `${stat.percent}%`}}></div>
+                                    </div>
+                                    {stat.type === 'PAYMENT' && (
+                                        <div className="pt-2 border-t border-slate-50 flex justify-between text-xs">
+                                            <span className="text-slate-400">집행액: <b>{CURRENCY}{stat.actualAmount.toLocaleString()}</b></span>
+                                            <span className="text-slate-400">예상: {CURRENCY}{stat.expectedAmount.toLocaleString()}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {scheduleStats.length === 0 && <div className="col-span-full py-10 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">등록된 일정이 없습니다.</div>}
+                    </div>
+                </div>
+
+                <div className="pc-only bg-white rounded-3xl border border-slate-200 shadow-card overflow-hidden mt-8">
+                    <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+                        <h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="table" className="text-incar"/> 상세 현황 분석표</h3>
+                    </div>
+                    {Object.entries(groupedStats).length === 0 ? <div className="p-10 text-center text-slate-400">데이터가 없습니다.</div> : (
+                        <div className="p-6 space-y-8">
+                            {Object.entries(groupedStats).sort().map(([date, stats]) => (
+                                <div key={date}>
+                                    <h4 className="text-xs font-black text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-3">{date}</h4>
+                                    <div className="overflow-hidden rounded-xl border border-slate-200">
+                                        <table className="w-full text-left data-table">
+                                            <thead><tr><th className="w-1/3">일정명</th><th className="text-center">구분</th><th className="text-right">대상(Target)</th><th className="text-right">완료(Done)</th><th className="text-center border-l border-slate-200">미완료</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
+                                            <tbody>
+                                                {stats.map(s => (
+                                                    <tr key={s.id}>
+                                                        <td className="font-bold">{s.title}</td>
+                                                        <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-black border ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':'탑승'}</span></td>
+                                                        <td className="text-right text-slate-500">{s.targetCount}</td>
+                                                        <td className="text-right font-bold text-slate-900">{s.doneCount}</td>
+                                                        <td className="text-center border-l border-slate-50">{s.targetCount - s.doneCount === 0 ? <span className="text-emerald-500 font-bold text-xs">Complete</span> : <span className="text-rose-500 font-bold text-xs">{s.targetCount - s.doneCount}명 남음</span>}</td>
+                                                        <td className="text-right text-slate-400">{s.type==='PAYMENT'?`${CURRENCY}${s.expectedAmount.toLocaleString()}`:'-'}</td>
+                                                        <td className="text-right font-bold text-emerald-600">{s.type==='PAYMENT'?`${CURRENCY}${s.actualAmount.toLocaleString()}`:'-'}</td>
+                                                        <td className="text-center border-l border-slate-50">{s.type !== 'PAYMENT' ? '-' : (s.diffAmount === 0 ? <span className="text-emerald-500 font-bold text-xs">OK</span> : s.diffAmount < 0 ? <span className="text-rose-500 font-bold text-xs">{s.diffAmount}</span> : <span className="text-blue-500 font-bold text-xs">+{s.diffAmount}</span>)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+
+        const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile }) => {
+            const scannerRef = useRef(null);
+            const isRunningRef = useRef(false);
+            
+            const filteredSchedules = useMemo(() => {
+                return schedules.filter(s => s.type === mode);
+            }, [schedules, mode]);
+
+            useEffect(() => {
+                if (filteredSchedules.length > 0) {
+                    // 현재 선택된 세션이 필터링된 목록에 없으면 첫번째꺼 선택
+                    const exists = filteredSchedules.find(s => s.id === targetSessionId);
+                    if (!exists) setTargetSessionId(filteredSchedules[0].id);
+                } else {
+                    setTargetSessionId('');
+                }
+            }, [mode, filteredSchedules]);
+
+            useEffect(() => {
+                return () => {
+                    stopScanner();
+                };
+            }, []);
+
+            const startScanner = () => {
+                if (isRunningRef.current) return;
+                setIsScanning(true);
+                
+                setTimeout(() => {
+                    const element = document.getElementById("reader");
+                    if (!element) {
+                        setIsScanning(false);
+                        return;
+                    }
+                    if (!scannerRef.current) {
+                        scannerRef.current = new Html5Qrcode("reader");
+                    }
+                    const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
+                    scannerRef.current.start({ facingMode: "environment" }, config, (decodedText) => {
+                        stopScanner();
+                        processScan(decodedText);
+                    }, () => {}).then(() => {
+                        isRunningRef.current = true;
+                    }).catch(err => {
+                        console.error("Camera start failed", err);
+                        setIsScanning(false);
+                        alert("카메라 시작 실패. 권한을 확인해주세요.");
+                    });
+                }, 300);
+            };
+
+            const stopScanner = () => {
+                if (scannerRef.current && isRunningRef.current) {
+                    scannerRef.current.stop().then(() => {
+                        scannerRef.current.clear();
+                        isRunningRef.current = false;
+                        setIsScanning(false);
+                    }).catch(err => {
+                        console.log("Failed to stop scanner", err);
+                        setIsScanning(false);
+                        isRunningRef.current = false;
+                    });
+                } else {
+                    setIsScanning(false);
+                }
+            };
+
+            return (
+                <div className="space-y-6 h-full flex flex-col animate-slide-up">
+                    <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
+                        <div className="flex items-center gap-2 mb-4">
+                            <span className={`px-2 py-1 rounded-lg text-xs font-black ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING' ? 'STEP 1' : '지급'}</span>
+                            <h3 className="text-lg font-black text-slate-800">{mode==='BOARDING' ? '탑승 일정 선택' : '지급 항목 선택'}</h3>
+                        </div>
+                        <div className="mb-6">
+                            <select value={targetSessionId} onChange={(e) => setTargetSessionId(e.target.value)} className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-lg outline-none focus:ring-4 transition-all ${mode==='BOARDING'?'focus:ring-incar/20':'focus:ring-emerald-500/20'}`}>
+                                {filteredSchedules.length === 0 && <option>해당하는 일정이 없습니다</option>}
+                                {filteredSchedules.map(s => <option key={s.id} value={s.id}>[{s.displayDate}] {s.title}</option>)}
+                            </select>
+                        </div>
+                        {mode === 'BOARDING' && (
+                            <div className="animate-slide-up">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <span className="px-2 py-1 rounded-lg text-xs font-black bg-slate-800 text-white">STEP 2</span>
+                                    <div className="flex justify-between items-center flex-1">
+                                        <h3 className="text-lg font-black text-slate-800">차량 번호 선택</h3>
+                                        <button onClick={()=>setManualBus(!manualBus)} className="text-xs font-bold text-slate-400 underline decoration-slate-300">{manualBus ? '목록에서 선택' : '직접 입력'}</button>
+                                    </div>
+                                </div>
+                                {manualBus ? 
+                                    <input type="text" value={targetBus} onChange={e=>setTargetBus(e.target.value)} className="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl font-bold text-center text-lg focus:border-incar outline-none" placeholder="차량 번호 입력" /> :
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                                            <button key={n} onClick={()=>setTargetBus(`${n}호차`)} className={`py-3 rounded-xl text-sm font-black transition-all ${targetBus===`${n}호차`?'bg-incar text-white shadow-lg scale-105':'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{n}호차</button>
+                                        ))}
+                                    </div>
+                                }
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="flex-1 flex flex-col justify-end">
+                        {isScanning ? (
+                            <div className="bg-black rounded-3xl overflow-hidden relative shadow-2xl flex-1 max-h-[400px]">
+                                <div id="reader" className="w-full h-full"></div>
+                                <div className={`scan-line ${mode==='BOARDING'?'bg-incar':'bg-emerald-500'}`}></div>
+                                <button onClick={stopScanner} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur text-white px-6 py-2 rounded-full font-bold text-sm border border-white/30 z-20">스캔 취소</button>
+                            </div>
+                        ) : (
+                            <button onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-black text-xl shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${mode==='BOARDING'?'bg-incar shadow-incar/30':'bg-emerald-500 shadow-emerald-500/30'}`}>
+                                <Icon name="qr" size={28}/> {mode==='BOARDING' ? '탑승 스캔 시작' : '지급 스캔 시작'}
+                            </button>
+                        )}
+                        {!isMobile && users.length > 0 && <button onClick={()=>processScan(users[0].uid)} className="mt-4 text-xs text-slate-400 underline text-center">테스트: 첫번째 유저 강제 인식</button>}
+                    </div>
+                </div>
+            );
+        };
+
+        const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users }) => (
+            <div className="space-y-6 animate-slide-up">
+                <div className="bg-white p-6 rounded-3xl shadow-card">
+                    <h3 className="font-bold text-lg mb-4 text-slate-800">참가자 일정 변경 및 패널티 관리</h3>
+                    <div className="flex gap-2 mb-6">
+                        <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="사번 또는 이름 검색" className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-incar" />
+                        <button onClick={()=>{
+                            const found = users.find(u => u.uid.includes(searchQuery) || u.name.includes(searchQuery));
+                            if(found) setSelectedUser(found); else alert("사용자를 찾을 수 없습니다.");
+                        }} className="bg-slate-800 text-white px-6 rounded-2xl font-bold">검색</button>
+                    </div>
+                    {selectedUser && (
+                        <div className="border-t border-slate-100 pt-6 space-y-4">
+                            <div className="flex flex-col md:flex-row gap-6 mb-6">
+                                <div className="flex-1 bg-slate-50 p-5 rounded-2xl border border-slate-100 flex flex-col justify-center">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div>
+                                            <div className="font-black text-2xl text-slate-800">{selectedUser.name}</div>
+                                            <div className="text-sm font-bold text-slate-500">{selectedUser.org}</div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-[10px] font-bold text-slate-400 uppercase">사번(ID)</div>
+                                            <div className="font-mono font-bold text-incar">{selectedUser.uid}</div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-between items-center">
+                                        <span className="text-xs font-bold text-slate-400">누적 패널티</span>
+                                        <span className="font-black text-rose-500 text-lg">-{CURRENCY}{selectedUser.penaltyTotal || 0}</span>
+                                    </div>
+                                </div>
+                                <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center w-full md:w-auto">
+                                    <div className="mb-2 w-32 h-32 flex items-center justify-center bg-slate-50">
+                                        <QRCodeCanvas text={selectedUser.uid} />
+                                    </div>
+                                    <p className="text-[10px] font-bold text-slate-400">QR 데이터: {selectedUser.uid}</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1">변경할 옵션 (Key)</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{key} (현재: {selectedUser.options[key]})</option>)}</select></div>
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1">변경값 (New)</label><input type="text" value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm" /></div>
+                            </div>
+                            <div><label className="block text-xs font-bold text-slate-400 mb-1">패널티 ({CURRENCY})</label><input type="number" value={editForm.penalty} onChange={e=>setEditForm({...editForm, penalty: e.target.value})} className="w-full p-3 border border-rose-200 bg-rose-50 rounded-xl font-bold text-rose-600" /></div>
+                            <div><label className="block text-xs font-bold text-slate-400 mb-1">변경 사유</label><input type="text" value={editForm.reason} onChange={e=>setEditForm({...editForm, reason: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm" /></div>
+                            <button onClick={handleUserUpdate} className="w-full py-4 bg-incar text-white font-bold rounded-2xl shadow-lg mt-4 hover:bg-incar-dark">저장하기</button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+
+        const BadgePrintView = ({ users, onClose, config }) => (
+            <div className="fixed inset-0 bg-white z-[100] overflow-auto animate-fade-in print-only-container">
+                <div className="no-print fixed top-0 left-0 w-full bg-slate-900 text-white p-4 flex justify-between items-center shadow-xl z-50">
+                    <div className="font-bold text-lg flex items-center gap-4">
+                        <span className="bg-incar px-2 py-1 rounded text-xs">PRINT MODE</span> 
+                        <span>명찰 일괄 출력 (총 {users.length}명)</span>
+                    </div>
+                    <div className="flex gap-3">
+                        <button onClick={() => window.print()} className="bg-emerald-500 hover:bg-emerald-600 px-6 py-2 rounded-lg font-bold flex items-center gap-2">
+                            <Icon name="print" /> 인쇄 / PDF저장
+                        </button>
+                        <button onClick={onClose} className="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-lg font-bold">닫기</button>
+                    </div>
+                </div>
+                <div className="p-8 pt-24 flex flex-col items-center gap-8 max-w-full mx-auto print:p-0 print:block">
+                    {users.map((u, i) => (
+                        <div key={u.uid} className="page-break relative shadow-sm overflow-hidden print:border-0 print:shadow-none" 
+                                style={{
+                                    width: '545px',
+                                    height: '697px',
+                                    border: config?.bgImage ? '1px solid #eee' : '2px solid #0f172a',
+                                    borderRadius: '0.75rem',
+                                    backgroundColor: 'white',
+                                    marginBottom: '20px'
+                                }}>
+                            {config?.bgImage ? (
+                                <>
+                                    <img src={config.bgImage} className="absolute inset-0 w-full h-full object-cover z-0 print:block" />
+                                    <div style={{ position: 'absolute', top: `${config.qr.y}%`, left: `${config.qr.x}%`, transform: 'translate(-50%, -50%)', zIndex: 10 }}>
+                                        <QRCodeCanvas text={u.uid} size={config.qr.size} transparent={true} />
+                                    </div>
+                                    {config.org.show && <div style={{ position: 'absolute', top: `${config.org.y}%`, left: `${config.org.x}%`, transform: 'translate(-50%, -50%)', color: config.org.color, fontSize: `${config.org.size}px`, fontWeight: 'bold', whiteSpace: 'nowrap', zIndex: 10 }}>{u.org}</div>}
+                                    {config.name.show && <div style={{ position: 'absolute', top: `${config.name.y}%`, left: `${config.name.x}%`, transform: 'translate(-50%, -50%)', color: config.name.color, fontSize: `${config.name.size}px`, fontWeight: '900', whiteSpace: 'nowrap', zIndex: 10 }}>{u.name}</div>}
+                                    {config.uid.show && <div style={{ position: 'absolute', top: `${config.uid.y}%`, left: `${config.uid.x}%`, transform: 'translate(-50%, -50%)', color: config.uid.color, fontSize: `${config.uid.size}px`, fontFamily: 'monospace', zIndex: 10 }}>{u.uid}</div>}
+                                </>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center h-full p-6 text-center border-2 border-slate-900 m-4">
+                                    <div className="w-40 h-40 bg-white mb-6">
+                                        <QRCodeCanvas text={u.uid} size={160} />
+                                    </div>
+                                    <div className="overflow-hidden w-full space-y-2">
+                                        <div className="text-2xl font-bold text-slate-500 truncate">{u.org}</div>
+                                        <div className="text-6xl font-black text-slate-900 truncate leading-tight">{u.name}</div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+
+        const ManageView = ({ users, handleUserUpload, handleScheduleUpload, badgeConfig, setBadgeConfig, db, serverError, schedules, logs }) => {
+            
+            const handleBgImageUpload = (e) => {
+                const file = e.target.files[0];
+                if(file){
+                    const reader = new FileReader();
+                    reader.onload = (evt) => setBadgeConfig(prev => ({...prev, bgImage: evt.target.result}));
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const downloadTemplate = (type) => {
+                let content = '';
+                let filename = '';
+                if(type === 'users') {
+                    content = '\uFEFF사번,성명,소속,버스,2일차,3일차\n202401,홍길동,마케팅팀,1호차,힐링코스,투어\n202402,김철수,영업팀,미정,문화탐방,자유일정';
+                    filename = '참가자명단_샘플.csv';
+                } else {
+                    content = '\uFEFF일정,장소,타입,지급,타겟옵션,타겟값\n1일차,공항미팅,관광,0,ALL,ALL\n2일차,자유식비,지급,30,2일차,자유일정\n2일차,힐링코스탑승,관광,0,2일차,힐링코스';
+                    filename = '일정정보_샘플.csv';
+                }
+                const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = filename;
+                link.click();
+            };
+
+            // [NEW] 전체 데이터 엑셀 내보내기 기능
+            const exportAllData = () => {
+                if(logs.length === 0) return alert("내보낼 데이터가 없습니다.");
+                
+                const csvData = logs.map(l => ({
+                    '스캔일시': l.timestamp ? new Date(l.timestamp).toLocaleString() : '',
+                    '사번': l.uid,
+                    '성명': l.name,
+                    '소속': l.org,
+                    '구분': l.action, // 탑승/지급
+                    '일정명': l.sessionTitle,
+                    '탑승차량': l.bus,
+                    '금액': l.amount,
+                    '최종지급액': l.finalAmount || l.amount,
+                    '패널티적용': l.penaltyApplied > 0 ? 'Y' : 'N'
+                }));
+
+                const csv = Papa.unparse(csvData);
+                const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `INCARPASS_FULL_DATA_${new Date().toISOString().slice(0,10)}.csv`;
+                link.click();
+            };
+
+            const SliderGroup = ({ label, conf, onChange, colorPicker = false }) => (
+                <div className="p-4 bg-slate-50 rounded-xl space-y-3 border border-slate-100">
+                    <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-slate-700">{label}</span>
+                        {conf.hasOwnProperty('show') && (
+                            <label className="flex items-center gap-1 cursor-pointer">
+                                <input type="checkbox" checked={conf.show} onChange={e => onChange('show', e.target.checked)} className="w-3 h-3 rounded text-incar focus:ring-incar"/>
+                                <span className="text-[10px] text-slate-400">표시</span>
+                            </label>
+                        )}
+                    </div>
+                    <div className="grid grid-cols-1 gap-2">
+                        <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">가로</span><input type="range" min="0" max="100" value={conf.x} onChange={e=>onChange('x', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
+                        <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">세로</span><input type="range" min="0" max="100" value={conf.y} onChange={e=>onChange('y', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
+                        <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">크기</span><input type="range" min="10" max={label==='QR코드'?250:100} value={conf.size} onChange={e=>onChange('size', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
+                        {colorPicker && (
+                            <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">색상</span><input type="color" value={conf.color} onChange={e=>onChange('color', e.target.value)} className="w-full h-6 rounded cursor-pointer border border-slate-200"/></div>
+                        )}
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="space-y-6 animate-slide-up no-print">
+                    <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-card">
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <h3 className="font-bold text-lg flex items-center gap-2">
+                                    <div className={`w-3 h-3 rounded-full ${db ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></div> 
+                                    {db ? '서버 연결 정상' : '로컬 모드 (서버 미연결)'}
+                                </h3>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    {db ? '모든 데이터가 클라우드에 실시간으로 저장됩니다.' : 
+                                        serverError ? `오류: ${serverError}` : '현재 기기에만 데이터가 저장됩니다. (공유 불가)'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
+                        <h3 className="font-bold text-lg mb-4 text-slate-800 flex items-center gap-2"><Icon name="edit" className="text-incar"/> 명찰 디자인 설정</h3>
+                        <div className="flex flex-col md:flex-row gap-8">
+                            <div className="flex-1 flex justify-center items-start bg-slate-50 rounded-2xl p-4 border-2 border-dashed border-slate-200 min-h-[300px] overflow-auto">
+                                <div className="relative overflow-hidden shadow-2xl bg-white sticky top-4 origin-top transform scale-75 md:scale-50 lg:scale-75" 
+                                        style={{ width: '545px', height: '697px', borderRadius: '10px', flexShrink: 0 }}>
+                                    {badgeConfig.bgImage ? (
+                                        <>
+                                            <img src={badgeConfig.bgImage} className="absolute inset-0 w-full h-full object-cover" />
+                                            <div style={{ position: 'absolute', top: `${badgeConfig.qr.y}%`, left: `${badgeConfig.qr.x}%`, width: `${badgeConfig.qr.size}px`, height: `${badgeConfig.qr.size}px`, transform: 'translate(-50%, -50%)', border: '2px dashed red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'red', fontWeight: 'bold' }}>QR</div>
+                                            {badgeConfig.org.show && <div style={{ position: 'absolute', top: `${badgeConfig.org.y}%`, left: `${badgeConfig.org.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.org.color, fontSize: `${badgeConfig.org.size}px`, fontWeight: 'bold', border: '1px dashed blue', whiteSpace: 'nowrap' }}>소속 (Organization)</div>}
+                                            {badgeConfig.name.show && <div style={{ position: 'absolute', top: `${badgeConfig.name.y}%`, left: `${badgeConfig.name.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.name.color, fontSize: `${badgeConfig.name.size}px`, fontWeight: '900', border: '1px dashed blue', whiteSpace: 'nowrap' }}>성 명 (Name)</div>}
+                                            {badgeConfig.uid.show && <div style={{ position: 'absolute', top: `${badgeConfig.uid.y}%`, left: `${badgeConfig.uid.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.uid.color, fontSize: `${badgeConfig.uid.size}px`, fontFamily: 'monospace', border: '1px dashed blue', whiteSpace: 'nowrap' }}>12345678</div>}
+                                        </>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-slate-400 text-sm flex-col gap-2"><Icon name="upload" size={32}/><span>배경 이미지를 업로드해주세요</span></div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex-1 space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-2">배경 이미지 업로드</label>
+                                    <input type="file" accept="image/*" onChange={handleBgImageUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-incar-light file:text-incar hover:file:bg-indigo-100"/>
+                                </div>
+                                {badgeConfig.bgImage && (
+                                    <div className="space-y-3">
+                                        <SliderGroup label="QR코드" conf={badgeConfig.qr} onChange={(k,v)=>setBadgeConfig(p=>({...p, qr:{...p.qr, [k]:v}}))} />
+                                        <SliderGroup label="소속 (상단)" conf={badgeConfig.org} onChange={(k,v)=>setBadgeConfig(p=>({...p, org:{...p.org, [k]:v}}))} colorPicker={true} />
+                                        <SliderGroup label="성명 (중앙)" conf={badgeConfig.name} onChange={(k,v)=>setBadgeConfig(p=>({...p, name:{...p.name, [k]:v}}))} colorPicker={true} />
+                                        <SliderGroup label="사번 (하단)" conf={badgeConfig.uid} onChange={(k,v)=>setBadgeConfig(p=>({...p, uid:{...p.uid, [k]:v}}))} colorPicker={true} />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-incar text-white p-6 rounded-3xl shadow-xl relative overflow-hidden">
+                        <div className="relative z-10">
+                            <h3 className="font-black text-2xl">Master Data Setup</h3>
+                            <p className="text-blue-200 text-sm mt-1 mb-6">엑셀 파일을 업로드하여 행사를 설정하세요.</p>
+                            <div className="space-y-4">
+                                <div className="bg-white/10 rounded-2xl border border-white/20 p-4">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <div className="flex items-center gap-3"><Icon name="users" className="text-blue-200"/><div><div className="font-bold text-sm">1. 참가자 명단 (Users.csv)</div><div className="text-[10px] text-blue-300">사번, 성명, 옵션(2일차 등) 포함</div></div></div>
+                                        <button onClick={()=>downloadTemplate('users')} className="text-[10px] bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"><Icon name="download" size={12} /> 양식 다운로드</button>
+                                    </div>
+                                    <label className="flex items-center justify-center w-full p-3 bg-white text-incar font-bold rounded-xl cursor-pointer hover:bg-slate-100 transition-colors text-sm"><input type="file" accept=".csv" onChange={handleUserUpload} className="hidden" /><Icon name="upload" size={16} className="mr-2" /> 파일 업로드</label>
+                                </div>
+                                <div className="bg-white/10 rounded-2xl border border-white/20 p-4">
+                                    <div className="flex justify-between items-center mb-3">
+                                        <div className="flex items-center gap-3"><Icon name="dashboard" className="text-blue-200"/><div><div className="font-bold text-sm">2. 일정 정보 (Schedules.csv)</div><div className="text-[10px] text-blue-300">일정, 장소, 타입, 타겟옵션 포함</div></div></div>
+                                        <button onClick={()=>downloadTemplate('schedules')} className="text-[10px] bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"><Icon name="download" size={12} /> 양식 다운로드</button>
+                                    </div>
+                                    <label className="flex items-center justify-center w-full p-3 bg-white text-incar font-bold rounded-xl cursor-pointer hover:bg-slate-100 transition-colors text-sm"><input type="file" accept=".csv" onChange={handleScheduleUpload} className="hidden" /><Icon name="upload" size={16} className="mr-2" /> 파일 업로드</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* [NEW] 전체 엑셀 백데이터 다운로드 버튼 */}
+                    <div className="bg-slate-100 border border-slate-200 p-6 rounded-3xl shadow-sm flex justify-between items-center">
+                        <div>
+                            <h4 className="font-bold text-lg text-slate-800 mb-1 flex items-center gap-2"><Icon name="download" /> 운영 데이터 내보내기</h4>
+                            <p className="text-xs text-slate-400">모든 스캔 기록을 엑셀(CSV) 파일로 다운로드합니다.</p>
+                        </div>
+                        <button onClick={exportAllData} className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-900 transition-colors shadow-lg active:scale-95">전체 내역 다운로드</button>
+                    </div>
+
+                    <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-card flex justify-between items-center relative overflow-hidden group">
+                        <div className="absolute right-0 bottom-0 opacity-10 p-4"><Icon name="print" size={80} /></div>
+                        <div className="relative z-10">
+                            <h4 className="font-bold text-lg mb-1 flex items-center gap-2"><Icon name="print" /> 명찰 일괄 출력</h4>
+                            <p className="text-xs text-slate-400">등록된 {users.length}명의 QR 명찰을 한 번에 생성합니다.</p>
+                        </div>
+                        <button onClick={() => {
+                            if(users.length === 0) return alert("참가자 데이터가 없습니다.");
+                            setIsPrintMode(true);
+                        }} className="relative z-10 px-6 py-3 bg-white text-slate-900 rounded-xl font-bold text-sm hover:bg-slate-100 transition-colors shadow-lg active:scale-95">전체 인쇄 모드</button>
+                    </div>
+
+                    <div className="bg-white p-6 rounded-3xl shadow-card">
+                        <h4 className="font-bold text-slate-800 mb-4">현재 데이터 현황</h4>
+                        <div className="grid grid-cols-2 gap-4 text-center">
+                            <div className="p-4 bg-slate-50 rounded-2xl"><div className="text-2xl font-black text-incar">{users.length}</div><div className="text-xs text-slate-400 font-bold">참가자</div></div>
+                            <div className="p-4 bg-slate-50 rounded-2xl"><div className="text-2xl font-black text-emerald-600">{schedules.length}</div><div className="text-xs text-slate-400 font-bold">세션</div></div>
+                        </div>
+                        <button onClick={()=>{ if(confirm("초기화?")) { localStorage.clear(); window.location.reload(); }}} className="w-full mt-6 py-4 bg-rose-50 text-rose-600 font-bold rounded-2xl hover:bg-rose-100">전체 초기화</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const Sidebar = ({ activeTab, setActiveTab }) => (
+            <aside className="w-64 bg-white h-full border-r border-slate-200 flex flex-col shadow-lg z-30 no-print">
+                <div className="p-6 border-b border-slate-100 flex items-center gap-3">
+                    <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
+                    <h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PC</span></h1>
+                </div>
+                <nav className="flex-1 p-4 space-y-2">
+                    {[
+                        {id:'dashboard', icon:'dashboard', label:'관제 대시보드'},
+                        {id:'boarding', icon:'bus', label:'탑승 (Boarding)'},
+                        {id:'payment', icon:'money', label:'지급 (Payment)'},
+                        {id:'change', icon:'edit', label:'일정/패널티 관리'},
+                        {id:'manage', icon:'settings', label:'마스터 설정'}
+                    ].map(menu => (
+                        <button key={menu.id} onClick={()=>setActiveTab(menu.id)} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab===menu.id ? 'bg-incar text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>
+                            <Icon name={menu.icon} /> {menu.label}
+                        </button>
+                    ))}
+                </nav>
+                <div className="p-6 border-t border-slate-100">
+                    <div className="text-xs text-slate-400 font-bold mb-2">OPERATOR</div>
+                    <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-slate-200"></div>
+                        <div className="text-sm font-bold text-slate-700">관리자님</div>
+                    </div>
+                </div>
+            </aside>
+        );
+
+        const MobileTab = ({ activeTab, setActiveTab }) => (
+            <nav className="fixed bottom-0 w-full bg-white border-t border-slate-200 pb-safe pt-2 px-4 flex justify-around items-center z-30 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] no-print">
+                <button onClick={()=>setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='dashboard'?'text-incar':'text-slate-300'}`}><Icon name="dashboard" size={20} className={activeTab==='dashboard'?'fill-current':''} /><span className="text-[9px] font-bold">현황</span></button>
+                <button onClick={()=>setActiveTab('boarding')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='boarding'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='boarding'?'bg-incar text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="bus" size={20} /></div>{activeTab!=='boarding' && <span className="text-[9px] font-bold">탑승</span>}</button>
+                <button onClick={()=>setActiveTab('payment')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='payment'?'text-emerald-500':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='payment'?'bg-emerald-500 text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="money" size={20} /></div>{activeTab!=='payment' && <span className="text-[9px] font-bold">지급</span>}</button>
+                <button onClick={()=>setActiveTab('change')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='change'?'text-incar':'text-slate-300'}`}><Icon name="edit" size={20} className={activeTab==='change'?'fill-current':''} /><span className="text-[9px] font-bold">변경</span></button>
+            </nav>
+        );
+
         const App = () => {
             const [activeTab, setActiveTab] = useState('dashboard');
             const [isPrintMode, setIsPrintMode] = useState(false);
             
-            // [통합된 명찰 디자인 설정 상태]
             const [badgeConfig, setBadgeConfig] = useState({
                 bgImage: null,
                 qr: { x: 50, y: 70, size: 150 },
@@ -191,8 +714,8 @@
                 uid: { x: 50, y: 85, size: 14, color: '#94a3b8', show: false } 
             });
 
-            const [user, setUser] = useState(null); // Firebase User
-            const [db, setDb] = useState(null);     // Firestore Instance
+            const [user, setUser] = useState(null); 
+            const [db, setDb] = useState(null);    
             const [isLoading, setIsLoading] = useState(true);
             const [serverError, setServerError] = useState(null);
 
@@ -211,35 +734,31 @@
             const [selectedUser, setSelectedUser] = useState(null);
             const [editForm, setEditForm] = useState({ optKey: '', optVal: '', penalty: 0, reason: '' });
 
-            // [NEW] 상수: 파이어베이스 컬렉션 경로
             const SYSTEM_APP_ID = 'inca-prod-v1';
 
-            // [수정] 파이어베이스 설정값 (코드에 직접 입력)
+            // [사용자 설정 영역] 파이어베이스 키
             const firebaseConfig = {
-              apiKey: "AIzaSyAh1dsSNobeF6Wz-0euP5AUggdqJANJ3dQ",
-              authDomain: "incarpass.firebaseapp.com",
-              projectId: "incarpass",
-              storageBucket: "incarpass.firebasestorage.app",
-              messagingSenderId: "955362361998",
-              appId: "1:955362361998:web:166055dd392784f1827fdf",
-              measurementId: "G-SNR3FPPQ7E"
+                apiKey: "", 
+                authDomain: "",
+                projectId: "",
+                storageBucket: "",
+                messagingSenderId: "",
+                appId: ""
             };
-            
+
+            // ... (useEffect hooks for init and sync - same as before) ...
             useEffect(() => {
                 const handleResize = () => setIsMobile(window.innerWidth < 768);
                 window.addEventListener('resize', handleResize);
                 return () => window.removeEventListener('resize', handleResize);
             }, []);
 
-            // [수정] 초기화 로직
             useEffect(() => {
                 const initSystem = async () => {
-                    // 0. 실행 환경 체크
                     if (window.location.protocol === 'file:') {
                         alert("⚠️ 주의: HTML 파일을 직접 열면(file://) 파이어베이스 서버 연결이 차단됩니다.\n\nVS Code의 'Live Server'를 사용하거나, GitHub/Netlify에 올려서(http/https) 실행해주세요.");
                     }
 
-                    // 1. 코드에 입력된 설정 확인
                     if (firebaseConfig.apiKey && firebaseConfig.projectId) {
                         try {
                             if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
@@ -276,12 +795,6 @@
 
                         } catch (e) {
                             console.error("Firebase Init Failed:", e);
-                            let errorMsg = e.message;
-                            if(e.code === 'auth/operation-not-allowed') errorMsg = "파이어베이스 콘솔에서 [Authentication > Sign-in method > 익명]을 사용 설정해주세요.";
-                            if(e.code === 'permission-denied') errorMsg = "Firestore 보안 규칙이 잠겨있습니다. [Firestore > 규칙]을 테스트 모드로 변경해주세요.";
-                            
-                            setServerError(errorMsg);
-                            alert(`서버 연결 실패!\n\n원인: ${errorMsg}\n\n로컬 모드로 전환합니다.`);
                             initLocal();
                         }
                     } else {
@@ -318,6 +831,7 @@
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
             useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_1', JSON.stringify(badgeConfig)); }, [badgeConfig]);
 
+            // ... (Handlers) ...
             const handleUserUpload = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -541,553 +1055,9 @@
                 return groups;
             }, [scheduleStats]);
 
-            // --- Sub Views ---
-            const DashboardView = () => (
-                <div className="space-y-6 animate-slide-up">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-incar">
-                            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Participants</div>
-                            <div className="text-4xl font-black text-slate-800">{users.length}</div>
-                        </div>
-                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-emerald-500">
-                            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Payout</div>
-                            <div className="text-4xl font-black text-slate-800">{CURRENCY}{logs.reduce((sum, l) => sum + (l.finalAmount||0), 0).toLocaleString()}</div>
-                        </div>
-                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-indigo-400 hidden md:block">
-                            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Completion Rate</div>
-                            <div className="text-4xl font-black text-slate-800">
-                                {scheduleStats.length > 0 
-                                    ? Math.round(scheduleStats.reduce((acc, s) => acc + s.percent, 0) / scheduleStats.length) 
-                                    : 0}%
-                            </div>
-                        </div>
-                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-rose-400 hidden md:block">
-                            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Penalties</div>
-                            <div className="text-4xl font-black text-slate-800">{changeLogs.length}건</div>
-                        </div>
-                    </div>
-
-                    <div>
-                        <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2">
-                            <Icon name="dashboard" className="text-incar"/> 일정별 진행률 (요약)
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {scheduleStats.map(stat => (
-                                <div key={stat.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow">
-                                    <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity">
-                                        <Icon name={stat.type === 'PAYMENT' ? 'money' : 'bus'} size={60} />
-                                    </div>
-                                    <div className="relative z-10">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <span className={`text-[10px] font-black px-2 py-0.5 rounded ${stat.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-indigo-50 text-incar'}`}>{stat.type==='PAYMENT'?'지급':'탑승'}</span>
-                                            <span className="text-xs font-bold text-slate-400">{stat.displayDate}</span>
-                                        </div>
-                                        <h4 className="font-bold text-slate-800 mb-4 truncate pr-8">{stat.title}</h4>
-                                        <div className="flex justify-between items-end mb-1">
-                                            <span className="text-3xl font-black text-slate-800">{stat.doneCount}<span className="text-sm text-slate-400 font-medium ml-1">/ {stat.targetCount}</span></span>
-                                            <span className={`text-xl font-bold ${stat.percent === 100 ? 'text-emerald-500' : 'text-incar'}`}>{stat.percent}%</span>
-                                        </div>
-                                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
-                                            <div className={`h-full rounded-full transition-all duration-1000 ${stat.percent===100?'bg-emerald-500':'bg-incar'}`} style={{width: `${stat.percent}%`}}></div>
-                                        </div>
-                                        {stat.type === 'PAYMENT' && (
-                                            <div className="pt-2 border-t border-slate-50 flex justify-between text-xs">
-                                                <span className="text-slate-400">집행액: <b>{CURRENCY}{stat.actualAmount.toLocaleString()}</b></span>
-                                                <span className="text-slate-400">예상: {CURRENCY}{stat.expectedAmount.toLocaleString()}</span>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                            {scheduleStats.length === 0 && <div className="col-span-full py-10 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">등록된 일정이 없습니다.</div>}
-                        </div>
-                    </div>
-
-                    <div className="pc-only bg-white rounded-3xl border border-slate-200 shadow-card overflow-hidden mt-8">
-                        <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-                            <h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="table" className="text-incar"/> 상세 현황 분석표</h3>
-                        </div>
-                        {Object.entries(groupedStats).length === 0 ? (
-                            <div className="p-10 text-center text-slate-400">데이터가 없습니다.</div>
-                        ) : (
-                            <div className="p-6 space-y-8">
-                                {Object.entries(groupedStats).sort().map(([date, stats]) => (
-                                    <div key={date}>
-                                        <h4 className="text-xs font-black text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-3">{date}</h4>
-                                        <div className="overflow-hidden rounded-xl border border-slate-200">
-                                            <table className="w-full text-left data-table">
-                                                <thead>
-                                                    <tr>
-                                                        <th className="w-1/3">일정명</th>
-                                                        <th className="text-center">구분</th>
-                                                        <th className="text-right">대상(Target)</th>
-                                                        <th className="text-right">완료(Done)</th>
-                                                        <th className="text-center border-l border-slate-200">미완료</th>
-                                                        <th className="text-right">예상 금액</th>
-                                                        <th className="text-right">실제 집행</th>
-                                                        <th className="text-center border-l border-slate-200">차액 (Diff)</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {stats.map(s => (
-                                                        <tr key={s.id}>
-                                                            <td className="font-bold">{s.title}</td>
-                                                            <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-black border ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':'탑승'}</span></td>
-                                                            <td className="text-right text-slate-500">{s.targetCount}</td>
-                                                            <td className="text-right font-bold text-slate-900">{s.doneCount}</td>
-                                                            <td className="text-center border-l border-slate-50">
-                                                                {s.targetCount - s.doneCount === 0 ? <span className="text-emerald-500 font-bold text-xs">Complete</span> : <span className="text-rose-500 font-bold text-xs">{s.targetCount - s.doneCount}명 남음</span>}
-                                                            </td>
-                                                            <td className="text-right text-slate-400">{s.type==='PAYMENT'?`${CURRENCY}${s.expectedAmount.toLocaleString()}`:'-'}</td>
-                                                            <td className="text-right font-bold text-emerald-600">{s.type==='PAYMENT'?`${CURRENCY}${s.actualAmount.toLocaleString()}`:'-'}</td>
-                                                            <td className="text-center border-l border-slate-50">
-                                                                {s.type !== 'PAYMENT' ? '-' : (
-                                                                    s.diffAmount === 0 ? <span className="text-emerald-500 font-bold text-xs">OK</span> : 
-                                                                    s.diffAmount < 0 ? <span className="text-rose-500 font-bold text-xs">{s.diffAmount}</span> : 
-                                                                    <span className="text-blue-500 font-bold text-xs">+{s.diffAmount}</span>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-
-            const ScanView = ({ mode }) => {
-                const scannerRef = useRef(null);
-                const filteredSchedules = useMemo(() => {
-                    return schedules.filter(s => s.type === mode);
-                }, [schedules, mode]);
-
-                useEffect(() => {
-                    if (filteredSchedules.length > 0) {
-                        const exists = filteredSchedules.find(s => s.id === targetSessionId);
-                        if (!exists) setTargetSessionId(filteredSchedules[0].id);
-                    } else {
-                        setTargetSessionId('');
-                    }
-                }, [mode, filteredSchedules]);
-
-                useEffect(() => {
-                    let html5QrCode;
-                    if (isScanning && scannerRef.current) {
-                        html5QrCode = new Html5Qrcode("reader");
-                        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, 
-                            (decodedText) => {
-                                setIsScanning(false);
-                                processScan(decodedText);
-                                html5QrCode.stop().catch(err => console.error(err));
-                            },
-                            (errorMessage) => { /* ignore */ }
-                        ).catch(err => {
-                            setIsScanning(false);
-                            alert("카메라 권한을 확인해주세요.");
-                        });
-                    }
-                    return () => { if(html5QrCode && html5QrCode.isScanning) html5QrCode.stop().catch(err=>{}); };
-                }, [isScanning]);
-
-                const currentSession = schedules.find(s => s.id === targetSessionId);
-
-                return (
-                    <div className="space-y-6 h-full flex flex-col animate-slide-up">
-                        <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
-                            <div className="flex items-center gap-2 mb-4">
-                                <span className={`px-2 py-1 rounded-lg text-xs font-black ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>
-                                    {mode==='BOARDING' ? 'STEP 1' : '지급'}
-                                </span>
-                                <h3 className="text-lg font-black text-slate-800">
-                                    {mode==='BOARDING' ? '탑승 일정 선택' : '지급 항목 선택'}
-                                </h3>
-                            </div>
-                            
-                            <div className="mb-6">
-                                <select value={targetSessionId} onChange={(e) => setTargetSessionId(e.target.value)} className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-lg outline-none focus:ring-4 transition-all ${mode==='BOARDING'?'focus:ring-incar/20':'focus:ring-emerald-500/20'}`}>
-                                    {filteredSchedules.length === 0 && <option>해당하는 일정이 없습니다</option>}
-                                    {filteredSchedules.map(s => <option key={s.id} value={s.id}>[{s.displayDate}] {s.title}</option>)}
-                                </select>
-                            </div>
-                            
-                            {mode === 'BOARDING' && (
-                                <div className="animate-slide-up">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <span className="px-2 py-1 rounded-lg text-xs font-black bg-slate-800 text-white">STEP 2</span>
-                                        <div className="flex justify-between items-center flex-1">
-                                            <h3 className="text-lg font-black text-slate-800">차량 번호 선택</h3>
-                                            <button onClick={()=>setManualBus(!manualBus)} className="text-xs font-bold text-slate-400 underline decoration-slate-300">
-                                                {manualBus ? '목록에서 선택' : '직접 입력'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                    
-                                    {manualBus ? 
-                                        <input type="text" value={targetBus} onChange={e=>setTargetBus(e.target.value)} className="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl font-bold text-center text-lg focus:border-incar outline-none" placeholder="차량 번호 입력" /> :
-                                        <div className="grid grid-cols-4 gap-2">
-                                            {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
-                                                <button key={n} onClick={()=>setTargetBus(`${n}호차`)} className={`py-3 rounded-xl text-sm font-black transition-all ${targetBus===`${n}호차`?'bg-incar text-white shadow-lg scale-105':'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
-                                                    {n}호차
-                                                </button>
-                                            ))}
-                                        </div>
-                                    }
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="flex-1 flex flex-col justify-end">
-                            {isScanning ? (
-                                <div className="bg-black rounded-3xl overflow-hidden relative shadow-2xl flex-1 max-h-[400px]">
-                                    <div id="reader" className="w-full h-full"></div>
-                                    <div className={`scan-line ${mode==='BOARDING'?'bg-incar':'bg-emerald-500'}`}></div>
-                                    <button onClick={()=>setIsScanning(false)} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur text-white px-6 py-2 rounded-full font-bold text-sm border border-white/30">스캔 취소</button>
-                                </div>
-                            ) : (
-                                <button onClick={()=>setIsScanning(true)} className={`w-full py-6 text-white rounded-3xl font-black text-xl shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${mode==='BOARDING'?'bg-incar shadow-incar/30':'bg-emerald-500 shadow-emerald-500/30'}`}>
-                                    <Icon name="qr" size={28}/> {mode==='BOARDING' ? '탑승 스캔 시작' : '지급 스캔 시작'}
-                                </button>
-                            )}
-                            {!isMobile && <button onClick={()=>processScan(users[0]?.uid || 'TEST')} className="mt-4 text-xs text-slate-400 underline text-center">테스트: 첫번째 유저 강제 인식</button>}
-                        </div>
-                    </div>
-                );
-            };
-
-            const ChangeView = () => (
-                <div className="space-y-6 animate-slide-up">
-                    <div className="bg-white p-6 rounded-3xl shadow-card">
-                        <h3 className="font-bold text-lg mb-4 text-slate-800">참가자 일정 변경 및 패널티 관리</h3>
-                        <div className="flex gap-2 mb-6">
-                            <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="사번 또는 이름 검색" className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-incar" />
-                            <button onClick={()=>{
-                                const found = users.find(u => u.uid.includes(searchQuery) || u.name.includes(searchQuery));
-                                if(found) setSelectedUser(found); else alert("사용자를 찾을 수 없습니다.");
-                            }} className="bg-slate-800 text-white px-6 rounded-2xl font-bold">검색</button>
-                        </div>
-                        {selectedUser && (
-                            <div className="border-t border-slate-100 pt-6 space-y-4">
-                                <div className="flex flex-col md:flex-row gap-6 mb-6">
-                                    <div className="flex-1 bg-slate-50 p-5 rounded-2xl border border-slate-100 flex flex-col justify-center">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div>
-                                                <div className="font-black text-2xl text-slate-800">{selectedUser.name}</div>
-                                                <div className="text-sm font-bold text-slate-500">{selectedUser.org}</div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="text-[10px] font-bold text-slate-400 uppercase">사번(ID)</div>
-                                                <div className="font-mono font-bold text-incar">{selectedUser.uid}</div>
-                                            </div>
-                                        </div>
-                                        <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-between items-center">
-                                            <span className="text-xs font-bold text-slate-400">누적 패널티</span>
-                                            <span className="font-black text-rose-500 text-lg">-{CURRENCY}{selectedUser.penaltyTotal || 0}</span>
-                                        </div>
-                                    </div>
-                                    <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center w-full md:w-auto">
-                                        <div className="mb-2 w-32 h-32 flex items-center justify-center bg-slate-50">
-                                            <QRCodeCanvas text={selectedUser.uid} />
-                                        </div>
-                                        <p className="text-[10px] font-bold text-slate-400">QR 데이터: {selectedUser.uid}</p>
-                                    </div>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">변경할 옵션 (Key)</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{key} (현재: {selectedUser.options[key]})</option>)}</select></div>
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">변경값 (New)</label><input type="text" value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm" /></div>
-                                </div>
-                                <div><label className="block text-xs font-bold text-slate-400 mb-1">패널티 ({CURRENCY})</label><input type="number" value={editForm.penalty} onChange={e=>setEditForm({...editForm, penalty: e.target.value})} className="w-full p-3 border border-rose-200 bg-rose-50 rounded-xl font-bold text-rose-600" /></div>
-                                <div><label className="block text-xs font-bold text-slate-400 mb-1">변경 사유</label><input type="text" value={editForm.reason} onChange={e=>setEditForm({...editForm, reason: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm" /></div>
-                                <button onClick={handleUserUpdate} className="w-full py-4 bg-incar text-white font-bold rounded-2xl shadow-lg mt-4 hover:bg-incar-dark">저장하기</button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            );
-
-            const BadgePrintView = ({ users, onClose, config }) => {
-                return (
-                    <div className="fixed inset-0 bg-white z-[100] overflow-auto animate-fade-in print-only-container">
-                        <div className="no-print fixed top-0 left-0 w-full bg-slate-900 text-white p-4 flex justify-between items-center shadow-xl z-50">
-                            <div className="font-bold text-lg flex items-center gap-4">
-                                <span className="bg-incar px-2 py-1 rounded text-xs">PRINT MODE</span> 
-                                <span>명찰 일괄 출력 (총 {users.length}명)</span>
-                            </div>
-                            <div className="flex gap-3">
-                                <button onClick={() => window.print()} className="bg-emerald-500 hover:bg-emerald-600 px-6 py-2 rounded-lg font-bold flex items-center gap-2">
-                                    <Icon name="print" /> 인쇄 / PDF저장
-                                </button>
-                                <button onClick={onClose} className="bg-slate-700 hover:bg-slate-600 px-6 py-2 rounded-lg font-bold">닫기</button>
-                            </div>
-                        </div>
-                        <div className="p-8 pt-24 flex flex-col items-center gap-8 max-w-full mx-auto print:p-0 print:block">
-                            {users.map((u, i) => (
-                                <div key={u.uid} className="page-break relative shadow-sm overflow-hidden print:border-0 print:shadow-none" 
-                                     style={{
-                                         width: '545px',
-                                         height: '697px',
-                                         border: config?.bgImage ? '1px solid #eee' : '2px solid #0f172a',
-                                         borderRadius: '0.75rem',
-                                         backgroundColor: 'white',
-                                         marginBottom: '20px'
-                                     }}>
-                                    {config?.bgImage ? (
-                                        <>
-                                            <img src={config.bgImage} className="absolute inset-0 w-full h-full object-cover z-0 print:block" />
-                                            <div style={{ position: 'absolute', top: `${config.qr.y}%`, left: `${config.qr.x}%`, transform: 'translate(-50%, -50%)', zIndex: 10 }}>
-                                                <QRCodeCanvas text={u.uid} size={config.qr.size} transparent={true} />
-                                            </div>
-                                            {config.org.show && <div style={{ position: 'absolute', top: `${config.org.y}%`, left: `${config.org.x}%`, transform: 'translate(-50%, -50%)', color: config.org.color, fontSize: `${config.org.size}px`, fontWeight: 'bold', whiteSpace: 'nowrap', zIndex: 10 }}>{u.org}</div>}
-                                            {config.name.show && <div style={{ position: 'absolute', top: `${config.name.y}%`, left: `${config.name.x}%`, transform: 'translate(-50%, -50%)', color: config.name.color, fontSize: `${config.name.size}px`, fontWeight: '900', whiteSpace: 'nowrap', zIndex: 10 }}>{u.name}</div>}
-                                            {config.uid.show && <div style={{ position: 'absolute', top: `${config.uid.y}%`, left: `${config.uid.x}%`, transform: 'translate(-50%, -50%)', color: config.uid.color, fontSize: `${config.uid.size}px`, fontFamily: 'monospace', zIndex: 10 }}>{u.uid}</div>}
-                                        </>
-                                    ) : (
-                                        <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                                            <div className="w-40 h-40 bg-white mb-6">
-                                                <QRCodeCanvas text={u.uid} size={160} />
-                                            </div>
-                                            <div className="overflow-hidden w-full">
-                                                <div className="text-xl font-bold text-slate-500 mb-2 truncate">{u.org}</div>
-                                                <div className="text-6xl font-black text-slate-900 mb-4 truncate leading-tight">{u.name}</div>
-                                                <div className="text-sm font-mono text-slate-400 tracking-widest">{u.uid}</div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                );
-            };
-
-            const ManageView = () => {
-                const [viewQrUser, setViewQrUser] = useState(null); 
-                
-                const handleBgImageUpload = (e) => {
-                    const file = e.target.files[0];
-                    if(file){
-                        const reader = new FileReader();
-                        reader.onload = (evt) => setBadgeConfig(prev => ({...prev, bgImage: evt.target.result}));
-                        reader.readAsDataURL(file);
-                    }
-                };
-
-                const downloadTemplate = (type) => {
-                    let content = '';
-                    let filename = '';
-                    if(type === 'users') {
-                        content = '\uFEFF사번,성명,소속,버스,2일차,3일차\n202401,홍길동,마케팅팀,1호차,힐링코스,투어\n202402,김철수,영업팀,미정,문화탐방,자유일정';
-                        filename = '참가자명단_샘플.csv';
-                    } else {
-                        content = '\uFEFF일정,장소,타입,지급,타겟옵션,타겟값\n1일차,공항미팅,관광,0,ALL,ALL\n2일차,자유식비,지급,30,2일차,자유일정\n2일차,힐링코스탑승,관광,0,2일차,힐링코스';
-                        filename = '일정정보_샘플.csv';
-                    }
-                    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = filename;
-                    link.click();
-                };
-
-                const SliderGroup = ({ label, conf, onChange, colorPicker = false }) => (
-                    <div className="p-4 bg-slate-50 rounded-xl space-y-3 border border-slate-100">
-                        <div className="flex justify-between items-center">
-                            <span className="text-xs font-bold text-slate-700">{label}</span>
-                            {conf.hasOwnProperty('show') && (
-                                <label className="flex items-center gap-1 cursor-pointer">
-                                    <input type="checkbox" checked={conf.show} onChange={e => onChange('show', e.target.checked)} className="w-3 h-3 rounded text-incar focus:ring-incar"/>
-                                    <span className="text-[10px] text-slate-400">표시</span>
-                                </label>
-                            )}
-                        </div>
-                        <div className="grid grid-cols-1 gap-2">
-                            <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">가로</span><input type="range" min="0" max="100" value={conf.x} onChange={e=>onChange('x', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
-                            <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">세로</span><input type="range" min="0" max="100" value={conf.y} onChange={e=>onChange('y', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
-                            <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">크기</span><input type="range" min="10" max={label==='QR코드'?250:100} value={conf.size} onChange={e=>onChange('size', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
-                            {colorPicker && (
-                                <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">색상</span><input type="color" value={conf.color} onChange={e=>onChange('color', e.target.value)} className="w-full h-6 rounded cursor-pointer border border-slate-200"/></div>
-                            )}
-                        </div>
-                    </div>
-                );
-
-                return (
-                    <div className="space-y-6 animate-slide-up no-print">
-                        {/* Firebase Status Section */}
-                        <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-card">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <h3 className="font-bold text-lg flex items-center gap-2">
-                                        <div className={`w-3 h-3 rounded-full ${db ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></div> 
-                                        {db ? '서버 연결 정상' : '로컬 모드 (서버 미연결)'}
-                                    </h3>
-                                    <p className="text-xs text-slate-400 mt-1">
-                                        {db ? '모든 데이터가 클라우드에 실시간으로 저장됩니다.' : 
-                                            serverError ? `오류: ${serverError}` : '현재 기기에만 데이터가 저장됩니다. (공유 불가)'}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 명찰 디자인 설정 섹션 */}
-                        <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
-                            <h3 className="font-bold text-lg mb-4 text-slate-800 flex items-center gap-2"><Icon name="edit" className="text-incar"/> 명찰 디자인 설정</h3>
-                            <div className="flex flex-col md:flex-row gap-8">
-                                <div className="flex-1 flex justify-center items-start bg-slate-50 rounded-2xl p-4 border-2 border-dashed border-slate-200 min-h-[300px] overflow-auto">
-                                    <div className="relative overflow-hidden shadow-2xl bg-white sticky top-4 origin-top transform scale-75 md:scale-50 lg:scale-75" 
-                                         style={{ width: '545px', height: '697px', borderRadius: '10px', flexShrink: 0 }}>
-                                        {badgeConfig.bgImage ? (
-                                            <>
-                                                <img src={badgeConfig.bgImage} className="absolute inset-0 w-full h-full object-cover" />
-                                                <div style={{ position: 'absolute', top: `${badgeConfig.qr.y}%`, left: `${badgeConfig.qr.x}%`, width: `${badgeConfig.qr.size}px`, height: `${badgeConfig.qr.size}px`, transform: 'translate(-50%, -50%)', border: '2px dashed red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'red', fontWeight: 'bold' }}>QR</div>
-                                                {badgeConfig.org.show && <div style={{ position: 'absolute', top: `${badgeConfig.org.y}%`, left: `${badgeConfig.org.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.org.color, fontSize: `${badgeConfig.org.size}px`, fontWeight: 'bold', border: '1px dashed blue', whiteSpace: 'nowrap' }}>소속 (Organization)</div>}
-                                                {badgeConfig.name.show && <div style={{ position: 'absolute', top: `${badgeConfig.name.y}%`, left: `${badgeConfig.name.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.name.color, fontSize: `${badgeConfig.name.size}px`, fontWeight: '900', border: '1px dashed blue', whiteSpace: 'nowrap' }}>성 명 (Name)</div>}
-                                                {badgeConfig.uid.show && <div style={{ position: 'absolute', top: `${badgeConfig.uid.y}%`, left: `${badgeConfig.uid.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.uid.color, fontSize: `${badgeConfig.uid.size}px`, fontFamily: 'monospace', border: '1px dashed blue', whiteSpace: 'nowrap' }}>12345678</div>}
-                                            </>
-                                        ) : (
-                                            <div className="flex items-center justify-center h-full text-slate-400 text-sm flex-col gap-2"><Icon name="upload" size={32}/><span>배경 이미지를 업로드해주세요</span></div>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex-1 space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                                    <div>
-                                        <label className="block text-xs font-bold text-slate-400 mb-2">배경 이미지 업로드</label>
-                                        <input type="file" accept="image/*" onChange={handleBgImageUpload} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-incar-light file:text-incar hover:file:bg-indigo-100"/>
-                                    </div>
-                                    {badgeConfig.bgImage && (
-                                        <div className="space-y-3">
-                                            <SliderGroup label="QR코드" conf={badgeConfig.qr} onChange={(k,v)=>setBadgeConfig(p=>({...p, qr:{...p.qr, [k]:v}}))} />
-                                            <SliderGroup label="소속 (상단)" conf={badgeConfig.org} onChange={(k,v)=>setBadgeConfig(p=>({...p, org:{...p.org, [k]:v}}))} colorPicker={true} />
-                                            <SliderGroup label="성명 (중앙)" conf={badgeConfig.name} onChange={(k,v)=>setBadgeConfig(p=>({...p, name:{...p.name, [k]:v}}))} colorPicker={true} />
-                                            <SliderGroup label="사번 (하단)" conf={badgeConfig.uid} onChange={(k,v)=>setBadgeConfig(p=>({...p, uid:{...p.uid, [k]:v}}))} colorPicker={true} />
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-incar text-white p-6 rounded-3xl shadow-xl relative overflow-hidden">
-                            <div className="relative z-10">
-                                <h3 className="font-black text-2xl">Master Data Setup</h3>
-                                <p className="text-blue-200 text-sm mt-1 mb-6">엑셀 파일을 업로드하여 행사를 설정하세요.</p>
-                                <div className="space-y-4">
-                                    <div className="bg-white/10 rounded-2xl border border-white/20 p-4">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <div className="flex items-center gap-3"><Icon name="users" className="text-blue-200"/><div><div className="font-bold text-sm">1. 참가자 명단 (Users.csv)</div><div className="text-[10px] text-blue-300">사번, 성명, 옵션(2일차 등) 포함</div></div></div>
-                                            <button onClick={()=>downloadTemplate('users')} className="text-[10px] bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"><Icon name="download" size={12} /> 양식 다운로드</button>
-                                        </div>
-                                        <label className="flex items-center justify-center w-full p-3 bg-white text-incar font-bold rounded-xl cursor-pointer hover:bg-slate-100 transition-colors text-sm"><input type="file" accept=".csv" onChange={handleUserUpload} className="hidden" /><Icon name="upload" size={16} className="mr-2" /> 파일 업로드</label>
-                                    </div>
-                                    <div className="bg-white/10 rounded-2xl border border-white/20 p-4">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <div className="flex items-center gap-3"><Icon name="dashboard" className="text-blue-200"/><div><div className="font-bold text-sm">2. 일정 정보 (Schedules.csv)</div><div className="text-[10px] text-blue-300">일정, 장소, 타입, 타겟옵션 포함</div></div></div>
-                                            <button onClick={()=>downloadTemplate('schedules')} className="text-[10px] bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"><Icon name="download" size={12} /> 양식 다운로드</button>
-                                        </div>
-                                        <label className="flex items-center justify-center w-full p-3 bg-white text-incar font-bold rounded-xl cursor-pointer hover:bg-slate-100 transition-colors text-sm"><input type="file" accept=".csv" onChange={handleScheduleUpload} className="hidden" /><Icon name="upload" size={16} className="mr-2" /> 파일 업로드</label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-card flex justify-between items-center relative overflow-hidden group">
-                            <div className="absolute right-0 bottom-0 opacity-10 p-4"><Icon name="print" size={80} /></div>
-                            <div className="relative z-10">
-                                <h4 className="font-bold text-lg mb-1 flex items-center gap-2"><Icon name="print" /> 명찰 일괄 출력</h4>
-                                <p className="text-xs text-slate-400">등록된 {users.length}명의 QR 명찰을 한 번에 생성합니다.</p>
-                            </div>
-                            <button onClick={() => {
-                                if(users.length === 0) return alert("참가자 데이터가 없습니다.");
-                                setIsPrintMode(true);
-                            }} className="relative z-10 px-6 py-3 bg-white text-slate-900 rounded-xl font-bold text-sm hover:bg-slate-100 transition-colors shadow-lg active:scale-95">전체 인쇄 모드</button>
-                        </div>
-
-                        <div className="bg-white p-6 rounded-3xl shadow-card">
-                            <h4 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Icon name="users" className="text-incar"/> 참가자 QR 카드 발급</h4>
-                            <div className="overflow-y-auto max-h-80 border border-slate-100 rounded-2xl">
-                                {users.length === 0 ? <div className="p-8 text-center text-slate-400 text-sm">참가자 명단을 먼저 업로드해주세요.</div> : (
-                                    <div className="divide-y divide-slate-100">
-                                        {users.map(u => (
-                                            <div key={u.uid} className="p-4 flex justify-between items-center hover:bg-slate-50 transition-colors">
-                                                <div><div className="font-bold text-slate-800">{u.name}</div><div className="text-xs text-slate-400 font-medium">{u.org} | <span className="font-mono text-incar">{u.uid}</span></div></div>
-                                                <button onClick={()=>setViewQrUser(u)} className="px-4 py-2 bg-indigo-50 text-incar font-bold text-xs rounded-xl hover:bg-indigo-100 transition-colors flex items-center gap-1"><Icon name="qr" size={14}/> QR 보기</button>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="bg-white p-6 rounded-3xl shadow-card">
-                            <h4 className="font-bold text-slate-800 mb-4">현재 데이터 현황</h4>
-                            <div className="grid grid-cols-2 gap-4 text-center">
-                                <div className="p-4 bg-slate-50 rounded-2xl"><div className="text-2xl font-black text-incar">{users.length}</div><div className="text-xs text-slate-400 font-bold">참가자</div></div>
-                                <div className="p-4 bg-slate-50 rounded-2xl"><div className="text-2xl font-black text-emerald-600">{schedules.length}</div><div className="text-xs text-slate-400 font-bold">세션</div></div>
-                            </div>
-                            <button onClick={()=>{ if(confirm("초기화?")) { localStorage.clear(); window.location.reload(); }}} className="w-full mt-6 py-4 bg-rose-50 text-rose-600 font-bold rounded-2xl hover:bg-rose-100">전체 초기화</button>
-                        </div>
-
-                        {viewQrUser && (
-                            <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in" onClick={()=>setViewQrUser(null)}>
-                                <div className="bg-white p-8 rounded-3xl w-full max-w-xs text-center relative shadow-2xl" onClick={e=>e.stopPropagation()}>
-                                    <div className="absolute top-0 left-0 w-full h-2 bg-incar"></div>
-                                    <h3 className="font-black text-2xl text-incar mb-1 mt-2">INCARPASS</h3>
-                                    <div className="text-[10px] text-slate-400 font-bold tracking-[0.2em] mb-8">OFFICIAL EVENT ID</div>
-                                    <div className="bg-white p-2 rounded-2xl border-2 border-dashed border-slate-200 inline-block mb-6"><div className="w-48 h-48 flex items-center justify-center"><QRCodeCanvas text={viewQrUser.uid} /></div></div>
-                                    <div className="space-y-1 mb-8"><div className="font-black text-3xl text-slate-900">{viewQrUser.name}</div><div className="text-sm font-bold text-slate-500">{viewQrUser.org}</div><div className="inline-block bg-slate-100 px-4 py-1 rounded-full text-sm font-mono font-bold text-slate-600 mt-2">{viewQrUser.uid}</div></div>
-                                    <div className="text-[10px] text-slate-300 font-medium mb-6">본 QR코드를 스태프에게 제시해주세요.</div>
-                                    <button onClick={()=>setViewQrUser(null)} className="w-full py-4 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">닫기</button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                );
-            };
-
-            const Sidebar = () => (
-                <aside className="w-64 bg-white h-full border-r border-slate-200 flex flex-col shadow-lg z-30 no-print">
-                    <div className="p-6 border-b border-slate-100 flex items-center gap-3">
-                        <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
-                        <h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PC</span></h1>
-                    </div>
-                    <nav className="flex-1 p-4 space-y-2">
-                        {[
-                            {id:'dashboard', icon:'dashboard', label:'관제 대시보드'},
-                            {id:'boarding', icon:'bus', label:'탑승 (Boarding)'},
-                            {id:'payment', icon:'money', label:'지급 (Payment)'},
-                            {id:'change', icon:'edit', label:'일정/패널티 관리'},
-                            {id:'manage', icon:'settings', label:'마스터 설정'}
-                        ].map(menu => (
-                            <button key={menu.id} onClick={()=>setActiveTab(menu.id)} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab===menu.id ? 'bg-incar text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>
-                                <Icon name={menu.icon} /> {menu.label}
-                            </button>
-                        ))}
-                    </nav>
-                    <div className="p-6 border-t border-slate-100">
-                        <div className="text-xs text-slate-400 font-bold mb-2">OPERATOR</div>
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-slate-200"></div>
-                            <div className="text-sm font-bold text-slate-700">관리자님</div>
-                        </div>
-                    </div>
-                </aside>
-            );
-
-            const MobileTab = () => (
-                <nav className="fixed bottom-0 w-full bg-white border-t border-slate-200 pb-safe pt-2 px-4 flex justify-around items-center z-30 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] no-print">
-                    <button onClick={()=>setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='dashboard'?'text-incar':'text-slate-300'}`}><Icon name="dashboard" size={20} className={activeTab==='dashboard'?'fill-current':''} /><span className="text-[9px] font-bold">현황</span></button>
-                    <button onClick={()=>setActiveTab('boarding')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='boarding'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='boarding'?'bg-incar text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="bus" size={20} /></div>{activeTab!=='boarding' && <span className="text-[9px] font-bold">탑승</span>}</button>
-                    <button onClick={()=>setActiveTab('payment')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='payment'?'text-emerald-500':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='payment'?'bg-emerald-500 text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="money" size={20} /></div>{activeTab!=='payment' && <span className="text-[9px] font-bold">지급</span>}</button>
-                    <button onClick={()=>setActiveTab('change')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='change'?'text-incar':'text-slate-300'}`}><Icon name="edit" size={20} className={activeTab==='change'?'fill-current':''} /><span className="text-[9px] font-bold">변경</span></button>
-                </nav>
-            );
-
             return (
                 <div className="h-full flex flex-row bg-slate-50 w-full">
-                    { !isMobile && <Sidebar /> }
+                    { !isMobile && <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} /> }
                     <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full">
                         { isMobile && (
                             <header className="bg-white px-6 py-4 shadow-sm flex justify-between items-center z-20 no-print">
@@ -1097,14 +1067,14 @@
                         )}
                         <div className="flex-1 overflow-y-auto p-4 pb-24 md:p-8 md:pb-8 w-full no-print-scroll">
                             <div className="max-w-5xl mx-auto w-full">
-                                {activeTab === 'dashboard' && <DashboardView />}
-                                {activeTab === 'boarding' && <ScanView mode="BOARDING" />}
-                                {activeTab === 'payment' && <ScanView mode="PAYMENT" />}
-                                {activeTab === 'change' && <ChangeView />}
-                                {activeTab === 'manage' && <ManageView />}
+                                {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} changeLogs={changeLogs} />}
+                                {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} />}
+                                {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} />}
+                                {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} />}
+                                {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} badgeConfig={badgeConfig} setBadgeConfig={setBadgeConfig} db={db} serverError={serverError} schedules={schedules} logs={logs} />}
                             </div>
                         </div>
-                        { isMobile && <MobileTab /> }
+                        { isMobile && <MobileTab activeTab={activeTab} setActiveTab={setActiveTab} /> }
                         {isPrintMode && <BadgePrintView users={users} config={badgeConfig} onClose={() => setIsPrintMode(false)} />}
                     </main>
                     <ResultModal result={scanResult} onClose={() => setScanResult(null)} />
