@@ -58,12 +58,49 @@
         .data-table tr:hover td { background-color: #f8fafc; }
 
         @media print {
-            body { background-color: white; overflow: visible; }
+            @page { 
+                size: A4 portrait; 
+                margin: 0; 
+            }
+            body { 
+                background-color: white; 
+                margin: 0;
+                padding: 0;
+                -webkit-print-color-adjust: exact; 
+                print-color-adjust: exact;
+            }
+            body * { visibility: hidden; height: 0; overflow: hidden; }
+            .print-only-container, .print-only-container * { 
+                visibility: visible; 
+                height: auto; 
+                overflow: visible; 
+            }
+            .print-only-container {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                z-index: 9999;
+                background: white;
+            }
             .no-print { display: none !important; }
-            .print-only { display: block !important; }
-            .page-break { break-after: page; page-break-after: always; margin: 0 auto; }
-            #root { height: auto; overflow: visible; }
-            @page { margin: 0; }
+
+            .page-wrapper {
+                width: 100vw;
+                height: 100vh;
+                display: flex !important;
+                justify-content: center; 
+                align-items: center;    
+                page-break-after: always; 
+                break-after: page;
+                margin: 0;
+                padding: 0;
+                background: white;
+            }
+            .badge-card {
+                border: 1px solid #ddd; 
+                box-shadow: none !important;
+            }
         }
         .print-only { display: none; }
     </style>
@@ -113,8 +150,8 @@
             }, [isSuccess]);
 
             return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-slide-up no-print">
-                    <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-slide-up no-print">
+                    <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl relative z-[201]">
                         <div className={`p-8 text-center flex flex-col items-center justify-center ${isSuccess ? 'bg-emerald-50' : (status==='duplicate'?'bg-amber-50':'bg-rose-50')}`}>
                             <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${isSuccess ? 'bg-emerald-100 text-emerald-600' : (status==='duplicate'?'bg-amber-100 text-amber-600':'bg-rose-100 text-rose-600')}`}>
                                 <Icon name={isSuccess ? 'check' : (status==='duplicate'?'alert':'x')} size={40} />
@@ -287,12 +324,11 @@
                 if (isRunningRef.current) return;
                 setIsScanning(true);
                 
+                // [수정] 스캐너 렌더링 후 실행을 위해 딜레이 및 DOM 체크
                 setTimeout(() => {
                     const element = document.getElementById("reader");
-                    if (!element) {
-                        setIsScanning(false);
-                        return;
-                    }
+                    if (!element) return; // 요소가 없으면 중단
+
                     if (!scannerRef.current) {
                         scannerRef.current = new Html5Qrcode("reader");
                     }
@@ -307,7 +343,7 @@
                         setIsScanning(false);
                         alert("카메라 시작 실패. 권한을 확인해주세요.");
                     });
-                }, 300);
+                }, 100);
             };
 
             const stopScanner = () => {
@@ -361,19 +397,38 @@
                     </div>
 
                     <div className="flex-1 flex flex-col justify-end">
-                        {isScanning ? (
-                            <div className="bg-black rounded-3xl overflow-hidden relative shadow-2xl flex-1 max-h-[400px]">
-                                <div id="reader" className="w-full h-full"></div>
-                                <div className={`scan-line ${mode==='BOARDING'?'bg-incar':'bg-emerald-500'}`}></div>
-                                <button onClick={stopScanner} className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white/20 backdrop-blur text-white px-6 py-2 rounded-full font-bold text-sm border border-white/30 z-20">스캔 취소</button>
-                            </div>
-                        ) : (
-                            <button onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-black text-xl shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${mode==='BOARDING'?'bg-incar shadow-incar/30':'bg-emerald-500 shadow-emerald-500/30'}`}>
-                                <Icon name="qr" size={28}/> {mode==='BOARDING' ? '탑승 스캔 시작' : '지급 스캔 시작'}
-                            </button>
-                        )}
+                        <button onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-black text-xl shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${mode==='BOARDING'?'bg-incar shadow-incar/30':'bg-emerald-500 shadow-emerald-500/30'}`}>
+                            <Icon name="qr" size={28}/> {mode==='BOARDING' ? '탑승 스캔 시작' : '지급 스캔 시작'}
+                        </button>
                         {!isMobile && users.length > 0 && <button onClick={()=>processScan(users[0].uid)} className="mt-4 text-xs text-slate-400 underline text-center">테스트: 첫번째 유저 강제 인식</button>}
                     </div>
+
+                    {/* [수정] 스캐너 오버레이 (조건부 렌더링, Portal 역할) */}
+                    {isScanning && (
+                        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-fade-in" style={{ touchAction: 'none' }}>
+                            <button onClick={stopScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full hover:bg-white/20 transition-colors z-[101]">
+                                <Icon name="x" size={32} />
+                            </button>
+                            
+                            <div className="relative w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/20">
+                                <div id="reader" className="w-full h-full object-cover"></div>
+                                <div className={`scan-line ${mode==='BOARDING'?'bg-incar':'bg-emerald-500'}`}></div>
+                                <div className="absolute inset-0 border-2 border-white/30 rounded-3xl pointer-events-none"></div>
+                                <div className="absolute top-0 left-0 w-16 h-16 border-t-4 border-l-4 border-white rounded-tl-3xl pointer-events-none"></div>
+                                <div className="absolute top-0 right-0 w-16 h-16 border-t-4 border-r-4 border-white rounded-tr-3xl pointer-events-none"></div>
+                                <div className="absolute bottom-0 left-0 w-16 h-16 border-b-4 border-l-4 border-white rounded-bl-3xl pointer-events-none"></div>
+                                <div className="absolute bottom-0 right-0 w-16 h-16 border-b-4 border-r-4 border-white rounded-br-3xl pointer-events-none"></div>
+                            </div>
+                            
+                            <p className="text-white mt-10 font-bold text-xl animate-pulse text-center">
+                                QR코드를 사각형 안에 비춰주세요
+                            </p>
+                            
+                            <div className="mt-8 flex gap-4">
+                                <button onClick={stopScanner} className="px-8 py-3 bg-white text-slate-900 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors">닫기</button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             );
         };
@@ -480,7 +535,6 @@
             </div>
         );
 
-        // [수정] setIsPrintMode를 props로 받도록 추가
         const ManageView = ({ users, handleUserUpload, handleScheduleUpload, badgeConfig, setBadgeConfig, db, serverError, schedules, logs, setIsPrintMode }) => {
             
             const handleBgImageUpload = (e) => {
@@ -546,8 +600,8 @@
                         )}
                     </div>
                     <div className="grid grid-cols-1 gap-2">
-                        <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">가로</span><input type="range" min="0" max="100" value={conf.x} onChange={e=>onChange('x', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
-                        <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">세로</span><input type="range" min="0" max="100" value={conf.y} onChange={e=>onChange('y', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
+                        <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">가로</span><input type="range" min="0" max="100" step="0.5" value={conf.x} onChange={e=>onChange('x', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
+                        <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">세로</span><input type="range" min="0" max="100" step="0.5" value={conf.y} onChange={e=>onChange('y', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
                         <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">크기</span><input type="range" min="10" max={label==='QR코드'?250:100} value={conf.size} onChange={e=>onChange('size', e.target.value)} className="flex-1 accent-incar h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer"/></div>
                         {colorPicker && (
                             <div className="flex gap-2 items-center"><span className="w-6 text-[10px] text-slate-400 font-bold">색상</span><input type="color" value={conf.color} onChange={e=>onChange('color', e.target.value)} className="w-full h-6 rounded cursor-pointer border border-slate-200"/></div>
@@ -576,20 +630,23 @@
                     <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
                         <h3 className="font-bold text-lg mb-4 text-slate-800 flex items-center gap-2"><Icon name="edit" className="text-incar"/> 명찰 디자인 설정</h3>
                         <div className="flex flex-col md:flex-row gap-8">
-                            <div className="flex-1 flex justify-center items-start bg-slate-50 rounded-2xl p-4 border-2 border-dashed border-slate-200 min-h-[300px] overflow-auto">
-                                <div className="relative overflow-hidden shadow-2xl bg-white sticky top-4 origin-top transform scale-75 md:scale-50 lg:scale-75" 
-                                        style={{ width: '545px', height: '697px', borderRadius: '10px', flexShrink: 0 }}>
-                                    {badgeConfig.bgImage ? (
-                                        <>
-                                            <img src={badgeConfig.bgImage} className="absolute inset-0 w-full h-full object-cover" />
-                                            <div style={{ position: 'absolute', top: `${badgeConfig.qr.y}%`, left: `${badgeConfig.qr.x}%`, width: `${badgeConfig.qr.size}px`, height: `${badgeConfig.qr.size}px`, transform: 'translate(-50%, -50%)', border: '2px dashed red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'red', fontWeight: 'bold' }}>QR</div>
-                                            {badgeConfig.org.show && <div style={{ position: 'absolute', top: `${badgeConfig.org.y}%`, left: `${badgeConfig.org.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.org.color, fontSize: `${badgeConfig.org.size}px`, fontWeight: 'bold', border: '1px dashed blue', whiteSpace: 'nowrap' }}>소속 (Organization)</div>}
-                                            {badgeConfig.name.show && <div style={{ position: 'absolute', top: `${badgeConfig.name.y}%`, left: `${badgeConfig.name.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.name.color, fontSize: `${badgeConfig.name.size}px`, fontWeight: '900', border: '1px dashed blue', whiteSpace: 'nowrap' }}>성 명 (Name)</div>}
-                                            {badgeConfig.uid.show && <div style={{ position: 'absolute', top: `${badgeConfig.uid.y}%`, left: `${badgeConfig.uid.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.uid.color, fontSize: `${badgeConfig.uid.size}px`, fontFamily: 'monospace', border: '1px dashed blue', whiteSpace: 'nowrap' }}>12345678</div>}
-                                        </>
-                                    ) : (
-                                        <div className="flex items-center justify-center h-full text-slate-400 text-sm flex-col gap-2"><Icon name="upload" size={32}/><span>배경 이미지를 업로드해주세요</span></div>
-                                    )}
+                            {/* [수정] 미리보기 컨테이너 스크롤 제거 및 자동 맞춤 */}
+                            <div className="flex-1 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 relative overflow-hidden flex items-center justify-center" style={{ minHeight: '400px' }}>
+                                <div style={{ transform: 'scale(0.5)', transformOrigin: 'center', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', borderRadius: '10px' }}>
+                                    <div className="relative overflow-hidden bg-white" 
+                                            style={{ width: '545px', height: '697px' }}>
+                                        {badgeConfig.bgImage ? (
+                                            <>
+                                                <img src={badgeConfig.bgImage} className="absolute inset-0 w-full h-full object-cover" />
+                                                <div style={{ position: 'absolute', top: `${badgeConfig.qr.y}%`, left: `${badgeConfig.qr.x}%`, width: `${badgeConfig.qr.size}px`, height: `${badgeConfig.qr.size}px`, transform: 'translate(-50%, -50%)', border: '2px dashed red', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', color: 'red', fontWeight: 'bold' }}>QR</div>
+                                                {badgeConfig.org.show && <div style={{ position: 'absolute', top: `${badgeConfig.org.y}%`, left: `${badgeConfig.org.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.org.color, fontSize: `${badgeConfig.org.size}px`, fontWeight: 'bold', border: '1px dashed blue', whiteSpace: 'nowrap' }}>소속 (Organization)</div>}
+                                                {badgeConfig.name.show && <div style={{ position: 'absolute', top: `${badgeConfig.name.y}%`, left: `${badgeConfig.name.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.name.color, fontSize: `${badgeConfig.name.size}px`, fontWeight: '900', border: '1px dashed blue', whiteSpace: 'nowrap' }}>성 명 (Name)</div>}
+                                                {badgeConfig.uid.show && <div style={{ position: 'absolute', top: `${badgeConfig.uid.y}%`, left: `${badgeConfig.uid.x}%`, transform: 'translate(-50%, -50%)', color: badgeConfig.uid.color, fontSize: `${badgeConfig.uid.size}px`, fontFamily: 'monospace', border: '1px dashed blue', whiteSpace: 'nowrap' }}>12345678</div>}
+                                            </>
+                                        ) : (
+                                            <div className="flex items-center justify-center h-full text-slate-400 text-sm flex-col gap-2"><Icon name="upload" size={32}/><span>배경 이미지를 업로드해주세요</span></div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             <div className="flex-1 space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
