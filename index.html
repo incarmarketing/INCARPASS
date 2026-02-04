@@ -1297,6 +1297,7 @@
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedUser, setSelectedUser] = useState(null);
             const [editForm, setEditForm] = useState({ optKey: '', optVal: '', penalty: 0, reason: '' });
+            const [refundRequest, setRefundRequest] = useState(null);
 
             const SYSTEM_APP_ID = 'inca-prod-v1';
 
@@ -1394,7 +1395,6 @@
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
             useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_9', JSON.stringify(badgeConfig)); }, [badgeConfig]);
 
-            // ... (기존 코드 생략) ...
             const cleanupOldLogs = async (uid, targetKey, oldVal) => {
                 const oldSessions = schedules.filter(s => s.targetKey === targetKey && s.targetVal === oldVal);
                 if(oldSessions.length === 0) return;
@@ -1443,21 +1443,30 @@
                 alert("처리되었습니다.");
             };
 
-            const handleForceUpdateAndProcess = async (user, session, requiredChoice) => {
+            const executeUpdate = async (user, session, requiredChoice, penaltyAmount, reason) => {
                 if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
                 
                 const oldVal = user.options[session.targetKey];
                 await cleanupOldLogs(user.uid, session.targetKey, oldVal);
 
+                const newPenalty = penaltyAmount;
+
                 if(db) {
                     const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
                     const updatedOptions = { ...user.options, [session.targetKey]: requiredChoice };
-                    await userRef.update({ options: updatedOptions });
+                    await userRef.update({ 
+                        options: updatedOptions,
+                        penaltyTotal: (user.penaltyTotal || 0) + newPenalty
+                    });
                 } else {
                     const updatedUsers = users.map(u => {
                         if (u.uid === user.uid) {
                             const newOptions = { ...u.options, [session.targetKey]: requiredChoice };
-                            return { ...u, options: newOptions };
+                            return { 
+                                ...u, 
+                                options: newOptions,
+                                penaltyTotal: (u.penaltyTotal || 0) + newPenalty
+                            };
                         }
                         return u;
                     });
@@ -1472,11 +1481,21 @@
                     targetOption: session.targetKey,
                     oldVal: oldVal || '미선택',
                     newVal: requiredChoice,
-                    penalty: 0,
-                    reason: '현장 스캔 시 즉시 변경'
+                    penalty: newPenalty,
+                    reason: reason
                 };
                 if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
                 else setChangeLogs([changeLog, ...changeLogs]);
+
+                let finalAmount = 0;
+                let penaltyApplied = 0;
+
+                if (session.type === 'PAYMENT') {
+                    const baseAmount = session.price;
+                    const deduction = (user.penaltyTotal || 0) + newPenalty;
+                    finalAmount = Math.max(0, baseAmount - deduction);
+                    penaltyApplied = (baseAmount - finalAmount);
+                }
 
                 const newLog = {
                     id: `LOG_${Date.now()}_FORCE`,
@@ -1489,15 +1508,76 @@
                     sessionTitle: session.title,
                     bus: targetBus,
                     amount: session.type === 'PAYMENT' ? session.price : 0,
-                    penaltyApplied: 0,
-                    finalAmount: session.type === 'PAYMENT' ? session.price : 0
+                    penaltyApplied: penaltyApplied,
+                    finalAmount: finalAmount
                 };
 
-                if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog);
-                else setLogs([newLog, ...logs]);
+                if(db) {
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog);
+                    if (penaltyApplied > 0) {
+                        const currentPenalty = (user.penaltyTotal || 0) + newPenalty;
+                        const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
+                        await userRef.update({ penaltyTotal: currentPenalty - penaltyApplied });
+                    }
+                } else {
+                    setLogs([newLog, ...logs]);
+                    if (penaltyApplied > 0) {
+                        const currentPenalty = (user.penaltyTotal || 0) + newPenalty;
+                        const updatedUsers2 = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: currentPenalty - penaltyApplied } : u);
+                        setUsers(updatedUsers2);
+                    }
+                }
 
                 setScanResult(null); 
-                alert(`${user.name}님의 일정이 [${requiredChoice}]로 변경되고 탑승 처리되었습니다.\n(이전 일정에 대한 완료 기록은 삭제되었습니다.)`);
+                setRefundRequest(null);
+                
+                let alertMsg = `${user.name}님의 일정이 [${requiredChoice}]로 변경되고 탑승 처리되었습니다.`;
+                if(penaltyAmount > 0) {
+                    alertMsg += `\n\n⚠️ 미반환 처리: ${CURRENCY}${penaltyAmount}가 패널티로 등록되었습니다.`;
+                } else if (reason.includes('반환')) {
+                    alertMsg += `\n\n✅ 반환 확인: 기존 지급액이 정상적으로 회수되었습니다.`;
+                } else {
+                    alertMsg += `\n(이전 일정에 대한 완료 기록은 삭제되었습니다.)`;
+                }
+                alert(alertMsg);
+            };
+
+            const handleForceUpdateAndProcess = async (user, session, requiredChoice) => {
+                if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
+                
+                const oldVal = user.options[session.targetKey];
+                
+                // 기존 지급액(회수 대상 금액) 계산
+                const oldPaymentSchedules = schedules.filter(s => 
+                    s.targetKey === session.targetKey && 
+                    s.targetVal === oldVal && 
+                    s.type === 'PAYMENT'
+                );
+                
+                const oldPaymentLogs = logs.filter(l => 
+                    l.uid === user.uid && 
+                    oldPaymentSchedules.some(s => s.id === l.sessionId)
+                );
+                
+                const recoupAmount = oldPaymentLogs.reduce((sum, l) => sum + (l.finalAmount || 0), 0);
+
+                if (recoupAmount > 0) {
+                    setScanResult(null); 
+                    setRefundRequest({ user, session, requiredChoice, amount: recoupAmount, oldVal });
+                } else {
+                    await executeUpdate(user, session, requiredChoice, 0, '현장 스캔 시 즉시 변경');
+                }
+            };
+
+            const resolveRefundRequest = async (isReturned) => {
+                if (!refundRequest) return;
+                const { user, session, requiredChoice, amount } = refundRequest;
+                
+                if (isReturned) {
+                    await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (기존 지급액 ${CURRENCY}${amount} 현장 반환)`);
+                } else {
+                    await executeUpdate(user, session, requiredChoice, amount, `현장 변경 (기존 지급액 ${CURRENCY}${amount} 미반환/패널티)`);
+                }
             };
 
             const handleUserUpload = async (e) => {
@@ -1791,6 +1871,40 @@
                                 onClose={() => setSelectedSession(null)} 
                                 onManualComplete={handleManualComplete}
                             />
+                        )}
+                        
+                        {refundRequest && (
+                            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in no-print">
+                                <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
+                                    <div className="bg-rose-50 p-6 text-center border-b border-rose-100">
+                                        <div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">
+                                            $
+                                        </div>
+                                        <h3 className="text-xl font-black text-rose-600 mb-1">지급금 반환 필요</h3>
+                                        <p className="text-slate-600 font-bold text-sm">
+                                            {refundRequest.user.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{refundRequest.amount}</span>을 지급받았습니다.
+                                        </p>
+                                    </div>
+                                    <div className="p-6 space-y-4">
+                                        <div className="text-center text-xs text-slate-400 mb-2">
+                                            기존 일정: {refundRequest.oldVal} <br/>
+                                            ▼ <br/>
+                                            변경 일정: {refundRequest.session.title}
+                                        </div>
+                                        <button onClick={() => resolveRefundRequest(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1">
+                                            <span>반환 받았습니다</span>
+                                            <span className="text-[10px] opacity-80 font-normal">(패널티 없음)</span>
+                                        </button>
+                                        <button onClick={() => resolveRefundRequest(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1">
+                                            <span>반환받지 못했습니다</span>
+                                            <span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 처리)</span>
+                                        </button>
+                                        <button onClick={() => setRefundRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">
+                                            취소
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         )}
                     </main>
                     <ResultModal result={scanResult} onClose={() => setScanResult(null)} onForceUpdate={handleForceUpdateAndProcess} />
