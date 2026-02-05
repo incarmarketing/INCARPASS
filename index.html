@@ -61,11 +61,9 @@
         .data-table td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; font-weight: 500; color: #334155; }
         .data-table tr:hover td { background-color: #f8fafc; }
 
-        /* [수정] 인쇄 스타일 대폭 개선 */
         @media print {
             @page { size: A4 portrait; margin: 0; }
             
-            /* 모든 스크롤과 높이 제한 해제 */
             html, body, #root, main, .overflow-y-auto {
                 width: 100%;
                 height: auto !important;
@@ -75,17 +73,14 @@
                 background: white !important;
             }
 
-            /* 화면에 있는 모든 요소 숨김 처리 (visibility 사용으로 레이아웃 유지하되 안보이게) */
             body * {
                 visibility: hidden;
             }
 
-            /* 인쇄 컨테이너만 보이게 설정 */
             .print-only-container, .print-only-container * {
                 visibility: visible;
             }
 
-            /* 인쇄 컨테이너를 문서 최상단에 절대 배치하여 스크롤 영향 제거 */
             .print-only-container {
                 position: absolute;
                 top: 0;
@@ -97,13 +92,11 @@
                 display: block !important;
             }
 
-            /* 인쇄 시 숨겨야 할 요소들 */
             .no-print { display: none !important; }
 
-            /* 페이지 넘김 설정 */
             .page-wrapper {
                 width: 100%;
-                height: 100vh; /* 한 페이지 꽉 채우기 */
+                height: 100vh;
                 display: flex !important;
                 justify-content: center;
                 align-items: center;
@@ -121,7 +114,6 @@
         }
         .print-only { display: none; }
         
-        /* 명찰용 폰트 클래스 */
         .font-noto { font-family: 'Noto Sans KR', sans-serif; }
         .font-serif { font-family: 'Nanum Myeongjo', serif; }
         .font-black-han { font-family: 'Black Han Sans', sans-serif; }
@@ -1139,7 +1131,7 @@
                                                              backgroundColor: badgeConfig.role.bgColor || 'transparent',
                                                              padding: badgeConfig.role.padding ? `${badgeConfig.role.padding}px` : '0',
                                                              borderRadius: badgeConfig.role.borderRadius ? `${badgeConfig.role.borderRadius}px` : '0',
-                                                             width: badgeConfig.role.width ? `${badgeConfig.role.width}px` : 'auto',
+                                                             width: badgeConfig.role.width ? `${config.role.width}px` : 'auto',
                                                              textAlign: badgeConfig.role.textAlign || 'center',
                                                              overflow: 'hidden'
                                                         }}>
@@ -1298,6 +1290,7 @@
             const [selectedUser, setSelectedUser] = useState(null);
             const [editForm, setEditForm] = useState({ optKey: '', optVal: '', penalty: 0, reason: '' });
             const [refundRequest, setRefundRequest] = useState(null);
+            const [forfeitRequest, setForfeitRequest] = useState(null);
 
             const SYSTEM_APP_ID = 'inca-prod-v1';
 
@@ -1395,26 +1388,31 @@
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
             useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_9', JSON.stringify(badgeConfig)); }, [badgeConfig]);
 
-            const cleanupOldLogs = async (uid, targetKey, oldVal) => {
+            // [수정] 로그 ID를 반환하도록 변경 (로컬 업데이트 이슈 해결)
+            const getOldLogIdsToDelete = (uid, targetKey, oldVal) => {
                 const oldSessions = schedules.filter(s => s.targetKey === targetKey && s.targetVal === oldVal);
-                if(oldSessions.length === 0) return;
-
+                if(oldSessions.length === 0) return [];
+                
                 const logsToDelete = logs.filter(l => l.uid === uid && oldSessions.some(s => s.id === l.sessionId));
+                return logsToDelete.map(l => l.id);
+            };
 
-                if(logsToDelete.length > 0) {
+            const cleanupOldLogs = async (uid, targetKey, oldVal) => {
+                const oldLogIds = getOldLogIdsToDelete(uid, targetKey, oldVal);
+                
+                if(oldLogIds.length > 0) {
                     if(db) {
                         const batch = db.batch();
-                        logsToDelete.forEach(l => {
-                            const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(l.id);
+                        oldLogIds.forEach(logId => {
+                            const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logId);
                             batch.delete(ref);
                         });
                         await batch.commit();
-                    } else {
-                        const logIds = new Set(logsToDelete.map(l => l.id));
-                        setLogs(prev => prev.filter(l => !logIds.has(l.id)));
-                    }
-                    console.log(`Cleanup: Deleted ${logsToDelete.length} old logs for user ${uid}`);
+                    } 
+                    // 로컬 모드에서는 executeUpdate에서 일괄 처리
+                    console.log(`Cleanup: Identified ${oldLogIds.length} old logs for user ${uid}`);
                 }
+                return oldLogIds;
             };
             
             const handleManualComplete = async (user, session) => {
@@ -1443,11 +1441,12 @@
                 alert("처리되었습니다.");
             };
 
-            const executeUpdate = async (user, session, requiredChoice, penaltyAmount, reason) => {
+            const executeUpdate = async (user, session, requiredChoice, penaltyAmount, reason, payoutOverride = null) => {
                 if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
                 
                 const oldVal = user.options[session.targetKey];
-                await cleanupOldLogs(user.uid, session.targetKey, oldVal);
+                // 기존 로그 삭제 (로컬에서는 ID 배열 받음)
+                const logIdsToRemove = await cleanupOldLogs(user.uid, session.targetKey, oldVal);
 
                 const newPenalty = penaltyAmount;
 
@@ -1491,10 +1490,16 @@
                 let penaltyApplied = 0;
 
                 if (session.type === 'PAYMENT') {
-                    const baseAmount = session.price;
-                    const deduction = (user.penaltyTotal || 0) + newPenalty;
-                    finalAmount = Math.max(0, baseAmount - deduction);
-                    penaltyApplied = (baseAmount - finalAmount);
+                    // [수정] payoutOverride가 있으면(예: 0원 지급), 계산된 금액 무시하고 사용
+                    if (payoutOverride !== null) {
+                        finalAmount = payoutOverride;
+                        penaltyApplied = 0; // 특수 케이스이므로 패널티 적용 안함 (사유에 기록됨)
+                    } else {
+                        const baseAmount = session.price;
+                        const deduction = (user.penaltyTotal || 0) + newPenalty;
+                        finalAmount = Math.max(0, baseAmount - deduction);
+                        penaltyApplied = (baseAmount - finalAmount);
+                    }
                 }
 
                 const newLog = {
@@ -1520,7 +1525,12 @@
                         await userRef.update({ penaltyTotal: currentPenalty - penaltyApplied });
                     }
                 } else {
-                    setLogs([newLog, ...logs]);
+                    // [수정] 로컬 상태 업데이트: 기존 로그 제거 + 새 로그 추가를 한 번에 처리
+                    setLogs(prevLogs => {
+                        const filtered = prevLogs.filter(l => !logIdsToRemove.includes(l.id));
+                        return [newLog, ...filtered];
+                    });
+
                     if (penaltyApplied > 0) {
                         const currentPenalty = (user.penaltyTotal || 0) + newPenalty;
                         const updatedUsers2 = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: currentPenalty - penaltyApplied } : u);
@@ -1530,12 +1540,15 @@
 
                 setScanResult(null); 
                 setRefundRequest(null);
+                setForfeitRequest(null);
                 
                 let alertMsg = `${user.name}님의 일정이 [${requiredChoice}]로 변경되고 탑승 처리되었습니다.`;
                 if(penaltyAmount > 0) {
                     alertMsg += `\n\n⚠️ 미반환 처리: ${CURRENCY}${penaltyAmount}가 패널티로 등록되었습니다.`;
                 } else if (reason.includes('반환')) {
                     alertMsg += `\n\n✅ 반환 확인: 기존 지급액이 정상적으로 회수되었습니다.`;
+                } else if (payoutOverride === 0) {
+                    alertMsg += `\n\nℹ️ 지급 보류: 기존 일정 비용을 고려하여 이번 지급은 생략되었습니다.`;
                 } else {
                     alertMsg += `\n(이전 일정에 대한 완료 기록은 삭제되었습니다.)`;
                 }
@@ -1547,7 +1560,7 @@
                 
                 const oldVal = user.options[session.targetKey];
                 
-                // 기존 지급액(회수 대상 금액) 계산
+                // 1. 기존 지급액(회수 대상 금액) 계산
                 const oldPaymentSchedules = schedules.filter(s => 
                     s.targetKey === session.targetKey && 
                     s.targetVal === oldVal && 
@@ -1564,9 +1577,28 @@
                 if (recoupAmount > 0) {
                     setScanResult(null); 
                     setRefundRequest({ user, session, requiredChoice, amount: recoupAmount, oldVal });
-                } else {
-                    await executeUpdate(user, session, requiredChoice, 0, '현장 스캔 시 즉시 변경');
+                    return;
+                } 
+                
+                // 2. [추가] 관광코스(예약) -> 지급코스(현금) 변경 체크 (지급 보류)
+                // oldVal 일정이 BOARDING 타입이고, 새로운 session이 PAYMENT 타입이며 가격이 있는 경우
+                const oldBoardingSchedules = schedules.filter(s => 
+                    s.targetKey === session.targetKey && 
+                    s.targetVal === oldVal && 
+                    s.type === 'BOARDING'
+                );
+                
+                const isFromTour = oldBoardingSchedules.length > 0;
+                const isToPayment = session.type === 'PAYMENT' && session.price > 0;
+
+                if (isFromTour && isToPayment) {
+                    setScanResult(null);
+                    setForfeitRequest({ user, session, requiredChoice, oldVal, price: session.price });
+                    return;
                 }
+
+                // 특이사항 없으면 바로 진행
+                await executeUpdate(user, session, requiredChoice, 0, '현장 스캔 시 즉시 변경');
             };
 
             const resolveRefundRequest = async (isReturned) => {
@@ -1580,6 +1612,20 @@
                 }
             };
 
+            const resolveForfeitRequest = async (shouldPay) => {
+                if (!forfeitRequest) return;
+                const { user, session, requiredChoice, oldVal } = forfeitRequest;
+
+                if (shouldPay) {
+                    // 정상 지급 (기존 예약 무시)
+                    await executeUpdate(user, session, requiredChoice, 0, '현장 변경 (관광->지급, 정상지급)');
+                } else {
+                    // 지급 보류 (0원 지급)
+                    await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (관광->지급, 예약비용 고려하여 지급생략)`, 0);
+                }
+            };
+
+            // ... handleUserUpload, handleScheduleUpload ... (생략 없이 기존 코드 사용)
             const handleUserUpload = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -1638,14 +1684,12 @@
                             
                             const dateStr = dateObj.toISOString().split('T')[0];
                             
-                            // [수정] 가격 파싱 로직 강화 ($, 콤마, 공백 제거)
                             let rawPrice = row['지급'] || row['Price'] || '0';
                             if (typeof rawPrice === 'string') {
                                 rawPrice = rawPrice.replace(/[$,\s]/g, '');
                             }
                             const price = parseInt(rawPrice) || 0;
 
-                            // [수정] 타입 결정 로직 (가격이 있으면 무조건 PAYMENT)
                             let type = 'BOARDING';
                             if (price > 0) {
                                 type = 'PAYMENT';
@@ -1900,6 +1944,40 @@
                                             <span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 처리)</span>
                                         </button>
                                         <button onClick={() => setRefundRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">
+                                            취소
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {forfeitRequest && (
+                            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in no-print">
+                                <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
+                                    <div className="bg-indigo-50 p-6 text-center border-b border-indigo-100">
+                                        <div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">
+                                            ?
+                                        </div>
+                                        <h3 className="text-xl font-black text-indigo-900 mb-1">지급 보류 확인</h3>
+                                        <p className="text-slate-600 font-bold text-sm">
+                                            관광 코스(예약)에서<br/>지급 일정(현금)으로 변경됩니다.
+                                        </p>
+                                    </div>
+                                    <div className="p-6 space-y-4">
+                                        <div className="text-center text-xs text-slate-400 mb-2">
+                                            기존: {forfeitRequest.oldVal} (예약취소)<br/>
+                                            ▼ <br/>
+                                            변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})
+                                        </div>
+                                        <button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1">
+                                            <span>지급하지 않음 (보류)</span>
+                                            <span className="text-[10px] opacity-80 font-normal">(기존 예약 비용 고려)</span>
+                                        </button>
+                                        <button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1">
+                                            <span>정상 지급</span>
+                                            <span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 처리)</span>
+                                        </button>
+                                        <button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">
                                             취소
                                         </button>
                                     </div>
