@@ -2008,16 +2008,16 @@
                             </div>
                         )}
 
-                        {forfeitRequest && (
+{forfeitRequest && (
                             <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in no-print">
                                 <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
                                     <div className="bg-indigo-50 p-6 text-center border-b border-indigo-100">
                                         <div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">
                                             ?
                                         </div>
-                                        <h3 className="text-xl font-black text-indigo-900 mb-1">지급 보류 확인</h3>
+                                        <h3 className="text-xl font-black text-indigo-900 mb-1">일정 변경 확인 (Case 2)</h3>
                                         <p className="text-slate-600 font-bold text-sm">
-                                            관광 코스(예약)에서<br/>지급 일정(현금)으로 변경됩니다.
+                                            예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.
                                         </p>
                                     </div>
                                     <div className="p-6 space-y-4">
@@ -2027,12 +2027,12 @@
                                             변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})
                                         </div>
                                         <button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1">
-                                            <span>지급하지 않음 (보류)</span>
-                                            <span className="text-[10px] opacity-80 font-normal">(기존 예약 비용 고려)</span>
+                                            <span>부지급 (위약금 적용)</span>
+                                            <span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span>
                                         </button>
                                         <button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1">
                                             <span>정상 지급</span>
-                                            <span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 처리)</span>
+                                            <span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span>
                                         </button>
                                         <button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">
                                             취소
