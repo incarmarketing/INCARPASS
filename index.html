@@ -217,6 +217,8 @@
                 type: <g><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></g>,
                 up: <g><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></g>,
                 down: <g><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></g>,
+                chevronsUp: <g><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></g>,
+                chevronsDown: <g><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></g>,
                 image: <g><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></g>
             };
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="2"/>}</svg>;
@@ -1027,16 +1029,25 @@
                 }
             };
 
+            // 수정된 레이어 이동 로직: 맨 앞으로/맨 뒤로 대응
             const moveLayer = (direction) => {
                 if (!selectedId) return;
                 setBadgeConfig(prev => {
                     const idx = prev.layers.findIndex(l => l.id === selectedId);
                     if (idx < 0) return prev;
-                    const newLayers = [...prev.layers];
-                    if (direction === 'up' && idx < newLayers.length - 1) {
-                        [newLayers[idx], newLayers[idx+1]] = [newLayers[idx+1], newLayers[idx]];
+                    let newLayers = [...prev.layers];
+                    const item = newLayers.splice(idx, 1)[0];
+
+                    if (direction === 'top') {
+                        newLayers.push(item); // 배열의 끝 = 화면의 맨 앞
+                    } else if (direction === 'bottom') {
+                        newLayers.unshift(item); // 배열의 시작 = 화면의 맨 뒤
+                    } else if (direction === 'up' && idx < prev.layers.length - 1) {
+                        newLayers.splice(idx + 1, 0, item);
                     } else if (direction === 'down' && idx > 0) {
-                        [newLayers[idx], newLayers[idx-1]] = [newLayers[idx-1], newLayers[idx]];
+                        newLayers.splice(idx - 1, 0, item);
+                    } else {
+                        newLayers.splice(idx, 0, item);
                     }
                     return { ...prev, layers: newLayers };
                 });
@@ -1071,7 +1082,7 @@
                             backgroundColor: layer.bgColor || 'transparent', padding: `${layer.padding || 0}px`, borderRadius: `${layer.borderRadius || 0}px`,
                             width: layer.width === 'auto' ? 'auto' : `${layer.width}px`, textAlign: layer.align || 'center', whiteSpace: 'nowrap'
                         }}>
-                            {layer.content}
+                            {contentOrPlaceholder(layer)}
                         </div>
                     );
                 } else if (layer.type === 'rect' || layer.type === 'circle') {
@@ -1084,21 +1095,10 @@
                 }
             };
 
-            const downloadTemplate = (type) => {
-                let content = '';
-                let filename = '';
-                if(type === 'users') {
-                    content = '\uFEFF사번,성명,소속,직책,버스,2일차,3일차\n202401,홍길동,마케팅팀,대리,1호차,힐링코스,투어\n202402,김철수,영업팀,과장,미정,문화탐방,자유일정';
-                    filename = '참가자명단_샘플.csv';
-                } else {
-                    content = '\uFEFF일정,장소,타입,지급,타겟옵션,타겟값\n1일차,공항미팅,관광,0,ALL,ALL\n2일차,자유식비,지급,30,2일차,자유일정\n2일차,힐링코스탑승,관광,0,2일차,힐링코스';
-                    filename = '일정정보_샘플.csv';
-                }
-                const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = filename;
-                link.click();
+            const contentOrPlaceholder = (layer) => {
+                if (!layer.variable) return layer.content;
+                const names = { name: '성 명', org: '소 속', role: '직 책', id: '사 번' };
+                return names[layer.variable] || layer.content;
             };
 
             const exportAllData = () => {
@@ -1116,19 +1116,27 @@
                 link.click();
             };
 
+            // 데이터 초기화 기능 강화
             const handleFullReset = async () => {
-                if(!confirm("⚠️ 경고: 모든 데이터가 삭제됩니다.")) return;
+                if(!confirm("⚠️ 경고: 로컬 및 서버의 모든 데이터(참가자, 일정, 로그)가 삭제됩니다. 정말 진행하시겠습니까?")) return;
                 const SYSTEM_APP_ID = 'inca-prod-v1';
                 try {
                     if(db) {
-                        const batch = db.batch();
-                        // (Batch logic simplified for brevity, same as before)
-                        // ...
-                        alert("서버 데이터 삭제 요청됨 (실제 구현은 생략)");
+                        const collections = ['users', 'schedules', 'logs', 'changelogs'];
+                        for (const col of collections) {
+                            const snapshot = await db.collection('artifacts').doc(SYSTEM_APP_ID).collection(col).get();
+                            const batch = db.batch();
+                            snapshot.docs.forEach(doc => batch.delete(doc.ref));
+                            await batch.commit();
+                        }
                     }
                     localStorage.clear();
+                    alert("모든 데이터가 초기화되었습니다.");
                     window.location.reload();
-                } catch(e) { console.error(e); }
+                } catch(e) { 
+                    console.error(e); 
+                    alert("초기화 중 오류가 발생했습니다: " + e.message);
+                }
             };
 
             // Image Export Logic
@@ -1200,9 +1208,11 @@
                                         <div className="flex justify-between items-center border-b pb-2">
                                             <span className="font-bold text-sm text-incar">속성 편집 ({selectedLayer.type})</span>
                                             <div className="flex gap-2">
-                                                <button onClick={()=>moveLayer('up')} className="p-1 hover:bg-slate-100 rounded" title="맨 앞으로"><Icon name="up" size={16}/></button>
-                                                <button onClick={()=>moveLayer('down')} className="p-1 hover:bg-slate-100 rounded" title="맨 뒤로"><Icon name="down" size={16}/></button>
-                                                <button onClick={deleteLayer} className="p-1 hover:bg-rose-100 text-rose-500 rounded" title="삭제"><Icon name="trash" size={16}/></button>
+                                                <button onClick={()=>moveLayer('top')} className="p-1 hover:bg-slate-100 rounded text-incar" title="맨 앞으로"><Icon name="chevronsUp" size={16}/></button>
+                                                <button onClick={()=>moveLayer('up')} className="p-1 hover:bg-slate-100 rounded" title="한 칸 앞으로"><Icon name="up" size={16}/></button>
+                                                <button onClick={()=>moveLayer('down')} className="p-1 hover:bg-slate-100 rounded" title="한 칸 뒤로"><Icon name="down" size={16}/></button>
+                                                <button onClick={()=>moveLayer('bottom')} className="p-1 hover:bg-slate-100 rounded text-incar" title="맨 뒤로"><Icon name="chevronsDown" size={16}/></button>
+                                                <button onClick={deleteLayer} className="p-1 hover:bg-rose-100 text-rose-500 rounded ml-2" title="삭제"><Icon name="trash" size={16}/></button>
                                             </div>
                                         </div>
 
@@ -1227,10 +1237,6 @@
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div><label className="text-[10px] font-bold text-slate-400">폰트 크기</label><input type="number" value={selectedLayer.fontSize} onChange={e=>updateLayer('fontSize', Number(e.target.value))} className="w-full p-2 border rounded text-xs"/></div>
                                                     <div><label className="text-[10px] font-bold text-slate-400">색상</label><div className="flex items-center gap-2"><input type="color" value={selectedLayer.color} onChange={e=>updateLayer('color', e.target.value)} className="w-8 h-8 rounded border"/><span className="text-xs">{selectedLayer.color}</span></div></div>
-                                                </div>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div><label className="text-[10px] font-bold text-slate-400">너비</label><input type="number" value={selectedLayer.width === 'auto' ? 0 : selectedLayer.width} onChange={e=>updateLayer('width', Number(e.target.value) || 'auto')} placeholder="Auto" className="w-full p-2 border rounded text-xs"/><span className="text-[9px] text-slate-400">0=Auto</span></div>
-                                                    <div><label className="text-[10px] font-bold text-slate-400">정렬</label><select value={selectedLayer.align} onChange={e=>updateLayer('align', e.target.value)} className="w-full p-2 border rounded text-xs"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></div>
                                                 </div>
                                             </>
                                         )}
@@ -1304,9 +1310,12 @@
                         <button onClick={generateZip} className="relative z-10 px-6 py-3 bg-white text-slate-900 rounded-xl font-bold text-sm hover:bg-slate-100 transition-colors shadow-lg">{isZipping ? `생성 중... ${zipProgress}%` : '이미지 일괄 다운로드 (ZIP)'}</button>
                     </div>
 
-                    <div className="bg-white p-6 rounded-3xl shadow-card text-center">
-                        <h4 className="font-bold text-slate-800 mb-4">현재 데이터: {users.length}명 / {schedules.length}개 세션</h4>
-                        <button onClick={handleFullReset} className="w-full py-3 bg-rose-50 text-rose-600 font-bold rounded-xl hover:bg-rose-100 text-sm">전체 초기화</button>
+                    <div className="bg-white p-6 rounded-3xl shadow-card text-center border border-rose-100">
+                        <h4 className="font-bold text-slate-800 mb-2">데이터 관리 및 초기화</h4>
+                        <p className="text-xs text-slate-400 mb-4">현재 데이터: {users.length}명 / {schedules.length}개 세션 / {logs.length}개 로그</p>
+                        <button onClick={handleFullReset} className="w-full py-3 bg-rose-50 text-rose-600 font-bold rounded-xl hover:bg-rose-100 text-sm flex items-center justify-center gap-2">
+                           <Icon name="trash" size={16} /> 모든 데이터 영구 삭제 (초기화)
+                        </button>
                     </div>
 
                     {isZipping && (
@@ -1412,14 +1421,14 @@
             const SYSTEM_APP_ID = 'inca-prod-v1';
 
             const firebaseConfig = {
- apiKey: "AIzaSyAh1dsSNobeF6Wz-0euP5AUggdqJANJ3dQ",
- authDomain: "incarpass.firebaseapp.com",
- projectId: "incarpass",
- storageBucket: "incarpass.firebasestorage.app",
- messagingSenderId: "955362361998",
- appId: "1:955362361998:web:166055dd392784f1827fdf",
- measurementId: "G-SNR3FPPQ7E"
-};
+             apiKey: "AIzaSyAh1dsSNobeF6Wz-0euP5AUggdqJANJ3dQ",
+             authDomain: "incarpass.firebaseapp.com",
+             projectId: "incarpass",
+             storageBucket: "incarpass.firebasestorage.app",
+             messagingSenderId: "955362361998",
+             appId: "1:955362361998:web:166055dd392784f1827fdf",
+             measurementId: "G-SNR3FPPQ7E"
+            };
 
             useEffect(() => {
                 const handleResize = () => setIsMobile(window.innerWidth < 768);
