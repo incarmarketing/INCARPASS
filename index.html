@@ -801,13 +801,13 @@
                 };
             };
 
-            const renderLayer = (layer, u) => {
+            const renderLayer = (layer, u, index) => {
                 const commonStyle = {
                     position: 'absolute',
                     top: `${layer.y}%`,
                     left: `${layer.x}%`,
                     transform: 'translate(-50%, -50%)',
-                    zIndex: layer.type === 'qr' || layer.type === 'text' ? 20 : 10,
+                    zIndex: index, // 배열 인덱스에 따라 물리적 깊이 결정
                     width: layer.width === 'auto' ? 'auto' : `${layer.width}px`,
                     textAlign: layer.align || 'center',
                     cursor: 'default',
@@ -878,7 +878,7 @@
                             <div key={u.uid} className="page-wrapper relative">
                                 <div className="badge-card relative overflow-hidden bg-white shadow-lg" style={calculateStyle()}>
                                     {config.bgImage && <img src={config.bgImage} className="absolute inset-0 w-full h-full object-cover z-0" />}
-                                    {config.layers && config.layers.map(layer => renderLayer(layer, u))}
+                                    {config.layers && config.layers.map((layer, idx) => renderLayer(layer, u, idx))}
                                 </div>
                             </div>
                         ))}
@@ -1029,7 +1029,7 @@
                 }
             };
 
-            // 수정된 레이어 이동 로직: 맨 앞으로/맨 뒤로 대응
+            // 레이어 이동 로직 (물리적 z-index 배열 변경)
             const moveLayer = (direction) => {
                 if (!selectedId) return;
                 setBadgeConfig(prev => {
@@ -1039,9 +1039,9 @@
                     const item = newLayers.splice(idx, 1)[0];
 
                     if (direction === 'top') {
-                        newLayers.push(item); // 배열의 끝 = 화면의 맨 앞
+                        newLayers.push(item); // 배열 맨 뒤가 화면 맨 위(Front)
                     } else if (direction === 'bottom') {
-                        newLayers.unshift(item); // 배열의 시작 = 화면의 맨 뒤
+                        newLayers.unshift(item); // 배열 맨 앞이 화면 맨 아래(Back)
                     } else if (direction === 'up' && idx < prev.layers.length - 1) {
                         newLayers.splice(idx + 1, 0, item);
                     } else if (direction === 'down' && idx > 0) {
@@ -1056,14 +1056,14 @@
             const selectedLayer = badgeConfig.layers ? badgeConfig.layers.find(l => l.id === selectedId) : null;
 
             // Render Layer on Editor
-            const renderEditorLayer = (layer) => {
+            const renderEditorLayer = (layer, index) => {
                 const isSelected = layer.id === selectedId;
                 const style = {
                     position: 'absolute', top: `${layer.y}%`, left: `${layer.x}%`,
                     transform: 'translate(-50%, -50%)',
                     cursor: 'grab',
                     border: isSelected ? '2px solid #3b82f6' : '1px dashed rgba(0,0,0,0.1)',
-                    zIndex: isSelected ? 100 : (layer.type === 'qr' || layer.type === 'text' ? 20 : 10),
+                    zIndex: isSelected ? 100 : index, // 타입 고정 해제: 배열 인덱스에 따라 겹침 결정
                 };
 
                 const handlers = {
@@ -1116,7 +1116,7 @@
                 link.click();
             };
 
-            // 데이터 초기화 기능 강화
+            // 데이터 초기화 기능 (서버 데이터 포함)
             const handleFullReset = async () => {
                 if(!confirm("⚠️ 경고: 로컬 및 서버의 모든 데이터(참가자, 일정, 로그)가 삭제됩니다. 정말 진행하시겠습니까?")) return;
                 const SYSTEM_APP_ID = 'inca-prod-v1';
@@ -1195,7 +1195,7 @@
                                     {guides.x !== null && <div className="smart-guide-x" style={{left: `${guides.x}%`}}></div>}
                                     {guides.y !== null && <div className="smart-guide-y" style={{top: `${guides.y}%`}}></div>}
                                     {badgeConfig.bgImage ? <img src={badgeConfig.bgImage} className="absolute inset-0 w-full h-full object-cover pointer-events-none" /> : <div className="absolute inset-0 flex items-center justify-center text-slate-300">이미지 없음</div>}
-                                    {badgeConfig.layers && badgeConfig.layers.map(renderEditorLayer)}
+                                    {badgeConfig.layers && badgeConfig.layers.map((layer, idx) => renderEditorLayer(layer, idx))}
                                 </div>
                             </div>
 
@@ -1268,9 +1268,9 @@
                                 )}
                                 
                                 <div className="mt-4 pt-4 border-t">
-                                    <label className="block text-xs font-bold text-slate-400 mb-2">레이어 목록</label>
+                                    <label className="block text-xs font-bold text-slate-400 mb-2">레이어 목록 (위쪽이 앞면)</label>
                                     <div className="max-h-40 overflow-y-auto border rounded-lg text-xs">
-                                        {badgeConfig.layers && [...badgeConfig.layers].reverse().map(l => (
+                                        {badgeConfig.layers && [...badgeConfig.layers].reverse().map((l, idx) => (
                                             <div key={l.id} onClick={()=>setSelectedId(l.id)} className={`p-2 border-b cursor-pointer flex justify-between items-center layer-item ${l.id===selectedId?'active':''}`}>
                                                 <span>{l.type === 'text' ? (l.content || 'Text') : l.type.toUpperCase()}</span>
                                                 <span className="text-[9px] text-slate-400">{l.id}</span>
@@ -1323,8 +1323,8 @@
                             {users.map(u => (
                                 <div key={u.uid} id={`badge-export-${u.uid}`} style={{ width: `${badgeConfig.imgWidth}px`, height: `${badgeConfig.imgHeight}px`, position: 'relative', overflow: 'hidden', backgroundColor: 'white' }}>
                                     {badgeConfig.bgImage && <img src={badgeConfig.bgImage} className="absolute inset-0 w-full h-full object-cover" />}
-                                    {badgeConfig.layers && badgeConfig.layers.map(layer => {
-                                        const commonStyle = { position: 'absolute', top: `${layer.y}%`, left: `${layer.x}%`, transform: 'translate(-50%, -50%)', zIndex: layer.type === 'qr' || layer.type === 'text' ? 20 : 10, width: layer.width === 'auto' ? 'auto' : `${layer.width}px`, textAlign: layer.align || 'center' };
+                                    {badgeConfig.layers && badgeConfig.layers.map((layer, idx) => {
+                                        const commonStyle = { position: 'absolute', top: `${layer.y}%`, left: `${layer.x}%`, transform: 'translate(-50%, -50%)', zIndex: idx, width: layer.width === 'auto' ? 'auto' : `${layer.width}px`, textAlign: layer.align || 'center' };
                                         if (layer.type === 'qr') return <div key={layer.id} style={{ ...commonStyle, width: `${layer.size}px`, height: `${layer.size}px`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><QRCodeCanvas text={u.uid} size={layer.size} transparent={true} /></div>;
                                         else if (layer.type === 'text') {
                                             let content = layer.content;
