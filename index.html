@@ -1063,7 +1063,7 @@
                     transform: 'translate(-50%, -50%)',
                     cursor: 'grab',
                     border: isSelected ? '2px solid #3b82f6' : '1px dashed rgba(0,0,0,0.1)',
-                    zIndex: isSelected ? 100 : index, // 타입 고정 해제: 배열 인덱스에 따라 겹침 결정
+                    zIndex: index, // 타입별 강제 우선순위 제거: 배열 인덱스에 따라 물리적 깊이 결정 (직관적 적용)
                 };
 
                 const handlers = {
