@@ -354,7 +354,7 @@
                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${tab==='done'?'bg-emerald-500':'bg-slate-300'}`}>{u.name[0]}</div>
                                             <div>
                                                 <div className="font-bold text-slate-800 text-sm">{u.name} <span className="text-xs font-normal text-slate-500">({u.options && (u.options['직책'] || u.org)})</span></div>
-                                                <div className="text--[10px] text-slate-400 font-mono">{u.uid}</div>
+                                                <div className="text-[10px] text-slate-400 font-mono">{u.uid}</div>
                                             </div>
                                         </div>
                                         {tab === 'done' && u.log && (
@@ -626,6 +626,55 @@
         const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules }) => {
             const [manualInput, setManualInput] = useState(false);
 
+            // --- QR 조회 기능 추가 시작 ---
+            const [isLookupScanning, setIsLookupScanning] = useState(false);
+            const lookupScannerRef = useRef(null);
+
+            useEffect(() => {
+                return () => {
+                    if (isLookupScanning) stopLookupScanner();
+                };
+            }, [isLookupScanning]);
+
+            const startLookupScanner = () => {
+                setIsLookupScanning(true);
+                setTimeout(() => {
+                    const element = document.getElementById("lookup-reader");
+                    if (!element) return;
+                    if (!lookupScannerRef.current) {
+                        lookupScannerRef.current = new Html5Qrcode("lookup-reader");
+                    }
+                    const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
+                    lookupScannerRef.current.start({ facingMode: "environment" }, config, (decodedText) => {
+                        const found = users.find(u => u.uid === decodedText);
+                        if (found) {
+                            setSelectedUser(found);
+                            stopLookupScanner();
+                        } else {
+                            alert(`미등록 사용자입니다. (ID: ${decodedText})`);
+                        }
+                    }, () => {}).catch(err => {
+                        console.error(err);
+                        setIsLookupScanning(false);
+                        alert("카메라 권한을 확인해주세요.");
+                    });
+                }, 100);
+            };
+
+            const stopLookupScanner = () => {
+                if (lookupScannerRef.current) {
+                    lookupScannerRef.current.stop().then(() => {
+                        lookupScannerRef.current.clear();
+                        setIsLookupScanning(false);
+                    }).catch(() => {
+                        setIsLookupScanning(false);
+                    });
+                } else {
+                    setIsLookupScanning(false);
+                }
+            };
+            // --- QR 조회 기능 추가 끝 ---
+
             const userSchedules = useMemo(() => {
                 if (!selectedUser || !schedules) return [];
                 return schedules.filter(s => {
@@ -691,12 +740,40 @@
                     <div className="bg-white p-6 rounded-3xl shadow-card">
                         <h3 className="font-bold text-lg mb-4 text-slate-800">참가자 일정 변경 및 패널티 관리</h3>
                         <div className="flex flex-col md:flex-row gap-2 mb-6">
-                            <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="사번 또는 이름 검색" className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-incar" />
+                            <div className="flex-1 flex gap-2">
+                                <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="사번 또는 이름 검색" className="flex-1 p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-incar" />
+                                <button onClick={startLookupScanner} className="bg-slate-100 text-slate-600 px-4 rounded-2xl hover:bg-slate-200 transition-colors border border-slate-200" title="QR 스캔으로 찾기">
+                                    <Icon name="qr" size={24} />
+                                </button>
+                            </div>
                             <button onClick={()=>{
                                 const found = users.find(u => u.uid.includes(searchQuery) || u.name.includes(searchQuery));
                                 if(found) setSelectedUser(found); else alert("사용자를 찾을 수 없습니다.");
                             }} className="w-full md:w-auto bg-slate-800 text-white px-6 py-4 md:py-0 rounded-2xl font-bold">검색</button>
                         </div>
+
+                        {/* 스캐너 모달 */}
+                        {isLookupScanning && (
+                            <div className="fixed inset-0 z-[300] bg-black/95 flex flex-col items-center justify-center p-6 animate-fade-in" style={{ touchAction: 'none' }}>
+                                <button onClick={stopLookupScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full hover:bg-white/20 transition-colors z-[101]">
+                                    <Icon name="x" size={32} />
+                                </button>
+                                <div className="relative w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/20">
+                                    <div id="lookup-reader" className="w-full h-full object-cover"></div>
+                                    <div className="scan-line bg-incar"></div>
+                                    <div className="absolute inset-0 border-2 border-white/30 rounded-3xl pointer-events-none"></div>
+                                    <div className="absolute top-0 left-0 w-16 h-16 border-t-4 border-l-4 border-white rounded-tl-3xl pointer-events-none"></div>
+                                    <div className="absolute top-0 right-0 w-16 h-16 border-t-4 border-r-4 border-white rounded-tr-3xl pointer-events-none"></div>
+                                    <div className="absolute bottom-0 left-0 w-16 h-16 border-b-4 border-l-4 border-white rounded-bl-3xl pointer-events-none"></div>
+                                    <div className="absolute bottom-0 right-0 w-16 h-16 border-b-4 border-r-4 border-white rounded-br-3xl pointer-events-none"></div>
+                                </div>
+                                <p className="text-white mt-10 font-bold text-xl animate-pulse text-center">조회할 QR코드를 스캔하세요</p>
+                                <div className="mt-8 flex gap-4">
+                                    <button onClick={stopLookupScanner} className="px-8 py-3 bg-white text-slate-900 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors">닫기</button>
+                                </div>
+                            </div>
+                        )}
+
                         {selectedUser && (
                             <div className="border-t border-slate-100 pt-6 space-y-4">
                                 <div className="flex flex-col md:flex-row gap-6 mb-6">
@@ -807,7 +884,7 @@
                     top: `${layer.y}%`,
                     left: `${layer.x}%`,
                     transform: 'translate(-50%, -50%)',
-                    zIndex: index,
+                    zIndex: index, // 배열 인덱스에 따라 물리적 깊이 결정
                     width: layer.width === 'auto' ? 'auto' : `${layer.width}px`,
                     textAlign: layer.align || 'center',
                     cursor: 'default',
@@ -923,7 +1000,7 @@
                 setDragTarget(id);
 
                 const targets = [];
-                targets.push({ x: 50, y: 50 });
+                targets.push({ x: 50, y: 50 }); // Canvas Center
 
                 if (badgeConfig.layers) {
                     badgeConfig.layers.forEach(l => {
@@ -1029,6 +1106,7 @@
                 }
             };
 
+            // 레이어 이동 로직 (물리적 z-index 배열 변경)
             const moveLayer = (direction) => {
                 if (!selectedId) return;
                 setBadgeConfig(prev => {
@@ -1038,9 +1116,9 @@
                     const item = newLayers.splice(idx, 1)[0];
 
                     if (direction === 'top') {
-                        newLayers.push(item);
+                        newLayers.push(item); // 배열 맨 뒤가 화면 맨 위(Front)
                     } else if (direction === 'bottom') {
-                        newLayers.unshift(item);
+                        newLayers.unshift(item); // 배열 맨 앞이 화면 맨 아래(Back)
                     } else if (direction === 'up' && idx < prev.layers.length - 1) {
                         newLayers.splice(idx + 1, 0, item);
                     } else if (direction === 'down' && idx > 0) {
@@ -1054,6 +1132,7 @@
 
             const selectedLayer = badgeConfig.layers ? badgeConfig.layers.find(l => l.id === selectedId) : null;
 
+            // Render Layer on Editor
             const renderEditorLayer = (layer, index) => {
                 const isSelected = layer.id === selectedId;
                 const style = {
@@ -1061,7 +1140,7 @@
                     transform: 'translate(-50%, -50%)',
                     cursor: 'grab',
                     border: isSelected ? '2px solid #3b82f6' : '1px dashed rgba(0,0,0,0.1)',
-                    zIndex: index,
+                    zIndex: index, // 타입별 강제 우선순위 제거: 배열 인덱스에 따라 물리적 깊이 결정 (직관적 적용)
                 };
 
                 const handlers = {
@@ -1073,7 +1152,6 @@
                 if (layer.type === 'qr') {
                     return <div key={layer.id} {...handlers} style={{ ...style, width: `${layer.size}px`, height: `${layer.size}px`, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.5)' }}><span className="text-[10px] font-bold text-red-500">QR</span></div>;
                 } else if (layer.type === 'text') {
-                    const content = layer.variable ? (layer.variable === 'name' ? '성 명' : layer.variable === 'org' ? '소 속' : layer.variable === 'role' ? '직 책' : '사 번') : layer.content;
                     return (
                         <div key={layer.id} {...handlers} className={layer.fontFamily} style={{
                             ...style,
@@ -1081,7 +1159,7 @@
                             backgroundColor: layer.bgColor || 'transparent', padding: `${layer.padding || 0}px`, borderRadius: `${layer.borderRadius || 0}px`,
                             width: layer.width === 'auto' ? 'auto' : `${layer.width}px`, textAlign: layer.align || 'center', whiteSpace: 'nowrap'
                         }}>
-                            {content}
+                            {contentOrPlaceholder(layer)}
                         </div>
                     );
                 } else if (layer.type === 'rect' || layer.type === 'circle') {
@@ -1092,6 +1170,12 @@
                         }}></div>
                     );
                 }
+            };
+
+            const contentOrPlaceholder = (layer) => {
+                if (!layer.variable) return layer.content;
+                const names = { name: '성 명', org: '소 속', role: '직 책', id: '사 번' };
+                return names[layer.variable] || layer.content;
             };
 
             const exportAllData = () => {
@@ -1109,6 +1193,7 @@
                 link.click();
             };
 
+            // 데이터 초기화 기능 (서버 데이터 포함)
             const handleFullReset = async () => {
                 if(!confirm("⚠️ 경고: 로컬 및 서버의 모든 데이터(참가자, 일정, 로그)가 삭제됩니다. 정말 진행하시겠습니까?")) return;
                 const SYSTEM_APP_ID = 'inca-prod-v1';
@@ -1131,13 +1216,17 @@
                 }
             };
 
+            // Image Export Logic
             const generateZip = async () => {
                 if (users.length === 0) return alert("데이터가 없습니다.");
                 setIsZipping(true);
                 setZipProgress(0);
-                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Allow render
+
                 const zip = new JSZip();
                 const folder = zip.folder("badges");
+
                 for (let i = 0; i < users.length; i++) {
                     const u = users[i];
                     const element = document.getElementById(`badge-export-${u.uid}`);
@@ -1146,11 +1235,14 @@
                             const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: null });
                             const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
                             folder.file(`${u.name}_${u.uid}.png`, blob);
-                        } catch (err) { console.error("Error capturing badge:", u.name, err); }
+                        } catch (err) {
+                            console.error("Error capturing badge:", u.name, err);
+                        }
                     }
                     setZipProgress(Math.round(((i + 1) / users.length) * 100));
                     await new Promise(resolve => setTimeout(resolve, 10)); 
                 }
+
                 zip.generateAsync({ type: "blob" }).then(content => {
                     saveAs(content, `명찰_이미지_일괄_${new Date().toISOString().slice(0,10)}.zip`);
                     setIsZipping(false);
@@ -1172,7 +1264,9 @@
                                 <button onClick={()=>addLayer('qr')} className="px-3 py-1.5 bg-slate-100 text-xs font-bold rounded-lg hover:bg-slate-200">+ QR</button>
                             </div>
                         </div>
+                        
                         <div className="flex flex-col lg:flex-row gap-8 items-start">
+                            {/* Canvas Area */}
                             <div className="flex-none bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 p-4 flex justify-center relative" onClick={()=>setSelectedId(null)}>
                                 <div ref={editorRef} className="relative overflow-hidden shadow-2xl bg-white select-none" style={{ width: '545px', height: '697px', borderRadius: '10px' }}>
                                     {guides.x !== null && <div className="smart-guide-x" style={{left: `${guides.x}%`}}></div>}
@@ -1181,8 +1275,11 @@
                                     {badgeConfig.layers && badgeConfig.layers.map((layer, idx) => renderEditorLayer(layer, idx))}
                                 </div>
                             </div>
+
+                            {/* Property Panel */}
                             <div className="flex-1 space-y-4 w-full bg-white p-4 rounded-xl border border-slate-100 shadow-sm" onMouseDown={e => e.stopPropagation()}>
                                 <div><label className="block text-xs font-bold text-slate-400 mb-2">배경 이미지</label><input type="file" accept="image/*" onChange={handleBgImageUpload} className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-incar-light file:text-incar hover:file:bg-indigo-100"/></div>
+                                
                                 {selectedLayer ? (
                                     <div className="space-y-4 animate-fade-in">
                                         <div className="flex justify-between items-center border-b pb-2">
@@ -1195,10 +1292,12 @@
                                                 <button onClick={deleteLayer} className="p-1 hover:bg-rose-100 text-rose-500 rounded ml-2" title="삭제"><Icon name="trash" size={16}/></button>
                                             </div>
                                         </div>
+
                                         <div className="grid grid-cols-2 gap-4">
                                             <div><label className="text-[10px] font-bold text-slate-400">X (%)</label><input type="number" value={Math.round(selectedLayer.x)} onChange={e=>updateLayer('x', Number(e.target.value))} className="w-full p-2 border rounded text-xs"/></div>
                                             <div><label className="text-[10px] font-bold text-slate-400">Y (%)</label><input type="number" value={Math.round(selectedLayer.y)} onChange={e=>updateLayer('y', Number(e.target.value))} className="w-full p-2 border rounded text-xs"/></div>
                                         </div>
+
                                         {selectedLayer.type === 'text' && (
                                             <>
                                                 <div><label className="text-[10px] font-bold text-slate-400">내용</label><input type="text" value={selectedLayer.content} onChange={e=>updateLayer('content', e.target.value)} className="w-full p-2 border rounded text-xs"/></div>
@@ -1218,6 +1317,7 @@
                                                 </div>
                                             </>
                                         )}
+
                                         {(selectedLayer.type === 'rect' || selectedLayer.type === 'circle') && (
                                             <>
                                                 <div className="grid grid-cols-2 gap-4">
@@ -1233,6 +1333,7 @@
                                                 )}
                                             </>
                                         )}
+                                        
                                         {selectedLayer.type === 'qr' && (
                                             <div><label className="text-[10px] font-bold text-slate-400">크기</label><input type="number" value={selectedLayer.size} onChange={e=>updateLayer('size', Number(e.target.value))} className="w-full p-2 border rounded text-xs"/></div>
                                         )}
@@ -1242,6 +1343,7 @@
                                         요소를 클릭하여 편집하세요
                                     </div>
                                 )}
+                                
                                 <div className="mt-4 pt-4 border-t">
                                     <label className="block text-xs font-bold text-slate-400 mb-2">레이어 목록 (위쪽이 앞면)</label>
                                     <div className="max-h-40 overflow-y-auto border rounded-lg text-xs">
@@ -1256,6 +1358,7 @@
                             </div>
                         </div>
                     </div>
+
                     <div className="bg-incar text-white p-6 rounded-3xl shadow-xl relative overflow-hidden">
                         <div className="relative z-10">
                             <h3 className="font-black text-2xl">Master Data Setup</h3>
@@ -1271,16 +1374,19 @@
                             </div>
                         </div>
                     </div>
+                    
                     <div className="bg-slate-100 border border-slate-200 p-6 rounded-3xl shadow-sm flex justify-between items-center">
                         <div><h4 className="font-bold text-lg text-slate-800 mb-1 flex items-center gap-2"><Icon name="download" /> 데이터 내보내기</h4></div>
                         <div className="flex gap-2">
                              <button onClick={exportAllData} className="px-6 py-3 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-slate-900 transition-colors shadow-lg">전체 내역 다운로드</button>
                         </div>
                     </div>
+
                     <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-card flex justify-between items-center relative overflow-hidden group">
                         <div className="relative z-10"><h4 className="font-bold text-lg mb-1 flex items-center gap-2"><Icon name="download" /> 명찰 이미지 다운로드</h4><p className="text-xs text-slate-400">등록된 {users.length}명의 QR 명찰 이미지를 ZIP 파일로 다운로드합니다.</p></div>
                         <button onClick={generateZip} className="relative z-10 px-6 py-3 bg-white text-slate-900 rounded-xl font-bold text-sm hover:bg-slate-100 transition-colors shadow-lg">{isZipping ? `생성 중... ${zipProgress}%` : '이미지 일괄 다운로드 (ZIP)'}</button>
                     </div>
+
                     <div className="bg-white p-6 rounded-3xl shadow-card text-center border border-rose-100">
                         <h4 className="font-bold text-slate-800 mb-2">데이터 관리 및 초기화</h4>
                         <p className="text-xs text-slate-400 mb-4">현재 데이터: {users.length}명 / {schedules.length}개 세션 / {logs.length}개 로그</p>
@@ -1288,6 +1394,7 @@
                            <Icon name="trash" size={16} /> 모든 데이터 영구 삭제 (초기화)
                         </button>
                     </div>
+
                     {isZipping && (
                         <div style={{ position: 'fixed', top: '-10000px', left: 0, zIndex: -1000, visibility: 'visible', pointerEvents: 'none' }}>
                             {users.map(u => (
@@ -1365,7 +1472,7 @@
             });
 
             const [user, setUser] = useState(null); 
-            const [db, setDb] = useState(null);       
+            const [db, setDb] = useState(null);      
             const [isLoading, setIsLoading] = useState(true);
             const [serverError, setServerError] = useState(null);
 
@@ -1386,7 +1493,7 @@
             const [selectedUser, setSelectedUser] = useState(null);
             const [editForm, setEditForm] = useState({ optKey: '', optVal: '', penalty: 0, reason: '' });
             const [refundRequest, setRefundRequest] = useState(null);
-            // forfeitRequest removed as requested
+            const [forfeitRequest, setForfeitRequest] = useState(null);
 
             const SYSTEM_APP_ID = 'inca-prod-v1';
 
@@ -1477,7 +1584,31 @@
                     if (loadedBadgeConfig.layers) {
                         setBadgeConfig(loadedBadgeConfig);
                     } else if (loadedBadgeConfig.name) {
-                        // Migration logic omitted for brevity, assuming new config structure
+                        const newLayers = [];
+                        if (loadedBadgeConfig.qr) newLayers.push({ id: 'qr', type: 'qr', x: loadedBadgeConfig.qr.x, y: loadedBadgeConfig.qr.y, size: loadedBadgeConfig.qr.size });
+                        ['org', 'name', 'role'].forEach(key => {
+                            if (loadedBadgeConfig[key] && loadedBadgeConfig[key].show) {
+                                newLayers.push({
+                                    id: key,
+                                    type: 'text',
+                                    variable: key,
+                                    content: key === 'name' ? '성 명' : key === 'org' ? '소 속' : '직 책',
+                                    x: loadedBadgeConfig[key].x,
+                                    y: loadedBadgeConfig[key].y,
+                                    fontSize: loadedBadgeConfig[key].size,
+                                    fontFamily: loadedBadgeConfig[key].font,
+                                    color: loadedBadgeConfig[key].color,
+                                    align: loadedBadgeConfig[key].textAlign,
+                                    width: loadedBadgeConfig[key].width
+                                });
+                            }
+                        });
+                        setBadgeConfig({
+                            bgImage: loadedBadgeConfig.bgImage,
+                            imgWidth: loadedBadgeConfig.imgWidth || 545,
+                            imgHeight: loadedBadgeConfig.imgHeight || 697,
+                            layers: newLayers
+                        });
                     }
                 }
             }, []);
@@ -1488,7 +1619,6 @@
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
             useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_9', JSON.stringify(badgeConfig)); }, [badgeConfig]);
 
-            // ... (helper functions: getOldLogIdsToDelete, cleanupOldLogs, handleManualComplete - same as original)
             const getOldLogIdsToDelete = (uid, targetKey, oldVal) => {
                 const oldSessions = schedules.filter(s => s.targetKey === targetKey && s.targetVal === oldVal);
                 if(oldSessions.length === 0) return [];
@@ -1622,47 +1752,56 @@
 
                 setScanResult(null); 
                 setRefundRequest(null);
+                setForfeitRequest(null);
                 
                 let alertMsg = `${user.name}님의 일정이 [${requiredChoice}]로 변경되고 탑승 처리되었습니다.`;
                 if(penaltyAmount > 0) alertMsg += `\n\n⚠️ 미반환 처리: ${CURRENCY}${penaltyAmount}가 패널티로 등록되었습니다.`;
-                else if (reason.includes('반환')) alertMsg += `\n\n✅ 반환 확인: 차액이 정상적으로 회수되었습니다.`;
+                else if (reason.includes('반환')) alertMsg += `\n\n✅ 반환 확인: 기존 지급액이 정상적으로 회수되었습니다.`;
                 else if (payoutOverride === 0) alertMsg += `\n\nℹ️ 지급 보류: 기존 일정 비용을 고려하여 이번 지급은 생략되었습니다.`;
                 else alertMsg += `\n(이전 일정에 대한 완료 기록은 삭제되었습니다.)`;
                 alert(alertMsg);
             };
 
             const handleForceUpdateAndProcess = async (user, session, requiredChoice) => {
-                const oldVal = user.options[session.targetKey];
+                if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
                 
+                const oldVal = user.options[session.targetKey];
                 const oldPaymentSchedules = schedules.filter(s => s.targetKey === session.targetKey && s.targetVal === oldVal && s.type === 'PAYMENT');
                 const oldPaymentLogs = logs.filter(l => l.uid === user.uid && oldPaymentSchedules.some(s => s.id === l.sessionId));
                 const recoupAmount = oldPaymentLogs.reduce((sum, l) => sum + (l.finalAmount || 0), 0);
 
                 if (recoupAmount > 0) {
-                    const newPrice = session.type === 'PAYMENT' ? (session.price || 0) : 0;
-                    const diff = recoupAmount - newPrice; // Positive = Refund needed, Negative = Pay more
-
-                    if (diff > 0) {
-                        setScanResult(null); 
-                        setRefundRequest({ user, session, requiredChoice, recoupAmount, newPrice, diff, oldVal });
-                        return;
-                    }
+                    setScanResult(null); 
+                    setRefundRequest({ user, session, requiredChoice, amount: recoupAmount, oldVal });
+                    return;
                 } 
                 
+                const oldBoardingSchedules = schedules.filter(s => s.targetKey === session.targetKey && s.targetVal === oldVal && s.type === 'BOARDING');
+                const isFromTour = oldBoardingSchedules.length > 0;
+                const isToPayment = session.type === 'PAYMENT' && session.price > 0;
+
+                if (isFromTour && isToPayment) {
+                    setScanResult(null);
+                    setForfeitRequest({ user, session, requiredChoice, oldVal, price: session.price });
+                    return;
+                }
                 await executeUpdate(user, session, requiredChoice, 0, '현장 스캔 시 즉시 변경');
             };
 
             const resolveRefundRequest = async (isReturned) => {
                 if (!refundRequest) return;
-                const { user, session, requiredChoice, diff } = refundRequest;
-                if (isReturned) await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (차액 ${CURRENCY}${diff} 현장 반환)`);
-                else await executeUpdate(user, session, requiredChoice, diff, `현장 변경 (차액 ${CURRENCY}${diff} 미반환/패널티)`);
+                const { user, session, requiredChoice, amount } = refundRequest;
+                if (isReturned) await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (기존 지급액 ${CURRENCY}${amount} 현장 반환)`);
+                else await executeUpdate(user, session, requiredChoice, amount, `현장 변경 (기존 지급액 ${CURRENCY}${amount} 미반환/패널티)`);
             };
 
-            // handleUserUpload, handleScheduleUpload, processScan, handleUserUpdate logic remains same...
-            // (Repeated logic omitted for brevity in thought but included in final file construction)
-            
-            // ... (Copying handleUserUpload, handleScheduleUpload, processScan, handleUserUpdate from the prompt code)
+            const resolveForfeitRequest = async (shouldPay) => {
+                if (!forfeitRequest) return;
+                const { user, session, requiredChoice, oldVal } = forfeitRequest;
+                if (shouldPay) await executeUpdate(user, session, requiredChoice, 0, '현장 변경 (관광->지급, 위약금 면제 및 정상지급)');
+                else await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (관광->지급, 예약부도 위약금 적용으로 지급생략)`, 0);
+            };
+
             const handleUserUpload = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -1876,28 +2015,32 @@
                                 <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
                                     <div className="bg-rose-50 p-6 text-center border-b border-rose-100">
                                         <div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">$</div>
-                                        <h3 className="text-xl font-black text-rose-600 mb-1">지급금 반환 확인</h3>
-                                        <p className="text-slate-600 font-bold text-sm">
-                                            {refundRequest.user.name}님은<br/>
-                                            이미 <span className="text-rose-600 underline">{CURRENCY}{refundRequest.recoupAmount}</span>을 수령했습니다.
-                                        </p>
+                                        <h3 className="text-xl font-black text-rose-600 mb-1">지급금 반환 필요</h3>
+                                        <p className="text-slate-600 font-bold text-sm">{refundRequest.user.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{refundRequest.amount}</span>을 지급받았습니다.</p>
                                     </div>
                                     <div className="p-6 space-y-4">
-                                        <div className="text-center text-xs text-slate-400 mb-2">
-                                            기존 일정 ({CURRENCY}{refundRequest.recoupAmount})<br/>▼<br/>신규 일정 ({CURRENCY}{refundRequest.newPrice})
-                                        </div>
-                                        <div className="text-center font-black text-2xl text-slate-800 mb-2">
-                                            차액 {CURRENCY}{refundRequest.diff} 반환 필요
-                                        </div>
-                                        <button onClick={() => resolveRefundRequest(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1">
-                                            <span>차액을 반환 받았습니다</span>
-                                            <span className="text-[10px] opacity-80 font-normal">(정상 변경 처리)</span>
-                                        </button>
-                                        <button onClick={() => resolveRefundRequest(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1">
-                                            <span>반환받지 못했습니다</span>
-                                            <span className="text-[10px] opacity-80 font-normal">(차액만큼 패널티 적용)</span>
-                                        </button>
+                                        <div className="text-center text-xs text-slate-400 mb-2">기존 일정: {refundRequest.oldVal} <br/>▼ <br/>변경 일정: {refundRequest.session.title}</div>
+                                        <button onClick={() => resolveRefundRequest(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>반환 받았습니다</span><span className="text-[10px] opacity-80 font-normal">(패널티 없음)</span></button>
+                                        <button onClick={() => resolveRefundRequest(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>반환받지 못했습니다</span><span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 처리)</span></button>
                                         <button onClick={() => setRefundRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">취소</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {forfeitRequest && (
+                            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in no-print">
+                                <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
+                                    <div className="bg-indigo-50 p-6 text-center border-b border-indigo-100">
+                                        <div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div>
+                                        <h3 className="text-xl font-black text-indigo-900 mb-1">일정 변경 확인 (Case 2)</h3>
+                                        <p className="text-slate-600 font-bold text-sm">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p>
+                                    </div>
+                                    <div className="p-6 space-y-4">
+                                        <div className="text-center text-xs text-slate-400 mb-2">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div>
+                                        <button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span></button>
+                                        <button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span></button>
+                                        <button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">취소</button>
                                     </div>
                                 </div>
                             </div>
