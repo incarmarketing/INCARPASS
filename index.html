@@ -626,60 +626,88 @@
         const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules }) => {
             const [manualInput, setManualInput] = useState(false);
 
-            // --- QR 조회 기능 추가 시작 ---
+            // --- QR 조회 기능 추가 (안정성 개선) ---
             const [isLookupScanning, setIsLookupScanning] = useState(false);
-            const lookupScannerRef = useRef(null);
+            const html5QrCodeRef = useRef(null);
 
             useEffect(() => {
                 return () => {
-                    if (isLookupScanning) stopLookupScanner();
+                    if (html5QrCodeRef.current) {
+                        if (html5QrCodeRef.current.isScanning) {
+                            html5QrCodeRef.current.stop().catch(err => console.error(err));
+                        }
+                        html5QrCodeRef.current.clear();
+                    }
                 };
-            }, [isLookupScanning]);
+            }, []);
 
             const startLookupScanner = () => {
                 setIsLookupScanning(true);
+                
                 setTimeout(() => {
-                    const element = document.getElementById("lookup-reader");
-                    if (!element) return;
-                    if (!lookupScannerRef.current) {
-                        lookupScannerRef.current = new Html5Qrcode("lookup-reader");
+                    const elementId = "lookup-reader";
+                    const element = document.getElementById(elementId);
+                    if (!element) {
+                        console.error("Scanner element not found");
+                        return;
                     }
+
+                    if (html5QrCodeRef.current) {
+                        if(html5QrCodeRef.current.isScanning) return; 
+                        html5QrCodeRef.current.clear(); 
+                    }
+
+                    const html5QrCode = new Html5Qrcode(elementId);
+                    html5QrCodeRef.current = html5QrCode;
+
                     const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
-                    lookupScannerRef.current.start({ facingMode: "environment" }, config, async (decodedText) => {
-                        try {
-                            await lookupScannerRef.current.stop();
-                            lookupScannerRef.current.clear();
+                    
+                    html5QrCode.start(
+                        { facingMode: "environment" }, 
+                        config, 
+                        async (decodedText) => {
+                            console.log("Scanned text:", decodedText);
+                            try {
+                                if (html5QrCode.isScanning) {
+                                    await html5QrCode.stop();
+                                }
+                                html5QrCode.clear();
+                            } catch (err) {
+                                console.warn("Failed to stop scanner", err);
+                            }
+
                             setIsLookupScanning(false);
-                            
+                            html5QrCodeRef.current = null;
+
                             const found = users.find(u => u.uid === decodedText);
                             if (found) {
                                 setSelectedUser(found);
                             } else {
                                 alert(`미등록 사용자입니다. (ID: ${decodedText})`);
                             }
-                        } catch (err) {
-                            console.error("Stop failed", err);
-                            setIsLookupScanning(false);
-                        }
-                    }, () => {}).catch(err => {
-                        console.error(err);
+                        }, 
+                        (errorMessage) => {}
+                    ).catch(err => {
+                        console.error("Error starting scanner", err);
                         setIsLookupScanning(false);
-                        alert("카메라 권한을 확인해주세요.");
+                        alert("카메라를 실행할 수 없습니다. 권한을 확인해주세요.");
                     });
-                }, 100);
+                }, 300);
             };
 
-            const stopLookupScanner = () => {
-                if (lookupScannerRef.current) {
-                    lookupScannerRef.current.stop().then(() => {
-                        lookupScannerRef.current.clear();
-                        setIsLookupScanning(false);
-                    }).catch(() => {
-                        setIsLookupScanning(false);
-                    });
-                } else {
-                    setIsLookupScanning(false);
+            const stopLookupScanner = async () => {
+                if (html5QrCodeRef.current) {
+                    try {
+                        if (html5QrCodeRef.current.isScanning) {
+                            await html5QrCodeRef.current.stop();
+                        }
+                        html5QrCodeRef.current.clear();
+                    } catch (err) {
+                        console.warn("Error stopping scanner", err);
+                    }
+                    html5QrCodeRef.current = null;
                 }
+                setIsLookupScanning(false);
             };
             // --- QR 조회 기능 추가 끝 ---
 
