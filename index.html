@@ -623,7 +623,7 @@
             );
         };
 
-        const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules }) => {
+        const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules, changeLogs }) => {
             const [manualInput, setManualInput] = useState(false);
 
             // --- QR 조회 기능 추가 (안정성 개선) ---
@@ -875,7 +875,37 @@
                                     )}
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="mt-6 pt-6 border-t border-slate-100">
+                                    <h4 className="font-bold text-sm text-slate-800 mb-3 flex items-center gap-2"><Icon name="history" size={16}/> 변경 및 패널티 이력</h4>
+                                    {changeLogs.filter(l => l.uid === selectedUser.uid).length === 0 ? (
+                                        <p className="text-xs text-slate-400">변경 이력이 없습니다.</p>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-xs text-left">
+                                                <thead className="bg-slate-50 text-slate-500 font-bold">
+                                                    <tr><th className="p-2">일시</th><th className="p-2">항목</th><th className="p-2">내용</th><th className="p-2 text-right">패널티</th><th className="p-2">사유</th></tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-100">
+                                                    {changeLogs.filter(l => l.uid === selectedUser.uid).sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp)).map((log, i) => (
+                                                        <tr key={i}>
+                                                            <td className="p-2 text-slate-400">{log.timestamp.slice(5, 16)}</td>
+                                                            <td className="p-2 font-bold">{log.targetOption}</td>
+                                                            <td className="p-2">
+                                                                <span className="line-through text-slate-300">{log.oldVal}</span> 
+                                                                <span className="mx-1 text-slate-300">→</span> 
+                                                                <span className="text-incar font-bold">{log.newVal}</span>
+                                                            </td>
+                                                            <td className="p-2 text-right font-bold text-rose-500">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</td>
+                                                            <td className="p-2 text-slate-500 truncate max-w-[100px]">{log.reason}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4 mt-4">
                                     <div><label className="block text-xs font-bold text-slate-400 mb-1">변경할 옵션 (Key)</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{key} (현재: {selectedUser.options[key]})</option>)}</select></div>
                                     
                                     <div>
@@ -1015,7 +1045,7 @@
             );
         };
 
-        const ManageView = ({ users, handleUserUpload, handleScheduleUpload, badgeConfig, setBadgeConfig, db, serverError, schedules, logs, setIsPrintMode, setUsers, setSchedules, setLogs, setChangeLogs }) => {
+        const ManageView = ({ users, handleUserUpload, handleScheduleUpload, badgeConfig, setBadgeConfig, db, serverError, schedules, logs, setIsPrintMode, setUsers, setSchedules, setLogs, setChangeLogs, changeLogs }) => {
             const handleBgImageUpload = (e) => {
                 const file = e.target.files[0];
                 if(file){
@@ -1230,13 +1260,25 @@
             };
 
             const exportAllData = () => {
-                if(logs.length === 0) return alert("내보낼 데이터가 없습니다.");
-                const headers = ['스캔일시', '사번', '성명', '소속', '구분', '일정명', '탑승차량', '금액', '최종지급액', '패널티적용'];
-                let tableRows = '';
+                if(logs.length === 0 && changeLogs.length === 0) return alert("내보낼 데이터가 없습니다.");
+                
+                // 로그 데이터 (기존)
+                const logHeaders = ['스캔일시', '사번', '성명', '소속', '구분', '일정명', '탑승차량', '금액', '최종지급액', '패널티적용'];
+                let logRows = '';
                 logs.forEach(l => {
-                    tableRows += `<tr><td>${l.timestamp}</td><td style="mso-number-format:'@'">${l.uid}</td><td>${l.name}</td><td>${l.org}</td><td>${l.action}</td><td>${l.sessionTitle}</td><td>${l.bus}</td><td>${l.amount}</td><td>${l.finalAmount}</td><td>${l.penaltyApplied>0?'Y':'N'}</td></tr>`;
+                    logRows += `<tr><td>${l.timestamp}</td><td style="mso-number-format:'@'">${l.uid}</td><td>${l.name}</td><td>${l.org}</td><td>${l.action}</td><td>${l.sessionTitle}</td><td>${l.bus}</td><td>${l.amount}</td><td>${l.finalAmount}</td><td>${l.penaltyApplied>0?'Y':'N'}</td></tr>`;
                 });
-                const excelHTML = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8"></head><body><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${tableRows}</tbody></table></body></html>`;
+                const logTable = `<h3>[현장 스캔/지급 내역]</h3><table border="1"><thead><tr>${logHeaders.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${logRows}</tbody></table>`;
+
+                // 변경 로그 데이터 (추가)
+                const changeHeaders = ['변경일시', '사번', '성명', '항목', '기존값', '변경값', '패널티금액', '사유'];
+                let changeRows = '';
+                changeLogs.forEach(c => {
+                    changeRows += `<tr><td>${c.timestamp}</td><td style="mso-number-format:'@'">${c.uid}</td><td>${c.name}</td><td>${c.targetOption}</td><td>${c.oldVal}</td><td>${c.newVal}</td><td>${c.penalty}</td><td>${c.reason}</td></tr>`;
+                });
+                const changeTable = `<br><br><h3>[관리자 변경/패널티 이력]</h3><table border="1"><thead><tr>${changeHeaders.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${changeRows}</tbody></table>`;
+
+                const excelHTML = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8"></head><body>${logTable}${changeTable}</body></html>`;
                 const blob = new Blob([excelHTML], { type: 'application/vnd.ms-excel' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
@@ -1735,7 +1777,7 @@
                         }
                         return u;
                     });
-                    setUsers(updatedUsers);
+                    setUsers([...updatedUsers]); // 불변성 유지, 명시적 배열 복사로 리렌더링 유도
                 }
 
                 const changeLog = {
@@ -1797,7 +1839,7 @@
                     if (penaltyApplied > 0) {
                         const currentPenalty = (user.penaltyTotal || 0) + newPenalty;
                         const updatedUsers2 = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: currentPenalty - penaltyApplied } : u);
-                        setUsers(updatedUsers2);
+                        setUsers([...updatedUsers2]);
                     }
                 }
 
@@ -1964,7 +2006,7 @@
                     setLogs([newLog, ...logs]);
                     if (penaltyApplied > 0) {
                         const updatedUsers = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u);
-                        setUsers(updatedUsers);
+                        setUsers([...updatedUsers]);
                     }
                 }
                 const todayLogs = logs.filter(l => l.uid === user.uid && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급');
@@ -1997,16 +2039,18 @@
                         if (u.uid === selectedUser.uid) {
                             const newOptions = { ...u.options, [editForm.optKey]: editForm.optVal };
                             const totalPenalty = (u.penaltyTotal || 0) + newPenalty;
-                            return { ...u, options: newOptions, penaltyTotal: totalPenalty };
+                            const updatedUser = { ...u, options: newOptions, penaltyTotal: totalPenalty };
+                            // 변경된 유저 정보로 즉시 선택된 유저 갱신 (UI 반응성)
+                            setSelectedUser(updatedUser); 
+                            return updatedUser;
                         }
                         return u;
                     });
-                    setUsers(updatedUsers);
+                    setUsers([...updatedUsers]); // 명시적 배열 복사로 리렌더링 트리거
                     setChangeLogs([changeLog, ...changeLogs]);
                 }
                 alert("변경 및 패널티 적용이 완료되었습니다.");
                 setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' });
-                setSelectedUser(null);
                 setSearchQuery('');
             };
 
@@ -2050,8 +2094,8 @@
                                 {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
                                 {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} />}
                                 {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} />}
-                                {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} schedules={schedules} />}
-                                {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} badgeConfig={badgeConfig} setBadgeConfig={setBadgeConfig} db={db} serverError={serverError} schedules={schedules} logs={logs} setIsPrintMode={setIsPrintMode} setUsers={setUsers} setSchedules={setSchedules} setLogs={setLogs} setChangeLogs={setChangeLogs} />} 
+                                {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} schedules={schedules} changeLogs={changeLogs} />}
+                                {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} badgeConfig={badgeConfig} setBadgeConfig={setBadgeConfig} db={db} serverError={serverError} schedules={schedules} logs={logs} setIsPrintMode={setIsPrintMode} setUsers={setUsers} setSchedules={setSchedules} setLogs={setLogs} setChangeLogs={setChangeLogs} changeLogs={changeLogs} />} 
                             </div>
                         </div>
                         { isMobile && <MobileTab activeTab={activeTab} setActiveTab={setActiveTab} /> }
