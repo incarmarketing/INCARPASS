@@ -224,6 +224,48 @@
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="2"/>}</svg>;
         };
 
+        const Sidebar = ({ activeTab, setActiveTab, isOpen, onClose }) => (
+            <>
+                {isOpen && (
+                    <div 
+                        className="fixed inset-0 bg-black/50 z-40 md:hidden"
+                        onClick={onClose}
+                    ></div>
+                )}
+                <aside className={`
+                    fixed md:static inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 flex flex-col shadow-lg transition-transform duration-300 ease-in-out no-print
+                    ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 md:transform-none'}
+                `}>
+                    <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
+                            <h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PC</span></h1>
+                        </div>
+                        <button onClick={onClose} className="md:hidden text-slate-400 hover:text-slate-600">
+                            <Icon name="x" size={24} />
+                        </button>
+                    </div>
+                    <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+                        {[
+                            {id:'dashboard', icon:'dashboard', label:'현황 (Status)'},
+                            {id:'boarding', icon:'bus', label:'탑승 (Boarding)'},
+                            {id:'payment', icon:'money', label:'지급 (Payment)'},
+                            {id:'change', icon:'edit', label:'관리 (Management)'},
+                            {id:'manage', icon:'settings', label:'설정 (Settings)'}
+                        ].map(menu => (
+                            <button key={menu.id} onClick={()=>{setActiveTab(menu.id); onClose();}} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab===menu.id ? 'bg-incar text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>
+                                <Icon name={menu.icon} /> {menu.label}
+                            </button>
+                        ))}
+                    </nav>
+                    <div className="p-6 border-t border-slate-100">
+                        <div className="text-xs text-slate-400 font-bold mb-2">OPERATOR</div>
+                        <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-slate-200"></div><div className="text-sm font-bold text-slate-700">관리자님</div></div>
+                    </div>
+                </aside>
+            </>
+        );
+
         const ResultModal = ({ result, onClose, onForceUpdate }) => {
             if (!result) return null;
             const { status, msg, subMsg, user, logs, relatedLogs, requiredChoice, session } = result;
@@ -1262,27 +1304,73 @@
             const exportAllData = () => {
                 if(logs.length === 0 && changeLogs.length === 0) return alert("내보낼 데이터가 없습니다.");
                 
-                // 로그 데이터 (기존)
-                const logHeaders = ['스캔일시', '사번', '성명', '소속', '구분', '일정명', '탑승차량', '금액', '최종지급액', '패널티적용'];
-                let logRows = '';
+                // 데이터 통합 및 정렬
+                const combinedData = [];
+
+                // 일반 로그 (지급/탑승) 추가
                 logs.forEach(l => {
-                    logRows += `<tr><td>${l.timestamp}</td><td style="mso-number-format:'@'">${l.uid}</td><td>${l.name}</td><td>${l.org}</td><td>${l.action}</td><td>${l.sessionTitle}</td><td>${l.bus}</td><td>${l.amount}</td><td>${l.finalAmount}</td><td>${l.penaltyApplied>0?'Y':'N'}</td></tr>`;
+                    combinedData.push({
+                        rawTime: l.timestamp,
+                        일시: l.timestamp.replace('T', ' ').slice(0, 16),
+                        사번: l.uid,
+                        성명: l.name,
+                        구분: l.action, // '지급' or '탑승'
+                        일정명: l.sessionTitle,
+                        금액: l.finalAmount || 0,
+                        패널티: l.penaltyApplied || 0,
+                        탑승차량: l.bus,
+                        비고: ''
+                    });
                 });
-                const logTable = `<h3>[현장 스캔/지급 내역]</h3><table border="1"><thead><tr>${logHeaders.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${logRows}</tbody></table>`;
 
-                // 변경 로그 데이터 (추가)
-                const changeHeaders = ['변경일시', '사번', '성명', '항목', '기존값', '변경값', '패널티금액', '사유'];
-                let changeRows = '';
+                // 변경 로그 추가
                 changeLogs.forEach(c => {
-                    changeRows += `<tr><td>${c.timestamp}</td><td style="mso-number-format:'@'">${c.uid}</td><td>${c.name}</td><td>${c.targetOption}</td><td>${c.oldVal}</td><td>${c.newVal}</td><td>${c.penalty}</td><td>${c.reason}</td></tr>`;
-                });
-                const changeTable = `<br><br><h3>[관리자 변경/패널티 이력]</h3><table border="1"><thead><tr>${changeHeaders.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${changeRows}</tbody></table>`;
+                    // timestamp 형식이 toLocaleString일수도 있고 toISOString일수도 있음. 포맷 통일 시도.
+                    let timeStr = c.timestamp;
+                    if(timeStr.includes('T')) timeStr = timeStr.replace('T', ' ').slice(0, 16);
 
-                const excelHTML = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8"></head><body>${logTable}${changeTable}</body></html>`;
+                    combinedData.push({
+                        rawTime: c.timestamp,
+                        일시: timeStr,
+                        사번: c.uid,
+                        성명: c.name,
+                        구분: '변경',
+                        일정명: c.targetOption, // 변경 대상 옵션키 (예: 2일차 투어)
+                        금액: 0,
+                        패널티: c.penalty || 0,
+                        탑승차량: '', // 변경은 차량과 무관하므로 공란
+                        비고: `${c.oldVal} -> ${c.newVal} | ${c.reason}` // 변경 내역과 사유를 비고에 통합
+                    });
+                });
+
+                // 시간순 정렬 (내림차순 - 최신순)
+                combinedData.sort((a, b) => new Date(b.rawTime) - new Date(a.rawTime));
+
+                // 2. HTML 테이블 생성 (요청된 컬럼 순서 적용)
+                // 일시 | 사번 | 성명 | 구분 | 일정명 | 금액 | 패널티 | 탑승차량 | 비고
+                const headers = ['일시', '사번', '성명', '구분', '일정명', '금액', '패널티', '탑승차량', '비고'];
+                let rows = '';
+                combinedData.forEach(d => {
+                    rows += `<tr>
+                        <td>${d.일시}</td>
+                        <td style="mso-number-format:'@'">${d.사번}</td>
+                        <td>${d.성명}</td>
+                        <td>${d.구분}</td>
+                        <td>${d.일정명}</td>
+                        <td>${d.금액}</td>
+                        <td>${d.패널티}</td>
+                        <td>${d.탑승차량}</td>
+                        <td>${d.비고}</td>
+                    </tr>`;
+                });
+
+                const tableHTML = `<table border="1"><thead><tr>${headers.map(h=>`<th style="background-color:#f0f0f0;">${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
+                const excelHTML = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8"></head><body><h3>[INCARPASS 통합 운영 로그]</h3>${tableHTML}</body></html>`;
+                
                 const blob = new Blob([excelHTML], { type: 'application/vnd.ms-excel' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
-                link.download = `INCARPASS_DATA_${new Date().toISOString().slice(0,10)}.xls`;
+                link.download = `INCARPASS_Unified_Log_${new Date().toISOString().slice(0,10)}.xls`;
                 link.click();
             };
 
@@ -1500,9 +1588,7 @@
                                             let content = layer.content;
                                             if (layer.variable) { if (layer.variable === 'name') content = u.name; else if (layer.variable === 'org') content = u.org; else if (layer.variable === 'role') content = u.options && (u.options['직책'] || u.options['Role'] || '-'); else if (layer.variable === 'id') content = u.uid; }
                                             return <div key={layer.id} className={layer.fontFamily} style={{ ...commonStyle, fontSize: `${layer.fontSize}px`, color: layer.color, fontWeight: layer.fontWeight || 'bold', backgroundColor: layer.bgColor || 'transparent', padding: `${layer.padding || 0}px`, borderRadius: `${layer.borderRadius || 0}px`, textShadow: layer.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none', whiteSpace: 'nowrap' }}>{content}</div>;
-                                        } else if (layer.type === 'rect' || layer.type === 'circle') {
-                                            return <div key={layer.id} style={{ ...commonStyle, width: `${layer.w}px`, height: `${layer.h}px`, backgroundColor: layer.fill, border: `${layer.borderWidth}px solid ${layer.borderColor}`, borderRadius: layer.type === 'circle' ? '50%' : `${layer.borderRadius}px`, opacity: layer.opacity }}></div>;
-                                        }
+                                        } 
                                         return null;
                                     })}
                                 </div>
@@ -1513,45 +1599,31 @@
             );
         };
 
-        const Sidebar = ({ activeTab, setActiveTab }) => (
-            <aside className="w-64 bg-white h-full border-r border-slate-200 flex flex-col shadow-lg z-30 no-print">
-                <div className="p-6 border-b border-slate-100 flex items-center gap-3">
-                    <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
-                    <h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PC</span></h1>
-                </div>
-                <nav className="flex-1 p-4 space-y-2">
-                    {[
-                        {id:'dashboard', icon:'dashboard', label:'현황 (Status)'},
-                        {id:'boarding', icon:'bus', label:'탑승 (Boarding)'},
-                        {id:'payment', icon:'money', label:'지급 (Payment)'},
-                        {id:'change', icon:'edit', label:'관리 (Management)'},
-                        {id:'manage', icon:'settings', label:'설정 (Settings)'}
-                    ].map(menu => (
-                        <button key={menu.id} onClick={()=>setActiveTab(menu.id)} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab===menu.id ? 'bg-incar text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>
-                            <Icon name={menu.icon} /> {menu.label}
-                        </button>
-                    ))}
-                </nav>
-                <div className="p-6 border-t border-slate-100">
-                    <div className="text-xs text-slate-400 font-bold mb-2">OPERATOR</div>
-                    <div className="flex items-center gap-3"><div className="w-8 h-8 rounded-full bg-slate-200"></div><div className="text-sm font-bold text-slate-700">관리자님</div></div>
-                </div>
-            </aside>
-        );
-
-        const MobileTab = ({ activeTab, setActiveTab }) => (
-            <nav className="fixed bottom-0 w-full bg-white border-t border-slate-200 pb-safe pt-2 px-4 flex justify-around items-center z-30 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] no-print">
-                <button onClick={()=>setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='dashboard'?'text-incar':'text-slate-300'}`}><Icon name="dashboard" size={20} className={activeTab==='dashboard'?'fill-current':''} /><span className="text-[9px] font-bold">현황</span></button>
-                <button onClick={()=>setActiveTab('boarding')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='boarding'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='boarding'?'bg-incar text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="bus" size={20} /></div>{activeTab!=='boarding' && <span className="text-[9px] font-bold">탑승</span>}</button>
-                <button onClick={()=>setActiveTab('payment')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='payment'?'text-emerald-500':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='payment'?'bg-emerald-500 text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="money" size={20} /></div>{activeTab!=='payment' && <span className="text-[9px] font-bold">지급</span>}</button>
-                <button onClick={()=>setActiveTab('change')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='change'?'text-incar':'text-slate-300'}`}><Icon name="edit" size={20} className={activeTab==='change'?'fill-current':''} /><span className="text-[9px] font-bold">관리</span></button>
-            </nav>
-        );
-
         const App = () => {
             const [activeTab, setActiveTab] = useState('dashboard');
-            const [isPrintMode, setIsPrintMode] = useState(false);
+            const [users, setUsers] = useState([]);
+            const [schedules, setSchedules] = useState([]);
+            const [logs, setLogs] = useState([]);
+            const [changeLogs, setChangeLogs] = useState([]);
             
+            // --- 중요: 대시보드 진행률 계산 시 users 상태 변경도 감지해야 함 ---
+            const scheduleStats = useMemo(() => {
+                return schedules.map(s => {
+                    let targetCount = 0;
+                    if(s.targetKey === 'ALL') targetCount = users.length;
+                    else targetCount = users.filter(u => u.options && u.options[s.targetKey] && u.options[s.targetKey].includes(s.targetVal)).length;
+                    
+                    const doneCount = logs.filter(l => l.sessionId === s.id).length;
+                    const percent = targetCount > 0 ? Math.round((doneCount / targetCount) * 100) : 0;
+                    const expectedAmount = targetCount * (s.price || 0);
+                    const actualAmount = logs.filter(l => l.sessionId === s.id).reduce((sum, l) => sum + (l.finalAmount || 0), 0);
+                    const diffCount = doneCount - targetCount;
+                    const diffAmount = actualAmount - expectedAmount;
+                    return { ...s, targetCount, doneCount, percent, expectedAmount, actualAmount, diffCount, diffAmount };
+                });
+            }, [schedules, users, logs]); // [users] 의존성 추가 완료
+
+            const [isPrintMode, setIsPrintMode] = useState(false);
             const [badgeConfig, setBadgeConfig] = useState({
                 bgImage: null,
                 imgWidth: 545,
@@ -1565,19 +1637,12 @@
             });
 
             const [user, setUser] = useState(null); 
-            const [db, setDb] = useState(null);      
+            const [db, setDb] = useState(null);       
             const [isLoading, setIsLoading] = useState(true);
             const [serverError, setServerError] = useState(null);
-
-            const [users, setUsers] = useState([]);
-            const [schedules, setSchedules] = useState([]);
-            const [logs, setLogs] = useState([]);
-            const [changeLogs, setChangeLogs] = useState([]);
-            const [scanResult, setScanResult] = useState(null);
             
+            const [scanResult, setScanResult] = useState(null);
             const [selectedSession, setSelectedSession] = useState(null);
-
-            const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
             const [isScanning, setIsScanning] = useState(false);
             const [targetSessionId, setTargetSessionId] = useState('');
             const [targetBus, setTargetBus] = useState('1호차');
@@ -1587,6 +1652,8 @@
             const [editForm, setEditForm] = useState({ optKey: '', optVal: '', penalty: 0, reason: '' });
             const [refundRequest, setRefundRequest] = useState(null);
             const [forfeitRequest, setForfeitRequest] = useState(null);
+            const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
             const SYSTEM_APP_ID = 'inca-prod-v1';
 
@@ -1677,6 +1744,7 @@
                     if (loadedBadgeConfig.layers) {
                         setBadgeConfig(loadedBadgeConfig);
                     } else if (loadedBadgeConfig.name) {
+                        // ... legacy config migration code (omitted for brevity but kept in original) ...
                         const newLayers = [];
                         if (loadedBadgeConfig.qr) newLayers.push({ id: 'qr', type: 'qr', x: loadedBadgeConfig.qr.x, y: loadedBadgeConfig.qr.y, size: loadedBadgeConfig.qr.size });
                         ['org', 'name', 'role'].forEach(key => {
@@ -1712,28 +1780,30 @@
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
             useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_9', JSON.stringify(badgeConfig)); }, [badgeConfig]);
 
-            const getOldLogIdsToDelete = (uid, targetKey, oldVal) => {
+            /* --- 핵심 로직: 일정 변경 시 이전 로그 정리 (대시보드 정확도 향상) --- */
+            const cleanupOldLogs = async (uid, targetKey, oldVal) => {
                 const oldSessions = schedules.filter(s => s.targetKey === targetKey && s.targetVal === oldVal);
                 if(oldSessions.length === 0) return [];
                 const logsToDelete = logs.filter(l => l.uid === uid && oldSessions.some(s => s.id === l.sessionId));
-                return logsToDelete.map(l => l.id);
-            };
+                const oldLogIds = logsToDelete.map(l => l.id);
 
-            const cleanupOldLogs = async (uid, targetKey, oldVal) => {
-                const oldLogIds = getOldLogIdsToDelete(uid, targetKey, oldVal);
                 if(oldLogIds.length > 0) {
-                    if(db) {
+                    if (db) {
                         const batch = db.batch();
                         oldLogIds.forEach(logId => {
                             const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logId);
                             batch.delete(ref);
                         });
                         await batch.commit();
-                    } 
+                    } else {
+                        // 로컬 상태 즉시 업데이트
+                        setLogs(prevLogs => prevLogs.filter(l => !oldLogIds.includes(l.id)));
+                    }
                 }
                 return oldLogIds;
             };
-            
+
+            // ... (handleManualComplete, executeUpdate 등 기존 함수들 유지) ...
             const handleManualComplete = async (user, session) => {
                 if(!confirm(`${user.name}님을 수동으로 [${session.type==='PAYMENT'?'지급완료':'탑승완료'}] 처리하시겠습니까?`)) return;
                 const newLog = {
@@ -1777,7 +1847,7 @@
                         }
                         return u;
                     });
-                    setUsers([...updatedUsers]); // 불변성 유지, 명시적 배열 복사로 리렌더링 유도
+                    setUsers([...updatedUsers]);
                 }
 
                 const changeLog = {
@@ -2016,7 +2086,9 @@
             const handleUserUpdate = async () => {
                 if (!selectedUser || !editForm.optKey) return;
                 const oldVal = selectedUser.options[editForm.optKey];
+                
                 await cleanupOldLogs(selectedUser.uid, editForm.optKey, oldVal);
+                
                 const newPenalty = parseInt(editForm.penalty || 0);
                 const changeLog = {
                     id: `CHG_${Date.now()}`,
@@ -2040,34 +2112,18 @@
                             const newOptions = { ...u.options, [editForm.optKey]: editForm.optVal };
                             const totalPenalty = (u.penaltyTotal || 0) + newPenalty;
                             const updatedUser = { ...u, options: newOptions, penaltyTotal: totalPenalty };
-                            // 변경된 유저 정보로 즉시 선택된 유저 갱신 (UI 반응성)
                             setSelectedUser(updatedUser); 
                             return updatedUser;
                         }
                         return u;
                     });
-                    setUsers([...updatedUsers]); // 명시적 배열 복사로 리렌더링 트리거
+                    setUsers([...updatedUsers]); 
                     setChangeLogs([changeLog, ...changeLogs]);
                 }
                 alert("변경 및 패널티 적용이 완료되었습니다.");
                 setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' });
                 setSearchQuery('');
             };
-
-            const scheduleStats = useMemo(() => {
-                return schedules.map(s => {
-                    let targetCount = 0;
-                    if(s.targetKey === 'ALL') targetCount = users.length;
-                    else targetCount = users.filter(u => u.options && u.options[s.targetKey] && u.options[s.targetKey].includes(s.targetVal)).length;
-                    const doneCount = logs.filter(l => l.sessionId === s.id).length;
-                    const percent = targetCount > 0 ? Math.round((doneCount / targetCount) * 100) : 0;
-                    const expectedAmount = targetCount * (s.price || 0);
-                    const actualAmount = logs.filter(l => l.sessionId === s.id).reduce((sum, l) => sum + (l.finalAmount || 0), 0);
-                    const diffCount = doneCount - targetCount;
-                    const diffAmount = actualAmount - expectedAmount;
-                    return { ...s, targetCount, doneCount, percent, expectedAmount, actualAmount, diffCount, diffAmount };
-                });
-            }, [schedules, users, logs]);
 
             const groupedStats = useMemo(() => {
                 const groups = {};
@@ -2081,11 +2137,17 @@
 
             return (
                 <div className="h-full flex flex-row bg-slate-50 w-full">
-                    { !isMobile && <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} /> }
+                    <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
                     <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full">
                         { isMobile && (
                             <header className="bg-white px-6 py-4 shadow-sm flex justify-between items-center z-20 no-print">
-                                <div className="flex items-center gap-2"><div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div><h1 className="font-black text-slate-800 tracking-tight">INCARPASS</h1></div>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 text-slate-500">
+                                        <Icon name="menu" size={24} />
+                                    </button>
+                                    <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
+                                    <h1 className="font-black text-slate-800 tracking-tight">INCARPASS</h1>
+                                </div>
                                 <div className="text-xs font-bold text-slate-400">{users.length}명</div>
                             </header>
                         )}
@@ -2098,7 +2160,6 @@
                                 {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} badgeConfig={badgeConfig} setBadgeConfig={setBadgeConfig} db={db} serverError={serverError} schedules={schedules} logs={logs} setIsPrintMode={setIsPrintMode} setUsers={setUsers} setSchedules={setSchedules} setLogs={setLogs} setChangeLogs={setChangeLogs} changeLogs={changeLogs} />} 
                             </div>
                         </div>
-                        { isMobile && <MobileTab activeTab={activeTab} setActiveTab={setActiveTab} /> }
                         {isPrintMode && <BadgePrintView users={users} config={badgeConfig} onClose={() => setIsPrintMode(false)} />}
                         
                         {selectedSession && (
