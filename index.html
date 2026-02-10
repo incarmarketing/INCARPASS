@@ -71,7 +71,13 @@
         .data-table tr:hover td { background-color: #f8fafc; }
 
         /* 스캐너 카메라 정사각형 강제 스타일 */
-        #reader video, #lookup-reader video {
+        #reader {
+            width: 100% !important;
+            height: 100% !important;
+            overflow: hidden;
+            border-radius: 1.5rem;
+        }
+        #reader video {
             object-fit: cover !important;
             width: 100% !important;
             height: 100% !important;
@@ -563,10 +569,9 @@
             </div>
         );
 
-        const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile }) => {
+        const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile, busList, setBusList }) => {
             const scannerRef = useRef(null);
             const isRunningRef = useRef(false);
-            const [maxBusNum, setMaxBusNum] = useState(3);
             
             const filteredSchedules = useMemo(() => {
                 return schedules.filter(s => s.type === mode);
@@ -587,9 +592,32 @@
                 };
             }, []);
 
-            const addBus = () => {
-                if(confirm("차량을 추가하시겠습니까?")) {
-                    setMaxBusNum(prev => prev + 1);
+            const handleAddBus = () => {
+                const newBus = prompt("추가할 차량 번호를 입력하세요 (예: 5호차)");
+                if(newBus && newBus.trim()) {
+                    const newList = [...busList, newBus.trim()];
+                    setBusList(newList);
+                    if(!manualBus) setTargetBus(newBus.trim());
+                }
+            };
+
+            const handleRenameBus = (index) => {
+                const oldName = busList[index];
+                const newName = prompt(`'${oldName}'의 새로운 이름을 입력하세요:`, oldName);
+                if (newName && newName.trim()) {
+                    const newList = [...busList];
+                    newList[index] = newName.trim();
+                    setBusList(newList);
+                    if(targetBus === oldName) setTargetBus(newName.trim());
+                }
+            };
+
+            const handleDeleteBus = (index, e) => {
+                e.stopPropagation();
+                if(confirm(`'${busList[index]}'을(를) 삭제하시겠습니까?`)){
+                    const newList = busList.filter((_, i) => i !== index);
+                    setBusList(newList);
+                    if(targetBus === busList[index] && newList.length > 0) setTargetBus(newList[0]);
                 }
             };
 
@@ -652,19 +680,45 @@
                                 <div className="flex items-center gap-2 mb-3">
                                     <span className="px-2 py-1 rounded-lg text-xs font-bold bg-slate-800 text-white">STEP 2</span>
                                     <div className="flex justify-between items-center flex-1">
-                                        <h3 className="text-lg font-bold text-slate-800">차량 번호 선택</h3>
-                                        <button onClick={()=>setManualBus(!manualBus)} className="text-xs font-bold text-slate-400 underline decoration-slate-300">{manualBus ? '목록에서 선택' : '직접 입력'}</button>
+                                        <h3 className="text-lg font-bold text-slate-800">차량 선택</h3>
+                                        <button onClick={()=>setManualBus(!manualBus)} className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors ${manualBus ? 'bg-incar text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
+                                            {manualBus ? '관리 완료' : '차량 관리'}
+                                        </button>
                                     </div>
                                 </div>
-                                {manualBus ? 
-                                    <input type="text" value={targetBus} onChange={e=>setTargetBus(e.target.value)} className="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl font-bold text-center text-lg focus:border-incar outline-none" placeholder="차량 번호 입력" /> :
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {[...Array(maxBusNum)].map((_, i) => i + 1).map(n => (
-                                            <button key={n} onClick={()=>setTargetBus(`${n}호차`)} className={`py-3 rounded-xl text-sm font-bold transition-all ${targetBus===`${n}호차`?'bg-incar text-white shadow-lg scale-105':'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{n}호차</button>
-                                        ))}
-                                        <button onClick={addBus} className="py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-400 hover:bg-slate-200 flex items-center justify-center"><Icon name="plus" size={16} /></button>
-                                    </div>
-                                }
+
+                                <div className="grid grid-cols-4 gap-2">
+                                    {busList.map((bus, i) => (
+                                        <div key={i} className="relative group">
+                                            <button 
+                                                onClick={() => manualBus ? handleRenameBus(i) : setTargetBus(bus)}
+                                                className={`w-full py-3 rounded-xl text-sm font-bold transition-all relative ${
+                                                    targetBus === bus && !manualBus
+                                                    ? 'bg-incar text-white shadow-lg scale-105 z-10' 
+                                                    : manualBus 
+                                                        ? 'bg-white border-2 border-dashed border-indigo-200 text-indigo-400 hover:bg-indigo-50'
+                                                        : 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                                }`}
+                                            >
+                                                {bus}
+                                                {manualBus && <span className="absolute bottom-0.5 right-1 text-[8px] opacity-50">수정</span>}
+                                            </button>
+                                            {manualBus && (
+                                                <button 
+                                                    onClick={(e) => handleDeleteBus(i, e)}
+                                                    className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-md z-20 hover:scale-110 transition-transform"
+                                                >
+                                                    <Icon name="x" size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                    
+                                    <button onClick={handleAddBus} className="py-3 rounded-xl text-sm font-bold bg-slate-50 border-2 border-dashed border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600 hover:border-slate-300 transition-all flex items-center justify-center">
+                                        <Icon name="plus" size={20} />
+                                    </button>
+                                </div>
+                                {manualBus && <div className="text-[10px] text-slate-400 mt-2 text-right">* 차량을 눌러 이름을 수정하거나 X를 눌러 삭제하세요.</div>}
                             </div>
                         )}
                     </div>
@@ -683,7 +737,7 @@
                             </button>
                             
                             <div className="relative w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/20">
-                                <div id="reader" className="w-full h-full object-cover"></div>
+                                <div id="reader"></div>
                                 <div className={`scan-line ${mode==='BOARDING'?'bg-incar':'bg-emerald-500'}`}></div>
                                 <div className="absolute inset-0 border-2 border-white/30 rounded-3xl pointer-events-none"></div>
                                 <div className="absolute top-0 left-0 w-16 h-16 border-t-4 border-l-4 border-white rounded-tl-3xl pointer-events-none"></div>
@@ -708,8 +762,6 @@
         const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules, changeLogs }) => {
             const [manualInput, setManualInput] = useState(false);
             const [showAllHistory, setShowAllHistory] = useState(false);
-
-            // --- QR 조회 기능 추가 (안정성 개선) ---
             const [isLookupScanning, setIsLookupScanning] = useState(false);
             const html5QrCodeRef = useRef(null);
 
@@ -749,7 +801,6 @@
                         { facingMode: "environment" }, 
                         config, 
                         async (decodedText) => {
-                            console.log("Scanned text:", decodedText);
                             try {
                                 if (html5QrCode.isScanning) {
                                     await html5QrCode.stop();
@@ -792,7 +843,6 @@
                 }
                 setIsLookupScanning(false);
             };
-            // --- QR 조회 기능 추가 끝 ---
 
             const userSchedules = useMemo(() => {
                 if (!selectedUser || !schedules) return [];
@@ -900,7 +950,7 @@
                                     <Icon name="x" size={32} />
                                 </button>
                                 <div className="relative w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/20">
-                                    <div id="lookup-reader" className="w-full h-full object-cover"></div>
+                                    <div id="lookup-reader"></div>
                                     <div className="scan-line bg-incar"></div>
                                     <div className="absolute inset-0 border-2 border-white/30 rounded-3xl pointer-events-none"></div>
                                     <div className="absolute top-0 left-0 w-16 h-16 border-t-4 border-l-4 border-white rounded-tl-3xl pointer-events-none"></div>
@@ -1088,7 +1138,7 @@
                     top: `${layer.y}%`,
                     left: `${layer.x}%`,
                     transform: 'translate(-50%, -50%)',
-                    zIndex: index, // 배열 인덱스에 따라 물리적 깊이 결정
+                    zIndex: index, 
                     width: layer.width === 'auto' ? 'auto' : `${layer.width}px`,
                     textAlign: layer.align || 'center',
                     cursor: 'default',
@@ -1119,7 +1169,7 @@
                             padding: `${layer.padding || 0}px`,
                             borderRadius: `${layer.borderRadius || 0}px`,
                             textShadow: layer.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none',
-                            fontFamily: layer.fontFamily // 폰트 적용
+                            fontFamily: layer.fontFamily 
                         }}>
                             {content}
                         </div>
@@ -1345,7 +1395,7 @@
                     transform: 'translate(-50%, -50%)',
                     cursor: 'grab',
                     border: isSelected ? '2px solid #3b82f6' : '1px dashed rgba(0,0,0,0.1)',
-                    zIndex: index, // 타입별 강제 우선순위 제거: 배열 인덱스에 따라 물리적 깊이 결정 (직관적 적용)
+                    zIndex: index, 
                 };
 
                 const handlers = {
@@ -1363,9 +1413,9 @@
                             fontSize: `${layer.fontSize}px`, color: layer.color, fontWeight: layer.fontWeight || 'bold',
                             backgroundColor: layer.bgColor || 'transparent', padding: `${layer.padding || 0}px`, borderRadius: `${layer.borderRadius || 0}px`,
                             width: layer.width === 'auto' ? 'auto' : `${layer.width}px`, textAlign: layer.align || 'center', whiteSpace: 'nowrap',
-                            fontFamily: layer.fontFamily // 폰트 적용
+                            fontFamily: layer.fontFamily
                         }}>
-                            {contentOrPlaceholder(layer)}
+                            {(!layer.variable ? layer.content : { name: '성 명', org: '소 속', role: '직 책', id: '사 번' }[layer.variable] || layer.content)}
                         </div>
                     );
                 } else if (layer.type === 'rect' || layer.type === 'circle') {
@@ -1721,17 +1771,25 @@
             const [logs, setLogs] = useState([]);
             const [changeLogs, setChangeLogs] = useState([]);
             
-            // --- 중요: 대시보드 진행률 계산 시 users 상태 변경도 감지해야 함 ---
+            // 차량 목록 관리용 상태 (LocalStorage 저장)
+            const [busList, setBusList] = useState(() => {
+                const saved = localStorage.getItem('incar_pro_bus_list');
+                return saved ? JSON.parse(saved) : ['1호차', '2호차', '3호차'];
+            });
+
+            // 차량 목록이 변경될 때마다 로컬 스토리지에 저장
+            useEffect(() => {
+                localStorage.setItem('incar_pro_bus_list', JSON.stringify(busList));
+            }, [busList]);
+
             const scheduleStats = useMemo(() => {
                 return schedules.map(s => {
                     let targetCount = 0;
                     if(s.targetKey === 'ALL') targetCount = users.length;
                     else targetCount = users.filter(u => u.options && u.options[s.targetKey] && u.options[s.targetKey].includes(s.targetVal)).length;
                     
-                    // NEW: 로그 검증 로직 강화 (옵션 변경 시 즉시 반영)
                     const doneCount = logs.filter(l => {
                         if (l.sessionId !== s.id) return false;
-                        // 로그상의 유저가 현재도 이 스케줄의 대상자인지 확인 (유효성 이중 체크)
                         const currentUser = users.find(u => u.uid === l.uid);
                         if (!currentUser) return false; 
                         
@@ -1743,7 +1801,6 @@
 
                     const percent = targetCount > 0 ? Math.round((doneCount / targetCount) * 100) : 0;
                     const expectedAmount = targetCount * (s.price || 0);
-                    // 실제 집행액 계산 시에도 동일한 필터링 적용 (유효한 로그만 집계)
                     const actualAmount = logs.filter(l => {
                         if (l.sessionId !== s.id) return false;
                         const currentUser = users.find(u => u.uid === l.uid);
@@ -1758,7 +1815,17 @@
                     const diffAmount = actualAmount - expectedAmount;
                     return { ...s, targetCount, doneCount, percent, expectedAmount, actualAmount, diffCount, diffAmount };
                 });
-            }, [schedules, users, logs]); // [users] 의존성 추가 완료
+            }, [schedules, users, logs]);
+
+            const groupedStats = useMemo(() => {
+                const groups = {};
+                scheduleStats.forEach(stat => {
+                    const date = stat.displayDate || '기타';
+                    if(!groups[date]) groups[date] = [];
+                    groups[date].push(stat);
+                });
+                return groups;
+            }, [scheduleStats]);
 
             const [isPrintMode, setIsPrintMode] = useState(false);
             const [badgeConfig, setBadgeConfig] = useState({
@@ -1774,7 +1841,7 @@
             });
 
             const [user, setUser] = useState(null); 
-            const [db, setDb] = useState(null);       
+            const [db, setDb] = useState(null);        
             const [isLoading, setIsLoading] = useState(true);
             const [serverError, setServerError] = useState(null);
             
@@ -1881,7 +1948,6 @@
                     if (loadedBadgeConfig.layers) {
                         setBadgeConfig(loadedBadgeConfig);
                     } else if (loadedBadgeConfig.name) {
-                        // ... legacy config migration code (omitted for brevity but kept in original) ...
                         const newLayers = [];
                         if (loadedBadgeConfig.qr) newLayers.push({ id: 'qr', type: 'qr', x: loadedBadgeConfig.qr.x, y: loadedBadgeConfig.qr.y, size: loadedBadgeConfig.qr.size });
                         ['org', 'name', 'role'].forEach(key => {
@@ -1919,52 +1985,23 @@
 
             /* --- 핵심 로직: 일정 변경 시 이전 로그 정리 (대시보드 정확도 향상) --- */
             const cleanupOldLogs = async (uid, targetKey, oldVal, performUpdate = true) => {
-                // 이전 로그를 찾기 위해 해당 옵션키(targetKey)를 가진 모든 스케줄을 조회합니다.
-                // 값이 oldVal인 것만 찾는게 아니라, 해당 카테고리(예: 2일차) 전체를 조회하여 관련 로그를 삭제해야
-                // 이동 전 일정의 카운트가 정확히 줄어듭니다.
                 const relatedSessions = schedules.filter(s => s.targetKey === targetKey);
-                
                 const logsToDelete = logs.filter(l => l.uid === uid && relatedSessions.some(s => s.id === l.sessionId));
                 const oldLogIds = logsToDelete.map(l => l.id);
-
                 if(performUpdate && oldLogIds.length > 0) {
                     if (db) {
                         const batch = db.batch();
-                        oldLogIds.forEach(logId => {
-                            const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logId);
-                            batch.delete(ref);
-                        });
+                        oldLogIds.forEach(logId => { const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logId); batch.delete(ref); });
                         await batch.commit();
-                    } else {
-                        // 로컬 상태 즉시 업데이트 (여기서만 호출될 경우)
-                        setLogs(prevLogs => prevLogs.filter(l => !oldLogIds.includes(l.id)));
-                    }
+                    } else { setLogs(prevLogs => prevLogs.filter(l => !oldLogIds.includes(l.id))); }
                 }
                 return oldLogIds;
             };
 
-            // ... (handleManualComplete, executeUpdate 등 기존 함수들 유지) ...
             const handleManualComplete = async (user, session) => {
                 if(!confirm(`${user.name}님을 수동으로 [${session.type==='PAYMENT'?'지급완료':'탑승완료'}] 처리하시겠습니까?`)) return;
-                const newLog = {
-                    id: `LOG_${Date.now()}_MANUAL`,
-                    timestamp: new Date().toLocaleString(),
-                    uid: user.uid,
-                    name: user.name,
-                    org: user.org,
-                    action: session.type === 'PAYMENT' ? '지급' : '탑승',
-                    sessionId: session.id,
-                    sessionTitle: session.title,
-                    bus: '수동처리',
-                    amount: session.type === 'PAYMENT' ? session.price : 0,
-                    penaltyApplied: 0,
-                    finalAmount: session.type === 'PAYMENT' ? session.price : 0
-                };
-                if(db) {
-                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog);
-                } else {
-                    setLogs([newLog, ...logs]);
-                }
+                const newLog = { id: `LOG_${Date.now()}_MANUAL`, timestamp: new Date().toLocaleString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: '수동처리', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: 0, finalAmount: session.type === 'PAYMENT' ? session.price : 0 };
+                if(db) { await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); } else { setLogs([newLog, ...logs]); }
                 alert("처리되었습니다.");
             };
 
@@ -1972,382 +2009,317 @@
                 if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
                 
                 const oldVal = user.options[session.targetKey];
-                
-                // 로컬 모드일 경우 여기서 직접 삭제하지 않고 ID만 받아온 뒤 아래에서 한 번에 처리합니다. (Race Condition 방지)
                 const logIdsToRemove = await cleanupOldLogs(user.uid, session.targetKey, oldVal, !!db);
                 const newPenalty = penaltyAmount;
 
-                if(db) {
-                    const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
-                    const updatedOptions = { ...user.options, [session.targetKey]: requiredChoice };
-                    await userRef.update({ options: updatedOptions, penaltyTotal: (user.penaltyTotal || 0) + newPenalty });
-                } else {
-                    const updatedUsers = users.map(u => {
-                        if (u.uid === user.uid) {
-                            const newOptions = { ...u.options, [session.targetKey]: requiredChoice };
-                            return { ...u, options: newOptions, penaltyTotal: (u.penaltyTotal || 0) + newPenalty };
-                        }
-                        return u;
-                    });
-                    setUsers([...updatedUsers]);
+                if(db) { 
+                    const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
+                    const updatedOptions = { ...user.options, [session.targetKey]: requiredChoice }; 
+                    await userRef.update({ options: updatedOptions, penaltyTotal: (user.penaltyTotal || 0) + newPenalty }); 
+                } else { 
+                    const updatedUsers = users.map(u => { 
+                        if (u.uid === user.uid) { 
+                            const newOptions = { ...u.options, [session.targetKey]: requiredChoice }; 
+                            return { ...u, options: newOptions, penaltyTotal: (u.penaltyTotal || 0) + newPenalty }; 
+                        } 
+                        return u; 
+                    }); 
+                    setUsers([...updatedUsers]); 
                 }
 
-                const changeLog = {
-                    id: `CHG_${Date.now()}`,
-                    timestamp: new Date().toLocaleString(),
-                    uid: user.uid,
-                    name: user.name,
-                    targetOption: session.targetKey,
-                    oldVal: oldVal || '미선택',
-                    newVal: requiredChoice,
-                    penalty: newPenalty,
-                    reason: reason
-                };
-                if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
+                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toLocaleString(), uid: user.uid, name: user.name, targetOption: session.targetKey, oldVal: oldVal || '미선택', newVal: requiredChoice, penalty: newPenalty, reason: reason };
+                if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog); 
                 else setChangeLogs([changeLog, ...changeLogs]);
 
-                let finalAmount = 0;
+                let finalAmount = 0; 
                 let penaltyApplied = 0;
 
-                if (session.type === 'PAYMENT') {
-                    if (payoutOverride !== null) {
-                        finalAmount = payoutOverride;
+                if (session.type === 'PAYMENT') { 
+                    if (payoutOverride !== null) { 
+                        finalAmount = payoutOverride; 
                         penaltyApplied = 0; 
-                    } else {
-                        const baseAmount = session.price;
-                        const deduction = (user.penaltyTotal || 0) + newPenalty;
-                        finalAmount = Math.max(0, baseAmount - deduction);
-                        penaltyApplied = (baseAmount - finalAmount);
-                    }
+                    } else { 
+                        const baseAmount = session.price; 
+                        const deduction = (user.penaltyTotal || 0) + newPenalty; 
+                        finalAmount = Math.max(0, baseAmount - deduction); 
+                        penaltyApplied = (baseAmount - finalAmount); 
+                    } 
                 }
 
-                const newLog = {
-                    id: `LOG_${Date.now()}_FORCE`,
-                    timestamp: new Date().toLocaleString(),
-                    uid: user.uid,
-                    name: user.name,
-                    org: user.org,
-                    action: session.type === 'PAYMENT' ? '지급' : '탑승',
-                    sessionId: session.id,
-                    sessionTitle: session.title,
-                    bus: targetBus,
-                    amount: session.type === 'PAYMENT' ? session.price : 0,
-                    penaltyApplied: penaltyApplied,
-                    finalAmount: finalAmount
-                };
-
-                if(db) {
-                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog);
-                    if (penaltyApplied > 0) {
-                        const currentPenalty = (user.penaltyTotal || 0) + newPenalty;
-                        const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
-                        await userRef.update({ penaltyTotal: currentPenalty - penaltyApplied });
-                    }
-                } else {
-                    setLogs(prevLogs => {
-                        // 이전 로그 삭제와 새 로그 추가를 동시에 수행하여 상태 불일치 방지
-                        const filtered = prevLogs.filter(l => !logIdsToRemove.includes(l.id));
-                        return [newLog, ...filtered];
-                    });
-                    if (penaltyApplied > 0) {
-                        const currentPenalty = (user.penaltyTotal || 0) + newPenalty;
-                        const updatedUsers2 = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: currentPenalty - penaltyApplied } : u);
-                        setUsers([...updatedUsers2]);
-                    }
+                const newLog = { id: `LOG_${Date.now()}_FORCE`, timestamp: new Date().toLocaleString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: targetBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount };
+                
+                if(db) { 
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); 
+                    if (penaltyApplied > 0) { 
+                        const currentPenalty = (user.penaltyTotal || 0) + newPenalty; 
+                        const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
+                        await userRef.update({ penaltyTotal: currentPenalty - penaltyApplied }); 
+                    } 
+                } else { 
+                    setLogs(prevLogs => { 
+                        const filtered = prevLogs.filter(l => !logIdsToRemove.includes(l.id)); 
+                        return [newLog, ...filtered]; 
+                    }); 
+                    if (penaltyApplied > 0) { 
+                        const currentPenalty = (user.penaltyTotal || 0) + newPenalty; 
+                        const updatedUsers2 = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: currentPenalty - penaltyApplied } : u); 
+                        setUsers([...updatedUsers2]); 
+                    } 
                 }
 
                 setScanResult(null); 
-                setRefundRequest(null);
+                setRefundRequest(null); 
                 setForfeitRequest(null);
                 
-                let alertMsg = `${user.name}님의 일정이 [${requiredChoice}]로 변경되고 탑승 처리되었습니다.`;
-                if(penaltyAmount > 0) alertMsg += `\n\n⚠️ 미반환 처리: ${CURRENCY}${penaltyAmount}가 패널티로 등록되었습니다.`;
-                else if (reason.includes('반환')) alertMsg += `\n\n✅ 반환 확인: 기존 지급액이 정상적으로 회수되었습니다.`;
-                else if (payoutOverride === 0) alertMsg += `\n\nℹ️ 지급 보류: 기존 일정 비용을 고려하여 이번 지급은 생략되었습니다.`;
-                else alertMsg += `\n(이전 일정에 대한 완료 기록은 삭제되었습니다.)`;
+                let alertMsg = `${user.name}님의 일정이 [${requiredChoice}]로 변경되고 탑승 처리되었습니다.`; 
+                if(penaltyAmount > 0) alertMsg += `\n\n⚠️ 미반환 처리: ${CURRENCY}${penaltyAmount}가 패널티로 등록되었습니다.`; 
+                else if (reason.includes('반환')) alertMsg += `\n\n✅ 반환 확인: 기존 지급액이 정상적으로 회수되었습니다.`; 
+                else if (payoutOverride === 0) alertMsg += `\n\nℹ️ 지급 보류: 기존 일정 비용을 고려하여 이번 지급은 생략되었습니다.`; 
+                else alertMsg += `\n(이전 일정에 대한 완료 기록은 삭제되었습니다.)`; 
+                
                 alert(alertMsg);
             };
 
             const handleForceUpdateAndProcess = async (user, session, requiredChoice) => {
                 if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
-                
                 const oldVal = user.options[session.targetKey];
                 const oldPaymentSchedules = schedules.filter(s => s.targetKey === session.targetKey && s.targetVal === oldVal && s.type === 'PAYMENT');
                 const oldPaymentLogs = logs.filter(l => l.uid === user.uid && oldPaymentSchedules.some(s => s.id === l.sessionId));
                 const recoupAmount = oldPaymentLogs.reduce((sum, l) => sum + (l.finalAmount || 0), 0);
-
-                if (recoupAmount > 0) {
+                
+                if (recoupAmount > 0) { 
                     setScanResult(null); 
-                    setRefundRequest({ user, session, requiredChoice, amount: recoupAmount, oldVal });
-                    return;
+                    setRefundRequest({ user, session, requiredChoice, amount: recoupAmount, oldVal }); 
+                    return; 
                 } 
                 
                 const oldBoardingSchedules = schedules.filter(s => s.targetKey === session.targetKey && s.targetVal === oldVal && s.type === 'BOARDING');
                 const isFromTour = oldBoardingSchedules.length > 0;
                 const isToPayment = session.type === 'PAYMENT' && session.price > 0;
-
-                if (isFromTour && isToPayment) {
-                    setScanResult(null);
-                    setForfeitRequest({ user, session, requiredChoice, oldVal, price: session.price });
-                    return;
+                
+                if (isFromTour && isToPayment) { 
+                    setScanResult(null); 
+                    setForfeitRequest({ user, session, requiredChoice, oldVal, price: session.price }); 
+                    return; 
                 }
+                
                 await executeUpdate(user, session, requiredChoice, 0, '현장 스캔 시 즉시 변경');
             };
 
-            const resolveRefundRequest = async (isReturned) => {
-                if (!refundRequest) return;
-                const { user, session, requiredChoice, amount } = refundRequest;
-                if (isReturned) await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (기존 지급액 ${CURRENCY}${amount} 현장 반환)`);
-                else await executeUpdate(user, session, requiredChoice, amount, `현장 변경 (기존 지급액 ${CURRENCY}${amount} 미반환/패널티)`);
+            const resolveRefundRequest = async (isReturned) => { 
+                if (!refundRequest) return; 
+                const { user, session, requiredChoice, amount } = refundRequest; 
+                if (isReturned) await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (기존 지급액 ${CURRENCY}${amount} 현장 반환)`); 
+                else await executeUpdate(user, session, requiredChoice, amount, `현장 변경 (기존 지급액 ${CURRENCY}${amount} 미반환/패널티)`); 
             };
 
-            const resolveForfeitRequest = async (shouldPay) => {
-                if (!forfeitRequest) return;
-                const { user, session, requiredChoice, oldVal } = forfeitRequest;
-                if (shouldPay) await executeUpdate(user, session, requiredChoice, 0, '현장 변경 (관광->지급, 위약금 면제 및 정상지급)');
-                else await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (관광->지급, 예약부도 위약금 적용으로 지급생략)`, 0);
+            const resolveForfeitRequest = async (shouldPay) => { 
+                if (!forfeitRequest) return; 
+                const { user, session, requiredChoice, oldVal } = forfeitRequest; 
+                if (shouldPay) await executeUpdate(user, session, requiredChoice, 0, '현장 변경 (관광->지급, 위약금 면제 및 정상지급)'); 
+                else await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (관광->지급, 예약부도 위약금 적용으로 지급생략)`, 0); 
             };
 
-            const handleUserUpload = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                Papa.parse(file, {
-                    header: true, skipEmptyLines: true,
-                    complete: async (results) => {
-                        const parsed = results.data.map(row => {
-                            const uid = row['사번'] || row['ID'] || row['uid'] || Object.values(row)[0];
-                            const name = row['성명'] || row['이름'] || row['Name'] || Object.values(row)[1];
-                            const org = row['소속'] || row['부서'] || row['Org'] || '-';
-                            const bus = row['버스'] || row['탑승버스'] || row['Bus'] || '미정';
-                            const options = {};
-                            Object.keys(row).forEach(key => { if(!['사번','ID','uid','성명','이름','Name','소속','부서','Org','버스','탑승버스','Bus'].includes(key)) { if(row[key]) options[key] = row[key]; } });
-                            return { uid, name, org, bus, options, penaltyTotal: 0 };
-                        }).filter(u => u.uid);
-                        if(confirm(`${parsed.length}명의 참가자 명단을 로드하시겠습니까?`)) {
-                            if (db) {
-                                const batch = db.batch();
-                                parsed.forEach(u => { const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(u.uid)); batch.set(ref, u); });
-                                await batch.commit(); alert("서버 업로드 완료!");
-                            } else {
-                                setUsers(parsed); alert("로컬 로드 완료!");
-                            }
-                        }
-                    }
-                });
+            const handleUserUpload = async (e) => { 
+                const file = e.target.files[0]; 
+                if (!file) return; 
+                Papa.parse(file, { 
+                    header: true, 
+                    skipEmptyLines: true, 
+                    complete: async (results) => { 
+                        const parsed = results.data.map(row => { 
+                            const uid = row['사번'] || row['ID'] || row['uid'] || Object.values(row)[0]; 
+                            const name = row['성명'] || row['이름'] || row['Name'] || Object.values(row)[1]; 
+                            const org = row['소속'] || row['부서'] || row['Org'] || '-'; 
+                            const bus = row['버스'] || row['탑승버스'] || row['Bus'] || '미정'; 
+                            const options = {}; 
+                            Object.keys(row).forEach(key => { 
+                                if(!['사번','ID','uid','성명','이름','Name','소속','부서','Org','버스','탑승버스','Bus'].includes(key)) { 
+                                    if(row[key]) options[key] = row[key]; 
+                                } 
+                            }); 
+                            return { uid, name, org, bus, options, penaltyTotal: 0 }; 
+                        }).filter(u => u.uid); 
+                        
+                        if(confirm(`${parsed.length}명의 참가자 명단을 로드하시겠습니까?`)) { 
+                            if (db) { 
+                                const batch = db.batch(); 
+                                parsed.forEach(u => { const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(u.uid)); batch.set(ref, u); }); 
+                                await batch.commit(); 
+                                alert("서버 업로드 완료!"); 
+                            } else { 
+                                setUsers(parsed); 
+                                alert("로컬 로드 완료!"); 
+                            } 
+                        } 
+                    } 
+                }); 
             };
 
-            const handleScheduleUpload = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                Papa.parse(file, {
-                    header: true, skipEmptyLines: true,
-                    complete: async (results) => {
-                        const parsed = results.data.map((row, idx) => {
-                            const rawDate = row['일정'] || row['Date'] || `Day ${idx+1}`;
-                            const today = new Date();
-                            const dateObj = new Date(today);
-                            if(rawDate.includes('1일')) dateObj.setDate(today.getDate());
-                            else if(rawDate.includes('2일')) dateObj.setDate(today.getDate()+1);
-                            else if(rawDate.includes('3일')) dateObj.setDate(today.getDate()+2);
-                            else if(rawDate.includes('4일')) dateObj.setDate(today.getDate()+3);
-                            const dateStr = dateObj.toISOString().split('T')[0];
-                            let rawPrice = row['지급'] || row['Price'] || '0';
-                            if (typeof rawPrice === 'string') rawPrice = rawPrice.replace(/[$,\s]/g, '');
-                            const price = parseInt(rawPrice) || 0;
-                            let type = 'BOARDING';
-                            if (price > 0) type = 'PAYMENT';
-                            else if (row['타입'] && (row['타입'].includes('지급') || row['타입'].includes('Payment'))) type = 'PAYMENT';
-                            return {
-                                id: `SCHED_${idx}`, date: dateStr, displayDate: rawDate, title: row['장소'] || row['Title'] || '일정', type: type, price: price, targetKey: row['타겟옵션'] || row['OptionKey'] || 'ALL', targetVal: row['타겟값'] || row['OptionVal'] || 'ALL'
-                            };
-                        });
-                        if(confirm(`${parsed.length}개의 스케줄을 로드하시겠습니까?`)) {
-                            if (db) {
-                                const batch = db.batch();
-                                parsed.forEach(s => { const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(s.id); batch.set(ref, s); });
-                                await batch.commit(); alert("서버 업로드 완료!");
-                            } else {
-                                setSchedules(parsed); if(parsed.length > 0) setTargetSessionId(parsed[0].id); alert("로컬 로드 완료!");
-                            }
-                        }
-                    }
-                });
+            const handleScheduleUpload = async (e) => { 
+                const file = e.target.files[0]; 
+                if (!file) return; 
+                Papa.parse(file, { 
+                    header: true, 
+                    skipEmptyLines: true, 
+                    complete: async (results) => { 
+                        const parsed = results.data.map((row, idx) => { 
+                            const rawDate = row['일정'] || row['Date'] || `Day ${idx+1}`; 
+                            const today = new Date(); 
+                            const dateObj = new Date(today); 
+                            if(rawDate.includes('1일')) dateObj.setDate(today.getDate()); 
+                            else if(rawDate.includes('2일')) dateObj.setDate(today.getDate()+1); 
+                            else if(rawDate.includes('3일')) dateObj.setDate(today.getDate()+2); 
+                            else if(rawDate.includes('4일')) dateObj.setDate(today.getDate()+3); 
+                            const dateStr = dateObj.toISOString().split('T')[0]; 
+                            let rawPrice = row['지급'] || row['Price'] || '0'; 
+                            if (typeof rawPrice === 'string') rawPrice = rawPrice.replace(/[$,\s]/g, ''); 
+                            const price = parseInt(rawPrice) || 0; 
+                            let type = 'BOARDING'; 
+                            if (price > 0) type = 'PAYMENT'; 
+                            else if (row['타입'] && (row['타입'].includes('지급') || row['타입'].includes('Payment'))) type = 'PAYMENT'; 
+                            return { 
+                                id: `SCHED_${idx}`, 
+                                date: dateStr, 
+                                displayDate: rawDate, 
+                                title: row['장소'] || row['Title'] || '일정', 
+                                type: type, 
+                                price: price, 
+                                targetKey: row['타겟옵션'] || row['OptionKey'] || 'ALL', 
+                                targetVal: row['타겟값'] || row['OptionVal'] || 'ALL' 
+                            }; 
+                        }); 
+                        
+                        if(confirm(`${parsed.length}개의 스케줄을 로드하시겠습니까?`)) { 
+                            if (db) { 
+                                const batch = db.batch(); 
+                                parsed.forEach(s => { const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(s.id); batch.set(ref, s); }); 
+                                await batch.commit(); 
+                                alert("서버 업로드 완료!"); 
+                            } else { 
+                                setSchedules(parsed); 
+                                if(parsed.length > 0) setTargetSessionId(parsed[0].id); 
+                                alert("로컬 로드 완료!"); 
+                            } 
+                        } 
+                    } 
+                }); 
             };
 
-            const processScan = async (scannedUid) => {
-                const user = users.find(u => u.uid === scannedUid);
-                if (!user) return setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `ID: ${scannedUid}` });
-                const session = schedules.find(s => s.id === targetSessionId);
-                if (!session) return setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' });
-                const isDuplicate = logs.some(l => l.uid === user.uid && l.sessionId === session.id);
-                if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user });
-                if (session.targetKey !== 'ALL') {
-                    const userChoice = user.options[session.targetKey];
-                    const requiredChoice = session.targetVal;
-                    if (!userChoice || (requiredChoice !== 'ALL' && !userChoice.includes(requiredChoice))) {
-                        return setScanResult({ status: 'error', msg: '대상자 아님', subMsg: `필요: ${requiredChoice} / 본인: ${userChoice || '선택없음'}`, user, requiredChoice, session });
-                    }
-                }
-                let finalAmount = 0; let penaltyApplied = 0;
-                if (session.type === 'PAYMENT') {
-                    const baseAmount = session.price;
-                    const deduction = user.penaltyTotal || 0;
-                    finalAmount = Math.max(0, baseAmount - deduction);
-                    penaltyApplied = (baseAmount - finalAmount);
-                }
-                const newLog = {
-                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`,
-                    timestamp: new Date().toLocaleString(),
-                    uid: user.uid,
-                    name: user.name,
-                    org: user.org,
-                    action: session.type === 'PAYMENT' ? '지급' : '탑승',
-                    sessionId: session.id,
-                    sessionTitle: session.title,
-                    bus: session.type === 'BOARDING' ? targetBus : '-',
-                    amount: session.type === 'PAYMENT' ? session.price : 0,
-                    penaltyApplied: penaltyApplied,
-                    finalAmount: finalAmount
-                };
-                if (db) {
-                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog);
-                    if (penaltyApplied > 0) {
-                        const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
-                        await userRef.update({ penaltyTotal: user.penaltyTotal - penaltyApplied });
-                    }
-                } else {
-                    setLogs([newLog, ...logs]);
-                    if (penaltyApplied > 0) {
-                        const updatedUsers = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u);
-                        setUsers([...updatedUsers]);
-                    }
-                }
-                const todayLogs = logs.filter(l => l.uid === user.uid && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급');
-                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs });
-            };
-
-            const handleUserUpdate = async () => {
-                if (!selectedUser || !editForm.optKey) return;
-                const oldVal = selectedUser.options[editForm.optKey];
+            const processScan = async (scannedUid) => { 
+                const user = users.find(u => u.uid === scannedUid); 
+                if (!user) return setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `ID: ${scannedUid}` }); 
                 
-                // 로컬 모드에서는 여기서 반환된 ID를 이용해 아래 setLogs에서 일괄 처리
-                const logIdsToRemove = await cleanupOldLogs(selectedUser.uid, editForm.optKey, oldVal, !!db);
+                const session = schedules.find(s => s.id === targetSessionId); 
+                if (!session) return setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' }); 
                 
-                const newPenalty = parseInt(editForm.penalty || 0);
-                const changeLog = {
-                    id: `CHG_${Date.now()}`,
-                    timestamp: new Date().toLocaleString(),
-                    uid: selectedUser.uid,
-                    name: selectedUser.name,
-                    targetOption: editForm.optKey,
-                    oldVal: oldVal,
-                    newVal: editForm.optVal,
-                    penalty: newPenalty,
-                    reason: editForm.reason
-                };
-                if (db) {
-                    const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(selectedUser.uid));
-                    const updatedOptions = { ...selectedUser.options, [editForm.optKey]: editForm.optVal };
-                    await userRef.update({ options: updatedOptions, penaltyTotal: (selectedUser.penaltyTotal || 0) + newPenalty });
-                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
-                } else {
-                    // 로그 삭제 처리
-                    if(logIdsToRemove.length > 0) {
-                        setLogs(prevLogs => prevLogs.filter(l => !logIdsToRemove.includes(l.id)));
-                    }
+                const isDuplicate = logs.some(l => l.uid === user.uid && l.sessionId === session.id); 
+                if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user }); 
+                
+                if (session.targetKey !== 'ALL') { 
+                    const userChoice = user.options[session.targetKey]; 
+                    const requiredChoice = session.targetVal; 
+                    if (!userChoice || (requiredChoice !== 'ALL' && !userChoice.includes(requiredChoice))) { 
+                        return setScanResult({ status: 'error', msg: '대상자 아님', subMsg: `필요: ${requiredChoice} / 본인: ${userChoice || '선택없음'}`, user, requiredChoice, session }); 
+                    } 
+                } 
+                
+                let finalAmount = 0; 
+                let penaltyApplied = 0; 
+                
+                if (session.type === 'PAYMENT') { 
+                    const baseAmount = session.price; 
+                    const deduction = user.penaltyTotal || 0; 
+                    finalAmount = Math.max(0, baseAmount - deduction); 
+                    penaltyApplied = (baseAmount - finalAmount); 
+                } 
+                
+                const newLog = { 
+                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, 
+                    timestamp: new Date().toLocaleString(), 
+                    uid: user.uid, 
+                    name: user.name, 
+                    org: user.org, 
+                    action: session.type === 'PAYMENT' ? '지급' : '탑승', 
+                    sessionId: session.id, 
+                    sessionTitle: session.title, 
+                    bus: session.type === 'BOARDING' ? targetBus : '-', 
+                    amount: session.type === 'PAYMENT' ? session.price : 0, 
+                    penaltyApplied: penaltyApplied, 
+                    finalAmount: finalAmount 
+                }; 
+                
+                if (db) { 
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); 
+                    if (penaltyApplied > 0) { 
+                        const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
+                        await userRef.update({ penaltyTotal: user.penaltyTotal - penaltyApplied }); 
+                    } 
+                } else { 
+                    setLogs([newLog, ...logs]); 
+                    if (penaltyApplied > 0) { 
+                        const updatedUsers = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u); 
+                        setUsers([...updatedUsers]); 
+                    } 
+                } 
+                
+                const todayLogs = logs.filter(l => l.uid === user.uid && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급'); 
+                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs }); 
+            };
 
-                    const updatedUsers = users.map(u => {
-                        if (u.uid === selectedUser.uid) {
-                            const newOptions = { ...u.options, [editForm.optKey]: editForm.optVal };
-                            const totalPenalty = (u.penaltyTotal || 0) + newPenalty;
-                            const updatedUser = { ...u, options: newOptions, penaltyTotal: totalPenalty };
+            const handleUserUpdate = async () => { 
+                if (!selectedUser || !editForm.optKey) return; 
+                const oldVal = selectedUser.options[editForm.optKey]; 
+                const logIdsToRemove = await cleanupOldLogs(selectedUser.uid, editForm.optKey, oldVal, !!db); 
+                const newPenalty = parseInt(editForm.penalty || 0); 
+                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toLocaleString(), uid: selectedUser.uid, name: selectedUser.name, targetOption: editForm.optKey, oldVal: oldVal, newVal: editForm.optVal, penalty: newPenalty, reason: editForm.reason }; 
+                
+                if (db) { 
+                    const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(selectedUser.uid)); 
+                    const updatedOptions = { ...selectedUser.options, [editForm.optKey]: editForm.optVal }; 
+                    await userRef.update({ options: updatedOptions, penaltyTotal: (selectedUser.penaltyTotal || 0) + newPenalty }); 
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog); 
+                } else { 
+                    if(logIdsToRemove.length > 0) { 
+                        setLogs(prevLogs => prevLogs.filter(l => !logIdsToRemove.includes(l.id))); 
+                    } 
+                    const updatedUsers = users.map(u => { 
+                        if (u.uid === selectedUser.uid) { 
+                            const newOptions = { ...u.options, [editForm.optKey]: editForm.optVal }; 
+                            const totalPenalty = (u.penaltyTotal || 0) + newPenalty; 
+                            const updatedUser = { ...u, options: newOptions, penaltyTotal: totalPenalty }; 
                             setSelectedUser(updatedUser); 
-                            return updatedUser;
-                        }
-                        return u;
-                    });
+                            return updatedUser; 
+                        } 
+                        return u; 
+                    }); 
                     setUsers([...updatedUsers]); 
-                    setChangeLogs([changeLog, ...changeLogs]);
-                }
-                alert("변경 및 패널티 적용이 완료되었습니다.");
-                setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' });
-                setSearchQuery('');
+                    setChangeLogs([changeLog, ...changeLogs]); 
+                } 
+                alert("변경 및 패널티 적용이 완료되었습니다."); 
+                setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' }); 
+                setSearchQuery(''); 
             };
-
-            const groupedStats = useMemo(() => {
-                const groups = {};
-                scheduleStats.forEach(stat => {
-                    const date = stat.displayDate || '기타';
-                    if(!groups[date]) groups[date] = [];
-                    groups[date].push(stat);
-                });
-                return groups;
-            }, [scheduleStats]);
 
             return (
                 <div className="h-full flex flex-row bg-slate-50 w-full">
                     <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
                     <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full">
-                        { isMobile && (
-                            <header className="bg-white px-6 py-4 shadow-sm flex justify-between items-center z-20 no-print">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
-                                    <h1 className="font-black text-slate-800 tracking-tight">INCARPASS</h1>
-                                </div>
-                                <div className="text-xs font-bold text-slate-400">{users.length}명</div>
-                            </header>
-                        )}
+                        { isMobile && (<header className="bg-white px-6 py-4 shadow-sm flex justify-between items-center z-20 no-print"><div className="flex items-center gap-2"><div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div><h1 className="font-black text-slate-800 tracking-tight">INCARPASS</h1></div><div className="text-xs font-bold text-slate-400">{users.length}명</div></header>) }
                         <div className="flex-1 overflow-y-auto p-4 pb-32 md:p-8 md:pb-8 w-full no-print-scroll">
                             <div className="max-w-5xl mx-auto w-full">
                                 {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
-                                {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} />}
-                                {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} />}
+                                {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} />}
+                                {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} />}
                                 {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} schedules={schedules} changeLogs={changeLogs} />}
                                 {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} badgeConfig={badgeConfig} setBadgeConfig={setBadgeConfig} db={db} serverError={serverError} schedules={schedules} logs={logs} setIsPrintMode={setIsPrintMode} setUsers={setUsers} setSchedules={setSchedules} setLogs={setLogs} setChangeLogs={setChangeLogs} changeLogs={changeLogs} />} 
                             </div>
                         </div>
                         { isMobile && <MobileTab activeTab={activeTab} setActiveTab={setActiveTab} /> }
                         {isPrintMode && <BadgePrintView users={users} config={badgeConfig} onClose={() => setIsPrintMode(false)} />}
-                        
-                        {selectedSession && (
-                            <SessionDetailModal session={selectedSession} users={users} logs={logs} onClose={() => setSelectedSession(null)} onManualComplete={handleManualComplete} />
-                        )}
-                        
-                        {refundRequest && (
-                            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in no-print">
-                                <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
-                                    <div className="bg-rose-50 p-6 text-center border-b border-rose-100">
-                                        <div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">$</div>
-                                        <h3 className="text-xl font-black text-rose-600 mb-1">지급금 반환 필요</h3>
-                                        <p className="text-slate-600 font-bold text-sm">{refundRequest.user.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{refundRequest.amount}</span>을 지급받았습니다.</p>
-                                    </div>
-                                    <div className="p-6 space-y-4">
-                                        <div className="text-center text-xs text-slate-400 mb-2">기존 일정: {refundRequest.oldVal} <br/>▼ <br/>변경 일정: {refundRequest.session.title}</div>
-                                        <button onClick={() => resolveRefundRequest(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>반환 받았습니다</span><span className="text-[10px] opacity-80 font-normal">(패널티 없음)</span></button>
-                                        <button onClick={() => resolveRefundRequest(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>반환받지 못했습니다</span><span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 처리)</span></button>
-                                        <button onClick={() => setRefundRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">취소</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {forfeitRequest && (
-                            <div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in no-print">
-                                <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
-                                    <div className="bg-indigo-50 p-6 text-center border-b border-indigo-100">
-                                        <div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div>
-                                        <h3 className="text-xl font-black text-indigo-900 mb-1">일정 변경 확인 (Case 2)</h3>
-                                        <p className="text-slate-600 font-bold text-sm">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p>
-                                    </div>
-                                    <div className="p-6 space-y-4">
-                                        <div className="text-center text-xs text-slate-400 mb-2">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div>
-                                        <button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span></button>
-                                        <button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span></button>
-                                        <button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">취소</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        {selectedSession && <SessionDetailModal session={selectedSession} users={users} logs={logs} onClose={() => setSelectedSession(null)} onManualComplete={handleManualComplete} />}
+                        {refundRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in no-print"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-rose-50 p-6 text-center border-b border-rose-100"><div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">$</div><h3 className="text-xl font-black text-rose-600 mb-1">지급금 반환 필요</h3><p className="text-slate-600 font-bold text-sm">{refundRequest.user.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{refundRequest.amount}</span>을 지급받았습니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2">기존 일정: {refundRequest.oldVal} <br/>▼ <br/>변경 일정: {refundRequest.session.title}</div><button onClick={() => resolveRefundRequest(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>반환 받았습니다</span><span className="text-[10px] opacity-80 font-normal">(패널티 없음)</span></button><button onClick={() => resolveRefundRequest(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>반환받지 못했습니다</span><span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 처리)</span></button><button onClick={() => setRefundRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">취소</button></div></div></div>)}
+                        {forfeitRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in no-print"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-indigo-50 p-6 text-center border-b border-indigo-100"><div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div><h3 className="text-xl font-black text-indigo-900 mb-1">일정 변경 확인 (Case 2)</h3><p className="text-slate-600 font-bold text-sm">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div><button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span></button><button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span></button><button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">취소</button></div></div></div>)}
                     </main>
                     <ResultModal result={scanResult} onClose={() => setScanResult(null)} onForceUpdate={handleForceUpdateAndProcess} />
                 </div>
