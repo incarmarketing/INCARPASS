@@ -1440,8 +1440,11 @@
                 const zip = new JSZip();
                 const folder = zip.folder("badges");
 
-                for (let i = 0; i < users.length; i++) {
-                    const u = users[i];
+                // 사번(uid) 순으로 정렬
+                const sortedUsers = [...users].sort((a, b) => a.uid.localeCompare(b.uid, undefined, { numeric: true, sensitivity: 'base' }));
+
+                for (let i = 0; i < sortedUsers.length; i++) {
+                    const u = sortedUsers[i];
                     const element = document.getElementById(`badge-export-${u.uid}`);
                     if (element) {
                         try {
@@ -1452,7 +1455,7 @@
                             console.error("Error capturing badge:", u.name, err);
                         }
                     }
-                    setZipProgress(Math.round(((i + 1) / users.length) * 100));
+                    setZipProgress(Math.round(((i + 1) / sortedUsers.length) * 100));
                     await new Promise(resolve => setTimeout(resolve, 10)); 
                 }
 
@@ -1813,15 +1816,16 @@
             useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_9', JSON.stringify(badgeConfig)); }, [badgeConfig]);
 
             /* --- 핵심 로직: 일정 변경 시 이전 로그 정리 (대시보드 정확도 향상) --- */
-            const cleanupOldLogs = async (uid, targetKey, oldVal) => {
-                // OLD: const oldSessions = schedules.filter(s => s.targetKey === targetKey && s.targetVal === oldVal);
-                // NEW: 해당 카테고리(targetKey)에 속한 모든 세션을 찾아서 관련 로그 삭제 (옵션 불일치 로그도 포함하여 정리)
+            const cleanupOldLogs = async (uid, targetKey, oldVal, performUpdate = true) => {
+                // 이전 로그를 찾기 위해 해당 옵션키(targetKey)를 가진 모든 스케줄을 조회합니다.
+                // 값이 oldVal인 것만 찾는게 아니라, 해당 카테고리(예: 2일차) 전체를 조회하여 관련 로그를 삭제해야
+                // 이동 전 일정의 카운트가 정확히 줄어듭니다.
                 const relatedSessions = schedules.filter(s => s.targetKey === targetKey);
                 
                 const logsToDelete = logs.filter(l => l.uid === uid && relatedSessions.some(s => s.id === l.sessionId));
                 const oldLogIds = logsToDelete.map(l => l.id);
 
-                if(oldLogIds.length > 0) {
+                if(performUpdate && oldLogIds.length > 0) {
                     if (db) {
                         const batch = db.batch();
                         oldLogIds.forEach(logId => {
@@ -1830,7 +1834,7 @@
                         });
                         await batch.commit();
                     } else {
-                        // 로컬 상태 즉시 업데이트
+                        // 로컬 상태 즉시 업데이트 (여기서만 호출될 경우)
                         setLogs(prevLogs => prevLogs.filter(l => !oldLogIds.includes(l.id)));
                     }
                 }
@@ -1866,7 +1870,9 @@
                 if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
                 
                 const oldVal = user.options[session.targetKey];
-                const logIdsToRemove = await cleanupOldLogs(user.uid, session.targetKey, oldVal);
+                
+                // 로컬 모드일 경우 여기서 직접 삭제하지 않고 ID만 받아온 뒤 아래에서 한 번에 처리합니다. (Race Condition 방지)
+                const logIdsToRemove = await cleanupOldLogs(user.uid, session.targetKey, oldVal, !!db);
                 const newPenalty = penaltyAmount;
 
                 if(db) {
@@ -1937,6 +1943,7 @@
                     }
                 } else {
                     setLogs(prevLogs => {
+                        // 이전 로그 삭제와 새 로그 추가를 동시에 수행하여 상태 불일치 방지
                         const filtered = prevLogs.filter(l => !logIdsToRemove.includes(l.id));
                         return [newLog, ...filtered];
                     });
@@ -2121,7 +2128,8 @@
                 if (!selectedUser || !editForm.optKey) return;
                 const oldVal = selectedUser.options[editForm.optKey];
                 
-                await cleanupOldLogs(selectedUser.uid, editForm.optKey, oldVal);
+                // 로컬 모드에서는 여기서 반환된 ID를 이용해 아래 setLogs에서 일괄 처리
+                const logIdsToRemove = await cleanupOldLogs(selectedUser.uid, editForm.optKey, oldVal, !!db);
                 
                 const newPenalty = parseInt(editForm.penalty || 0);
                 const changeLog = {
@@ -2141,6 +2149,11 @@
                     await userRef.update({ options: updatedOptions, penaltyTotal: (selectedUser.penaltyTotal || 0) + newPenalty });
                     await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
                 } else {
+                    // 로그 삭제 처리
+                    if(logIdsToRemove.length > 0) {
+                        setLogs(prevLogs => prevLogs.filter(l => !logIdsToRemove.includes(l.id)));
+                    }
+
                     const updatedUsers = users.map(u => {
                         if (u.uid === selectedUser.uid) {
                             const newOptions = { ...u.options, [editForm.optKey]: editForm.optVal };
