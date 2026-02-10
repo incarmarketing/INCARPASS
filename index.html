@@ -459,31 +459,46 @@
                         <Icon name="dashboard" className="text-incar"/> 일정별 진행률 (요약)
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {scheduleStats.map(stat => (
-                            <div key={stat.id} onClick={() => onSessionClick(stat)} className="cursor-pointer bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow active:scale-[0.98] transition-transform">
-                                <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><Icon name={stat.type === 'PAYMENT' ? 'money' : 'bus'} size={60} /></div>
-                                <div className="relative z-10">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${stat.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-indigo-50 text-incar'}`}>{stat.type==='PAYMENT'?'지급':'탑승'}</span>
-                                        <span className="text-xs font-bold text-slate-400">{stat.displayDate}</span>
-                                    </div>
-                                    <h4 className="font-bold text-slate-800 mb-4 truncate pr-8">{stat.title}</h4>
-                                    <div className="flex justify-between items-end mb-1">
-                                        <span className="text-3xl font-bold text-slate-800">{stat.doneCount}<span className="text-sm text-slate-400 font-medium ml-1">/ {stat.targetCount}</span></span>
-                                        <span className={`text-xl font-bold ${stat.percent === 100 ? 'text-emerald-500' : 'text-incar'}`}>{stat.percent}%</span>
-                                    </div>
-                                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
-                                        <div className={`h-full rounded-full transition-all duration-1000 ${stat.percent===100?'bg-emerald-500':'bg-incar'}`} style={{width: `${stat.percent}%`}}></div>
-                                    </div>
-                                    {stat.type === 'PAYMENT' && (
-                                        <div className="pt-2 border-t border-slate-50 flex justify-between text-xs">
-                                            <span className="text-slate-400">집행액: <b>{CURRENCY}{stat.actualAmount.toLocaleString()}</b></span>
-                                            <span className="text-slate-400">예상: {CURRENCY}{stat.expectedAmount.toLocaleString()}</span>
+                        {scheduleStats.map(stat => {
+                             const sessionPenalties = logs.filter(l => l.sessionId === stat.id).reduce((sum, l) => sum + (l.penaltyApplied || 0), 0);
+                             return (
+                                <div key={stat.id} onClick={() => onSessionClick(stat)} className="cursor-pointer bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow active:scale-[0.98] transition-transform">
+                                    <div className="absolute right-0 top-0 p-3 opacity-10 group-hover:opacity-20 transition-opacity"><Icon name={stat.type === 'PAYMENT' ? 'money' : 'bus'} size={60} /></div>
+                                    <div className="relative z-10">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${stat.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-indigo-50 text-incar'}`}>{stat.type==='PAYMENT'?'지급':'탑승'}</span>
+                                            <span className="text-xs font-bold text-slate-400">{stat.displayDate}</span>
                                         </div>
-                                    )}
+                                        <h4 className="font-bold text-slate-800 mb-4 truncate pr-8">{stat.title}</h4>
+                                        <div className="flex justify-between items-end mb-1">
+                                            <span className="text-3xl font-bold text-slate-800">{stat.doneCount}<span className="text-sm text-slate-400 font-medium ml-1">/ {stat.targetCount}</span></span>
+                                            <span className={`text-xl font-bold ${stat.percent === 100 ? 'text-emerald-500' : 'text-incar'}`}>{stat.percent}%</span>
+                                        </div>
+                                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
+                                            <div className={`h-full rounded-full transition-all duration-1000 ${stat.percent===100?'bg-emerald-500':'bg-incar'}`} style={{width: `${stat.percent}%`}}></div>
+                                        </div>
+                                        {stat.type === 'PAYMENT' && (
+                                            <div className="pt-2 border-t border-slate-50 flex flex-col gap-1 text-xs">
+                                                <div className="flex justify-between">
+                                                    <span className="text-slate-400">집행액</span>
+                                                    <span className="font-bold text-slate-700">{CURRENCY}{stat.actualAmount.toLocaleString()}</span>
+                                                </div>
+                                                {sessionPenalties > 0 && (
+                                                    <div className="flex justify-between text-[10px] text-rose-500 font-bold">
+                                                        <span>(패널티 차감분)</span>
+                                                        <span>-{CURRENCY}{sessionPenalties.toLocaleString()}</span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between mt-1 pt-1 border-t border-slate-100/50">
+                                                    <span className="text-slate-400">예상 (변경전 포함안함)</span>
+                                                    <span>{CURRENCY}{stat.expectedAmount.toLocaleString()}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                         {scheduleStats.length === 0 && <div className="col-span-full py-10 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">등록된 일정이 없습니다.</div>}
                     </div>
                 </div>
@@ -1297,6 +1312,15 @@
             const exportAllData = () => {
                 if(logs.length === 0 && changeLogs.length === 0) return alert("내보낼 데이터가 없습니다.");
                 
+                // 날짜 포맷 헬퍼 함수
+                const formatLogDate = (ts) => {
+                    if (!ts) return '-';
+                    const date = new Date(ts);
+                    if (isNaN(date.getTime())) return ts; 
+                    const pad = n => n < 10 ? '0'+n : n;
+                    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+                };
+
                 // 데이터 통합 및 정렬
                 const combinedData = [];
 
@@ -1304,7 +1328,7 @@
                 logs.forEach(l => {
                     combinedData.push({
                         rawTime: l.timestamp,
-                        일시: l.timestamp.replace('T', ' ').slice(0, 16),
+                        일시: formatLogDate(l.timestamp),
                         사번: l.uid,
                         성명: l.name,
                         구분: l.action, // '지급' or '탑승'
@@ -1318,13 +1342,9 @@
 
                 // 변경 로그 추가
                 changeLogs.forEach(c => {
-                    // timestamp 형식이 toLocaleString일수도 있고 toISOString일수도 있음. 포맷 통일 시도.
-                    let timeStr = c.timestamp;
-                    if(timeStr.includes('T')) timeStr = timeStr.replace('T', ' ').slice(0, 16);
-
                     combinedData.push({
                         rawTime: c.timestamp,
-                        일시: timeStr,
+                        일시: formatLogDate(c.timestamp),
                         사번: c.uid,
                         성명: c.name,
                         구분: '변경',
@@ -1357,10 +1377,26 @@
                     </tr>`;
                 });
 
-                const tableHTML = `<table border="1"><thead><tr>${headers.map(h=>`<th style="background-color:#f0f0f0;">${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
-                const excelHTML = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8"></head><body><h3>[INCARPASS 통합 운영 로그]</h3>${tableHTML}</body></html>`;
+                const tableHTML = `
+                <html xmlns:x="urn:schemas-microsoft-com:office:excel">
+                    <head>
+                        <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+                        <style>
+                            table { border-collapse: collapse; width: 100%; }
+                            th, td { border: 1px solid #000; padding: 5px; text-align: center; white-space: nowrap; vertical-align: middle; }
+                            th { background-color: #f0f0f0; font-weight: bold; }
+                        </style>
+                    </head>
+                    <body>
+                        <h3>[INCARPASS 통합 운영 로그]</h3>
+                        <table>
+                            <thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </body>
+                </html>`;
                 
-                const blob = new Blob([excelHTML], { type: 'application/vnd.ms-excel' });
+                const blob = new Blob([tableHTML], { type: 'application/vnd.ms-excel' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
                 link.download = `INCARPASS_Unified_Log_${new Date().toISOString().slice(0,10)}.xls`;
@@ -2135,9 +2171,6 @@
                         { isMobile && (
                             <header className="bg-white px-6 py-4 shadow-sm flex justify-between items-center z-20 no-print">
                                 <div className="flex items-center gap-2">
-                                    <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 text-slate-500">
-                                        <Icon name="menu" size={24} />
-                                    </button>
                                     <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
                                     <h1 className="font-black text-slate-800 tracking-tight">INCARPASS</h1>
                                 </div>
