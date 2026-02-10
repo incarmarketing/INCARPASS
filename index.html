@@ -545,6 +545,7 @@
         const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile }) => {
             const scannerRef = useRef(null);
             const isRunningRef = useRef(false);
+            const [maxBusNum, setMaxBusNum] = useState(3);
             
             const filteredSchedules = useMemo(() => {
                 return schedules.filter(s => s.type === mode);
@@ -564,6 +565,12 @@
                     stopScanner();
                 };
             }, []);
+
+            const addBus = () => {
+                if(confirm("차량을 추가하시겠습니까?")) {
+                    setMaxBusNum(prev => prev + 1);
+                }
+            };
 
             const startScanner = () => {
                 if (isRunningRef.current) return;
@@ -631,9 +638,10 @@
                                 {manualBus ? 
                                     <input type="text" value={targetBus} onChange={e=>setTargetBus(e.target.value)} className="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl font-bold text-center text-lg focus:border-incar outline-none" placeholder="차량 번호 입력" /> :
                                     <div className="grid grid-cols-4 gap-2">
-                                        {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+                                        {[...Array(maxBusNum)].map((_, i) => i + 1).map(n => (
                                             <button key={n} onClick={()=>setTargetBus(`${n}호차`)} className={`py-3 rounded-xl text-sm font-bold transition-all ${targetBus===`${n}호차`?'bg-incar text-white shadow-lg scale-105':'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>{n}호차</button>
                                         ))}
+                                        <button onClick={addBus} className="py-3 rounded-xl text-sm font-bold bg-slate-100 text-slate-400 hover:bg-slate-200 flex items-center justify-center"><Icon name="plus" size={16} /></button>
                                     </div>
                                 }
                             </div>
@@ -678,6 +686,7 @@
 
         const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules, changeLogs }) => {
             const [manualInput, setManualInput] = useState(false);
+            const [showAllHistory, setShowAllHistory] = useState(false);
 
             // --- QR 조회 기능 추가 (안정성 개선) ---
             const [isLookupScanning, setIsLookupScanning] = useState(false);
@@ -824,6 +833,13 @@
                 }
             }, [editForm.optVal, editForm.optKey, selectedUser, schedules]);
 
+            const userHistoryLogs = useMemo(() => {
+                if(!selectedUser) return [];
+                return changeLogs.filter(l => l.uid === selectedUser.uid).sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
+            }, [changeLogs, selectedUser]);
+
+            const visibleLogs = showAllHistory ? userHistoryLogs : userHistoryLogs.slice(0, 1);
+
             return (
                 <div className="space-y-6 animate-slide-up">
                     <div className="bg-white p-6 rounded-3xl shadow-card">
@@ -930,40 +946,73 @@
 
                                 <div className="mt-6 pt-6 border-t border-slate-100">
                                     <h4 className="font-bold text-sm text-slate-800 mb-3 flex items-center gap-2"><Icon name="history" size={16}/> 변경 및 패널티 이력</h4>
-                                    {changeLogs.filter(l => l.uid === selectedUser.uid).length === 0 ? (
+                                    {userHistoryLogs.length === 0 ? (
                                         <p className="text-xs text-slate-400">변경 이력이 없습니다.</p>
                                     ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-xs text-left">
-                                                <thead className="bg-slate-50 text-slate-500 font-bold">
-                                                    <tr><th className="p-2">일시</th><th className="p-2">항목</th><th className="p-2">내용</th><th className="p-2 text-right">패널티</th><th className="p-2">사유</th></tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {changeLogs.filter(l => l.uid === selectedUser.uid).sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp)).map((log, i) => (
-                                                        <tr key={i}>
-                                                            <td className="p-2 text-slate-400">{log.timestamp.slice(5, 16)}</td>
-                                                            <td className="p-2 font-bold">{log.targetOption}</td>
-                                                            <td className="p-2">
-                                                                <span className="line-through text-slate-300">{log.oldVal}</span> 
-                                                                <span className="mx-1 text-slate-300">→</span> 
-                                                                <span className="text-incar font-bold">{log.newVal}</span>
-                                                            </td>
-                                                            <td className="p-2 text-right font-bold text-rose-500">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</td>
-                                                            <td className="p-2 text-slate-500 truncate max-w-[100px]">{log.reason}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                        <div className="space-y-3">
+                                            {/* PC 뷰 (테이블) */}
+                                            <div className="hidden md:block overflow-x-auto">
+                                                <table className="w-full text-xs text-left">
+                                                    <thead className="bg-slate-50 text-slate-500 font-bold">
+                                                        <tr><th className="p-2">일시</th><th className="p-2">항목</th><th className="p-2">내용</th><th className="p-2 text-right">패널티</th><th className="p-2">사유</th></tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-100">
+                                                        {visibleLogs.map((log, i) => (
+                                                            <tr key={i}>
+                                                                <td className="p-2 text-slate-400">{log.timestamp.slice(5, 16)}</td>
+                                                                <td className="p-2 font-bold">{log.targetOption}</td>
+                                                                <td className="p-2">
+                                                                    <span className="line-through text-slate-300">{log.oldVal}</span> 
+                                                                    <span className="mx-1 text-slate-300">→</span> 
+                                                                    <span className="text-incar font-bold">{log.newVal}</span>
+                                                                </td>
+                                                                <td className="p-2 text-right font-bold text-rose-500">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</td>
+                                                                <td className="p-2 text-slate-500 truncate max-w-[100px]">{log.reason}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            
+                                            {/* 모바일 뷰 (카드 리스트) */}
+                                            <div className="md:hidden space-y-2">
+                                                {visibleLogs.map((log, i) => (
+                                                    <div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2">
+                                                        <div className="flex justify-between items-center text-xs text-slate-400 font-medium border-b border-slate-200 pb-2 mb-1">
+                                                            <span>{log.timestamp.slice(5, 16)}</span>
+                                                            <span className="bg-white px-2 py-0.5 rounded border border-slate-200">{log.targetOption}</span>
+                                                        </div>
+                                                        <div className="flex items-center justify-center gap-2 text-sm">
+                                                            <span className="line-through text-slate-400">{log.oldVal}</span>
+                                                            <Icon name="chevronsDown" size={12} className="rotate-[-90deg] text-slate-300" />
+                                                            <span className="font-bold text-incar">{log.newVal}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-end mt-1 pt-2 border-t border-slate-200/50">
+                                                            <span className="text-xs text-slate-500 flex-1 truncate pr-2">{log.reason}</span>
+                                                            <span className="text-sm font-bold text-rose-500">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            {userHistoryLogs.length > 1 && (
+                                                <button 
+                                                    onClick={() => setShowAllHistory(!showAllHistory)} 
+                                                    className="w-full py-2 text-xs font-bold text-slate-400 bg-slate-50 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center gap-1"
+                                                >
+                                                    {showAllHistory ? '접기' : `더보기 (${userHistoryLogs.length - 1}건 더 있음)`} <Icon name={showAllHistory ? "up" : "down"} size={12} />
+                                                </button>
+                                            )}
                                         </div>
                                     )}
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4 mt-4">
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">변경할 옵션 (Key)</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{key} (현재: {selectedUser.options[key]})</option>)}</select></div>
+                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">변경 전 일정</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{key} (현재: {selectedUser.options[key]})</option>)}</select></div>
                                     
                                     <div>
                                         <div className="flex justify-between items-center mb-1">
-                                            <label className="block text-xs font-bold text-slate-400">변경값 (New)</label>
+                                            <label className="block text-xs font-bold text-slate-400">변경 후 일정</label>
                                             <button onClick={()=>setManualInput(!manualInput)} className="text-[10px] text-incar underline font-bold">{manualInput ? '목록에서 선택' : '직접 입력'}</button>
                                         </div>
                                         {manualInput ? (
@@ -1868,7 +1917,7 @@
                 if(!confirm(`${user.name}님을 수동으로 [${session.type==='PAYMENT'?'지급완료':'탑승완료'}] 처리하시겠습니까?`)) return;
                 const newLog = {
                     id: `LOG_${Date.now()}_MANUAL`,
-                    timestamp: new Date().toISOString(),
+                    timestamp: new Date().toLocaleString(),
                     uid: user.uid,
                     name: user.name,
                     org: user.org,
@@ -1943,7 +1992,7 @@
 
                 const newLog = {
                     id: `LOG_${Date.now()}_FORCE`,
-                    timestamp: new Date().toISOString(),
+                    timestamp: new Date().toLocaleString(),
                     uid: user.uid,
                     name: user.name,
                     org: user.org,
@@ -2117,7 +2166,7 @@
                 }
                 const newLog = {
                     id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`,
-                    timestamp: new Date().toISOString(),
+                    timestamp: new Date().toLocaleString(),
                     uid: user.uid,
                     name: user.name,
                     org: user.org,
