@@ -1648,10 +1648,32 @@
                     if(s.targetKey === 'ALL') targetCount = users.length;
                     else targetCount = users.filter(u => u.options && u.options[s.targetKey] && u.options[s.targetKey].includes(s.targetVal)).length;
                     
-                    const doneCount = logs.filter(l => l.sessionId === s.id).length;
+                    // NEW: 로그 검증 로직 강화 (옵션 변경 시 즉시 반영)
+                    const doneCount = logs.filter(l => {
+                        if (l.sessionId !== s.id) return false;
+                        // 로그상의 유저가 현재도 이 스케줄의 대상자인지 확인 (유효성 이중 체크)
+                        const currentUser = users.find(u => u.uid === l.uid);
+                        if (!currentUser) return false; 
+                        
+                        if (s.targetKey === 'ALL') return true;
+                        const userOpt = currentUser.options?.[s.targetKey];
+                        if (!userOpt) return false;
+                        return s.targetVal === 'ALL' || userOpt.includes(s.targetVal);
+                    }).length;
+
                     const percent = targetCount > 0 ? Math.round((doneCount / targetCount) * 100) : 0;
                     const expectedAmount = targetCount * (s.price || 0);
-                    const actualAmount = logs.filter(l => l.sessionId === s.id).reduce((sum, l) => sum + (l.finalAmount || 0), 0);
+                    // 실제 집행액 계산 시에도 동일한 필터링 적용 (유효한 로그만 집계)
+                    const actualAmount = logs.filter(l => {
+                        if (l.sessionId !== s.id) return false;
+                        const currentUser = users.find(u => u.uid === l.uid);
+                        if (!currentUser) return false;
+                        if (s.targetKey === 'ALL') return true;
+                        const userOpt = currentUser.options?.[s.targetKey];
+                        if (!userOpt) return false;
+                        return s.targetVal === 'ALL' || userOpt.includes(s.targetVal);
+                    }).reduce((sum, l) => sum + (l.finalAmount || 0), 0);
+
                     const diffCount = doneCount - targetCount;
                     const diffAmount = actualAmount - expectedAmount;
                     return { ...s, targetCount, doneCount, percent, expectedAmount, actualAmount, diffCount, diffAmount };
