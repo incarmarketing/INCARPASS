@@ -22,8 +22,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     
-    <!-- 폰트 다양화 -->
-    <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=Nanum+Brush+Script&family=Nanum+Myeongjo:wght@400;700;800&family=Noto+Sans+KR:wght@100;300;400;500;700;900&family=Gugi&family=Gamja+Flower&family=Hi+Melody&family=Sunflower:wght@300;500;700&family=Gowun+Dodum&display=swap" rel="stylesheet">
+    <!-- 폰트 다양화 (20종 추가) -->
+    <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Cute+Font&family=Do+Hyeon&family=Dongle&family=Gaegu&family=Gamja+Flower&family=Gowun+Batang&family=Gowun+Dodum&family=Gugi&family=Hi+Melody&family=Jua&family=Nanum+Brush+Script&family=Nanum+Gothic&family=Nanum+Myeongjo&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@100;300;400;500;700;900&family=Poor+Story&family=Single+Day&family=Song+Myung&family=Stylish&family=Sunflower:wght@300;500;700&family=Yeon+Sung&display=swap" rel="stylesheet">
     
     <script>
         tailwind.config = {
@@ -69,6 +69,14 @@
         .data-table th { background-color: #f8fafc; color: #64748b; font-weight: 700; font-size: 0.75rem; text-transform: uppercase; padding: 12px 16px; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
         .data-table td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; font-weight: 500; color: #334155; }
         .data-table tr:hover td { background-color: #f8fafc; }
+
+        /* 스캐너 카메라 정사각형 강제 스타일 */
+        #reader video, #lookup-reader video {
+            object-fit: cover !important;
+            width: 100% !important;
+            height: 100% !important;
+            border-radius: 1.5rem;
+        }
 
         /* 인쇄 스타일 */
         @media print {
@@ -137,17 +145,6 @@
         }
         .print-only { display: none; }
         
-        .font-noto { font-family: 'Noto Sans KR', sans-serif; }
-        .font-serif { font-family: 'Nanum Myeongjo', serif; }
-        .font-black-han { font-family: 'Black Han Sans', sans-serif; }
-        .font-dohyeon { font-family: 'Do Hyeon', sans-serif; }
-        .font-brush { font-family: 'Nanum Brush Script', cursive; }
-        .font-gugi { font-family: 'Gugi', cursive; }
-        .font-gamja { font-family: 'Gamja Flower', cursive; }
-        .font-melody { font-family: 'Hi Melody', cursive; }
-        .font-sunflower { font-family: 'Sunflower', sans-serif; }
-        .font-gowun { font-family: 'Gowun Dodum', sans-serif; }
-        
         /* 가이드라인 스타일 */
         .smart-guide-x {
             position: absolute;
@@ -191,6 +188,30 @@
         const { useState, useEffect, useMemo, useRef, Fragment, useCallback } = React;
         const CURRENCY = '$';
 
+        // 폰트 목록 정의
+        const AVAILABLE_FONTS = [
+            { name: 'Noto Sans KR (고딕)', value: "'Noto Sans KR', sans-serif" },
+            { name: 'Nanum Gothic (나눔고딕)', value: "'Nanum Gothic', sans-serif" },
+            { name: 'Nanum Myeongjo (나눔명조)', value: "'Nanum Myeongjo', serif" },
+            { name: 'Black Han Sans (검은고딕)', value: "'Black Han Sans', sans-serif" },
+            { name: 'Do Hyeon (도현)', value: "'Do Hyeon', sans-serif" },
+            { name: 'Jua (주아)', value: "'Jua', sans-serif" },
+            { name: 'Yeon Sung (연성)', value: "'Yeon Sung', cursive" },
+            { name: 'Gugi (구기)', value: "'Gugi', cursive" },
+            { name: 'Gamja Flower (감자꽃)', value: "'Gamja Flower', cursive" },
+            { name: 'Hi Melody (하이멜로디)', value: "'Hi Melody', cursive" },
+            { name: 'Sunflower (해바라기)', value: "'Sunflower', sans-serif" },
+            { name: 'Gowun Dodum (고운돋움)', value: "'Gowun Dodum', sans-serif" },
+            { name: 'Gowun Batang (고운바탕)', value: "'Gowun Batang', serif" },
+            { name: 'Dongle (동글)', value: "'Dongle', sans-serif" },
+            { name: 'Poor Story (가난한이야기)', value: "'Poor Story', cursive" },
+            { name: 'Single Day (싱글데이)', value: "'Single Day', cursive" },
+            { name: 'Cute Font (큐트)', value: "'Cute Font', cursive" },
+            { name: 'Song Myung (송명)', value: "'Song Myung', serif" },
+            { name: 'Stylish (스타일리시)', value: "'Stylish', serif" },
+            { name: 'Gaegu (개구쟁이)', value: "'Gaegu', cursive" }
+        ];
+
         const Icon = ({ name, size = 20, className = "" }) => {
             const icons = {
                 menu: <path d="M3 12h18M3 6h18M3 18h18"/>,
@@ -199,7 +220,7 @@
                 users: <g><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></g>,
                 money: <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>,
                 edit: <g><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></g>,
-                settings: <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.38a2 2 0 0 0-.73-2.73l-.15-.1a2 2 0 0 1-1-1.72v-.51a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>,
+                settings: <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>,
                 check: <polyline points="20 6 9 17 4 12"/>,
                 x: <g><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></g>,
                 alert: <g><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/></g>,
@@ -1097,7 +1118,8 @@
                             backgroundColor: layer.bgColor || 'transparent',
                             padding: `${layer.padding || 0}px`,
                             borderRadius: `${layer.borderRadius || 0}px`,
-                            textShadow: layer.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none'
+                            textShadow: layer.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none',
+                            fontFamily: layer.fontFamily // 폰트 적용
                         }}>
                             {content}
                         </div>
@@ -1261,7 +1283,7 @@
                         ...newLayer, 
                         content: subType ? (subType === 'name' ? '성 명' : subType === 'org' ? '소 속' : '직 책') : 'New Text',
                         variable: subType, 
-                        fontSize: 30, fontFamily: 'font-noto', color: '#000000', align: 'center', width: 'auto' 
+                        fontSize: 30, fontFamily: 'Noto Sans KR', color: '#000000', align: 'center', width: 'auto' 
                     };
                 } else if (type === 'qr') {
                     newLayer = { ...newLayer, size: 100 };
@@ -1340,7 +1362,8 @@
                             ...style,
                             fontSize: `${layer.fontSize}px`, color: layer.color, fontWeight: layer.fontWeight || 'bold',
                             backgroundColor: layer.bgColor || 'transparent', padding: `${layer.padding || 0}px`, borderRadius: `${layer.borderRadius || 0}px`,
-                            width: layer.width === 'auto' ? 'auto' : `${layer.width}px`, textAlign: layer.align || 'center', whiteSpace: 'nowrap'
+                            width: layer.width === 'auto' ? 'auto' : `${layer.width}px`, textAlign: layer.align || 'center', whiteSpace: 'nowrap',
+                            fontFamily: layer.fontFamily // 폰트 적용
                         }}>
                             {contentOrPlaceholder(layer)}
                         </div>
@@ -1576,6 +1599,14 @@
                                                         <option value="id">사번 {`{id}`}</option>
                                                     </select>
                                                 </div>
+                                                <div>
+                                                    <label className="text-[10px] font-bold text-slate-400">폰트</label>
+                                                    <select value={selectedLayer.fontFamily || "'Noto Sans KR', sans-serif"} onChange={e=>updateLayer('fontFamily', e.target.value)} className="w-full p-2 border rounded text-xs" style={{ fontFamily: selectedLayer.fontFamily }}>
+                                                        {AVAILABLE_FONTS.map((font, idx) => (
+                                                            <option key={idx} value={font.value} style={{ fontFamily: font.value }}>{font.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div><label className="text-[10px] font-bold text-slate-400">폰트 크기</label><input type="number" value={selectedLayer.fontSize} onChange={e=>updateLayer('fontSize', Number(e.target.value))} className="w-full p-2 border rounded text-xs"/></div>
                                                     <div><label className="text-[10px] font-bold text-slate-400">색상</label><div className="flex items-center gap-2"><input type="color" value={selectedLayer.color} onChange={e=>updateLayer('color', e.target.value)} className="w-8 h-8 rounded border"/><span className="text-xs">{selectedLayer.color}</span></div></div>
@@ -1671,7 +1702,7 @@
                                         else if (layer.type === 'text') {
                                             let content = layer.content;
                                             if (layer.variable) { if (layer.variable === 'name') content = u.name; else if (layer.variable === 'org') content = u.org; else if (layer.variable === 'role') content = u.options && (u.options['직책'] || u.options['Role'] || '-'); else if (layer.variable === 'id') content = u.uid; }
-                                            return <div key={layer.id} className={layer.fontFamily} style={{ ...commonStyle, fontSize: `${layer.fontSize}px`, color: layer.color, fontWeight: layer.fontWeight || 'bold', backgroundColor: layer.bgColor || 'transparent', padding: `${layer.padding || 0}px`, borderRadius: `${layer.borderRadius || 0}px`, textShadow: layer.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none', whiteSpace: 'nowrap' }}>{content}</div>;
+                                            return <div key={layer.id} className={layer.fontFamily} style={{ ...commonStyle, fontSize: `${layer.fontSize}px`, color: layer.color, fontWeight: layer.fontWeight || 'bold', backgroundColor: layer.bgColor || 'transparent', padding: `${layer.padding || 0}px`, borderRadius: `${layer.borderRadius || 0}px`, textShadow: layer.shadow ? '2px 2px 4px rgba(0,0,0,0.5)' : 'none', whiteSpace: 'nowrap', fontFamily: layer.fontFamily }}>{content}</div>;
                                         } 
                                         return null;
                                     })}
@@ -1736,9 +1767,9 @@
                 imgHeight: 697,
                 layers: [
                     { id: 'qr', type: 'qr', x: 50, y: 20, size: 100 },
-                    { id: 'org', type: 'text', content: '소속 (Org)', variable: 'org', x: 50, y: 40, fontSize: 20, fontFamily: 'font-noto', color: '#475569', align: 'center', width: 'auto' },
-                    { id: 'name', type: 'text', content: '성 명 (Name)', variable: 'name', x: 50, y: 65, fontSize: 40, fontFamily: 'font-noto', color: '#000000', align: 'center', width: 'auto' },
-                    { id: 'role', type: 'text', content: '직책 (Role)', variable: 'role', x: 50, y: 50, fontSize: 18, fontFamily: 'font-noto', color: '#000000', align: 'center', width: 'auto' }
+                    { id: 'org', type: 'text', content: '소속 (Org)', variable: 'org', x: 50, y: 40, fontSize: 20, fontFamily: "'Noto Sans KR', sans-serif", color: '#475569', align: 'center', width: 'auto' },
+                    { id: 'name', type: 'text', content: '성 명 (Name)', variable: 'name', x: 50, y: 65, fontSize: 40, fontFamily: "'Noto Sans KR', sans-serif", color: '#000000', align: 'center', width: 'auto' },
+                    { id: 'role', type: 'text', content: '직책 (Role)', variable: 'role', x: 50, y: 50, fontSize: 18, fontFamily: "'Noto Sans KR', sans-serif", color: '#000000', align: 'center', width: 'auto' }
                 ]
             });
 
