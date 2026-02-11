@@ -70,18 +70,33 @@
         .data-table td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; font-size: 0.85rem; font-weight: 500; color: #334155; }
         .data-table tr:hover td { background-color: #f8fafc; }
 
-        /* 스캐너 카메라 정사각형 강제 스타일 */
-        #reader {
-            width: 100% !important;
-            height: 100% !important;
+        /* 스캐너 UI 강제 스타일 (정사각형 및 꽉 채우기) */
+        .scanner-container {
+            position: relative;
+            width: 100%;
+            max-width: 320px;
+            aspect-ratio: 1 / 1;
+            background: #000;
+            border-radius: 1.5rem;
             overflow: hidden;
-            border-radius: 1.5rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border: 4px solid rgba(255, 255, 255, 0.1);
         }
-        #reader video {
-            object-fit: cover !important;
+
+        #reader, #lookup-reader {
             width: 100% !important;
             height: 100% !important;
-            border-radius: 1.5rem;
+            position: absolute !important;
+            top: 0;
+            left: 0;
+            border: none !important;
+        }
+
+        #reader video, #lookup-reader video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+            border-radius: 1.2rem;
         }
 
         /* 인쇄 스타일 */
@@ -721,6 +736,7 @@
                                         </div>
                                     ))}
                                     
+                                    {/* 항상 보이는 추가 버튼 (관리 모드가 아닐 때도 추가 가능) */}
                                     <button onClick={handleAddBus} className="py-3 rounded-xl text-sm font-bold bg-slate-50 border-2 border-dashed border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600 hover:border-slate-300 transition-all flex items-center justify-center">
                                         <Icon name="plus" size={20} />
                                     </button>
@@ -743,23 +759,24 @@
                                 <Icon name="x" size={32} />
                             </button>
                             
-                            <div className="relative w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/20 flex items-center justify-center">
-                                <div id="reader" className="w-full h-full absolute inset-0"></div>
+                            {/* 정사각형 스캐너 래퍼 */}
+                            <div className="scanner-container">
+                                <div id="reader"></div>
                                 
-                                {/* 스캔 가이드 라인 - 중앙 정렬 */}
-                                <div className="relative w-2/3 h-2/3 border-2 border-white/30 rounded-3xl pointer-events-none z-10 flex items-center justify-center">
-                                    <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-xl"></div>
-                                    <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-xl"></div>
-                                    <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-xl"></div>
-                                    <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-xl"></div>
-                                    
-                                    {/* 스캔 라인 */}
-                                    <div className={`scan-line ${mode==='BOARDING'?'bg-incar':'bg-emerald-500'}`} style={{ width: '90%' }}></div>
+                                {/* 중앙 가이드라인 (황금비율 스타일) */}
+                                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                                    <div className="relative w-[70%] h-[70%]">
+                                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-2xl"></div>
+                                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-2xl"></div>
+                                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-2xl"></div>
+                                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-2xl"></div>
+                                        <div className={`scan-line ${mode==='BOARDING'?'bg-incar':'bg-emerald-500'}`}></div>
+                                    </div>
                                 </div>
                             </div>
                             
                             <p className="text-white mt-10 font-bold text-xl animate-pulse text-center">
-                                QR코드를 사각형 안에 비춰주세요
+                                QR코드를 사각형 중앙에 맞춰주세요
                             </p>
                             
                             <div className="mt-8 flex gap-4">
@@ -961,20 +978,20 @@
                                 <button onClick={stopLookupScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full hover:bg-white/20 transition-colors z-[101]">
                                     <Icon name="x" size={32} />
                                 </button>
-                                <div className="relative w-full max-w-sm aspect-square bg-black rounded-3xl overflow-hidden shadow-2xl border border-white/20 flex items-center justify-center">
-                                    <div id="lookup-reader" className="w-full h-full absolute inset-0"></div>
-                                    
-                                    {/* 스캔 가이드 라인 - 중앙 정렬 */}
-                                    <div className="relative w-2/3 h-2/3 border-2 border-white/30 rounded-3xl pointer-events-none z-10 flex items-center justify-center">
-                                        <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-xl"></div>
-                                        <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-xl"></div>
-                                        <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-xl"></div>
-                                        <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-xl"></div>
-                                        
-                                        {/* 스캔 라인 */}
-                                        <div className="scan-line bg-incar" style={{ width: '90%' }}></div>
+                                
+                                <div className="scanner-container">
+                                    <div id="lookup-reader"></div>
+                                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                                        <div className="relative w-[70%] h-[70%]">
+                                            <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-white rounded-tl-2xl"></div>
+                                            <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-2xl"></div>
+                                            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-2xl"></div>
+                                            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-2xl"></div>
+                                            <div className="scan-line bg-incar"></div>
+                                        </div>
                                     </div>
                                 </div>
+
                                 <p className="text-white mt-10 font-bold text-xl animate-pulse text-center">조회할 QR코드를 스캔하세요</p>
                                 <div className="mt-8 flex gap-4">
                                     <button onClick={stopLookupScanner} className="px-8 py-3 bg-white text-slate-900 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors">닫기</button>
