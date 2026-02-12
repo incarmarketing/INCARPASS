@@ -267,7 +267,7 @@
         };
 
         const Sidebar = ({ activeTab, setActiveTab }) => (
-            <aside className="w-64 bg-white h-full border-r border-slate-200 flex flex-col shadow-lg z-30 no-print hidden md:flex">
+            <aside className="w-64 bg-white/95 backdrop-blur-md h-full border-r border-slate-200 flex flex-col shadow-lg z-30 no-print hidden md:flex relative">
                 <div className="p-6 border-b border-slate-100 flex items-center gap-3">
                     <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
                     <h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PC</span></h1>
@@ -791,7 +791,7 @@
                                         <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-white rounded-tr-2xl"></div>
                                         <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-white rounded-bl-2xl"></div>
                                         <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-white rounded-br-2xl"></div>
-                                        <div className={`scan-line ${mode==='BOARDING'?'bg-incar':'bg-emerald-500'}`}></div>
+                                        <div className={`scan-line ${mode==='BOARDING'?'bg-incar':'bg-emerald-500'}`} style={{ width: '90%' }}></div>
                                     </div>
                                 </div>
                             </div>
@@ -1272,7 +1272,7 @@
             );
         };
 
-        const ManageView = ({ users, handleUserUpload, handleScheduleUpload, badgeConfig, setBadgeConfig, db, serverError, schedules, logs, setIsPrintMode, setUsers, setSchedules, setLogs, setChangeLogs, changeLogs }) => {
+        const ManageView = ({ users, handleUserUpload, handleScheduleUpload, badgeConfig, setBadgeConfig, db, serverError, schedules, logs, setIsPrintMode, setUsers, setSchedules, setLogs, setChangeLogs, changeLogs, appBgImage, setAppBgImage, handleAppBgUpload }) => {
             const handleBgImageUpload = (e) => {
                 const file = e.target.files[0];
                 if(file){
@@ -1770,6 +1770,22 @@
                                     <div className="flex items-center gap-3"><Icon name="dashboard" className="text-blue-200"/><div><div className="font-bold text-sm">2. 일정 정보 (Schedules.csv)</div></div></div>
                                     <label className="flex items-center justify-center px-4 py-2 bg-white text-incar font-bold rounded-lg cursor-pointer hover:bg-slate-100 text-xs"><input type="file" accept=".csv" onChange={handleScheduleUpload} className="hidden" />업로드</label>
                                 </div>
+                                
+                                {/* 앱 전체 배경화면 추가 */}
+                                <div className="bg-white/10 rounded-2xl border border-white/20 p-4 flex justify-between items-center">
+                                    <div className="flex items-center gap-3">
+                                        <Icon name="image" className="text-blue-200"/>
+                                        <div>
+                                            <div className="font-bold text-sm">3. 앱 전체 배경화면 (행사 전경 등)</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {appBgImage && <button onClick={() => setAppBgImage(null)} className="px-3 py-2 bg-rose-500/80 text-white font-bold rounded-lg hover:bg-rose-500 text-xs transition-colors">초기화</button>}
+                                        <label className="flex items-center justify-center px-4 py-2 bg-white text-incar font-bold rounded-lg cursor-pointer hover:bg-slate-100 text-xs">
+                                            <input type="file" accept="image/*" onChange={handleAppBgUpload} className="hidden" />업로드
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1824,16 +1840,55 @@
             const [logs, setLogs] = useState([]);
             const [changeLogs, setChangeLogs] = useState([]);
             
+            // 앱 전체 배경화면 상태
+            const [appBgImage, setAppBgImage] = useState(() => localStorage.getItem('incar_pro_app_bg') || null);
+
             // 차량 목록 관리용 상태 (LocalStorage 저장)
             const [busList, setBusList] = useState(() => {
                 const saved = localStorage.getItem('incar_pro_bus_list');
                 return saved ? JSON.parse(saved) : ['1호차', '2호차', '3호차'];
             });
 
-            // 차량 목록이 변경될 때마다 로컬 스토리지에 저장
+            // 배경화면 및 차량 목록이 변경될 때마다 로컬 스토리지에 저장
             useEffect(() => {
                 localStorage.setItem('incar_pro_bus_list', JSON.stringify(busList));
             }, [busList]);
+
+            useEffect(() => {
+                if (appBgImage) localStorage.setItem('incar_pro_app_bg', appBgImage);
+                else localStorage.removeItem('incar_pro_app_bg');
+            }, [appBgImage]);
+
+            const handleAppBgUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            let width = img.width;
+                            let height = img.height;
+                            const MAX = 1920; // 1920px 이하로 압축
+                            if (width > height && width > MAX) {
+                                height *= MAX / width;
+                                width = MAX;
+                            } else if (height > MAX) {
+                                width *= MAX / height;
+                                height = MAX;
+                            }
+                            canvas.width = width;
+                            canvas.height = height;
+                            ctx.drawImage(img, 0, 0, width, height);
+                            const dataUrl = canvas.toDataURL('image/jpeg', 0.6); // 60% 압축 저장
+                            setAppBgImage(dataUrl);
+                        };
+                        img.src = evt.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
 
             const scheduleStats = useMemo(() => {
                 return schedules.map(s => {
@@ -2036,7 +2091,6 @@
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
             useEffect(() => { localStorage.setItem('incar_pro_badge_config_v2_9', JSON.stringify(badgeConfig)); }, [badgeConfig]);
 
-            /* --- 핵심 로직: 일정 변경 시 이전 로그 정리 (대시보드 정확도 향상) --- */
             const cleanupOldLogs = async (uid, targetKey, oldVal, performUpdate = true) => {
                 const relatedSessions = schedules.filter(s => s.targetKey === targetKey);
                 const logsToDelete = logs.filter(l => l.uid === uid && relatedSessions.some(s => s.id === l.sessionId));
@@ -2367,25 +2421,46 @@
             };
 
             return (
-                <div className="h-full flex flex-row bg-slate-50 w-full">
-                    <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
-                    <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full">
-                        { isMobile && (<header className="bg-white px-6 py-4 shadow-sm flex justify-between items-center z-20 no-print"><div className="flex items-center gap-2"><div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div><h1 className="font-black text-slate-800 tracking-tight">INCARPASS</h1></div><div className="text-xs font-bold text-slate-400">{users.length}명</div></header>) }
-                        <div className="flex-1 overflow-y-auto p-4 pb-32 md:p-8 md:pb-8 w-full no-print-scroll">
+                <div 
+                    className={`h-full flex flex-row w-full relative ${appBgImage ? 'bg-cover bg-center bg-no-repeat bg-fixed' : 'bg-slate-50'}`} 
+                    style={appBgImage ? {backgroundImage: `url(${appBgImage})`} : {}}
+                >
+                    {/* 전체 배경 오버레이 (사진 적용 시 약간 어둡게 처리) */}
+                    {appBgImage && <div className="absolute inset-0 z-0 bg-slate-900/40 backdrop-blur-[2px] pointer-events-none"></div>}
+
+                    <div className="z-10 h-full hidden md:block">
+                        <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+                    </div>
+                    
+                    <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full z-10">
+                        { isMobile && (
+                            <header className={`${appBgImage ? 'bg-white/90 backdrop-blur-md' : 'bg-white'} px-6 py-4 shadow-sm flex justify-between items-center z-20 no-print`}>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
+                                    <h1 className="font-black text-slate-800 tracking-tight">INCARPASS</h1>
+                                </div>
+                                <div className="text-xs font-bold text-slate-400">{users.length}명</div>
+                            </header>
+                        )}
+                        
+                        <div className="flex-1 overflow-y-auto p-4 pb-32 md:p-8 md:pb-8 w-full no-print-scroll relative z-10">
                             <div className="max-w-5xl mx-auto w-full">
                                 {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
                                 {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} />}
                                 {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} />}
                                 {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} schedules={schedules} changeLogs={changeLogs} />}
-                                {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} badgeConfig={badgeConfig} setBadgeConfig={setBadgeConfig} db={db} serverError={serverError} schedules={schedules} logs={logs} setIsPrintMode={setIsPrintMode} setUsers={setUsers} setSchedules={setSchedules} setLogs={setLogs} setChangeLogs={setChangeLogs} changeLogs={changeLogs} />} 
+                                {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} badgeConfig={badgeConfig} setBadgeConfig={setBadgeConfig} db={db} serverError={serverError} schedules={schedules} logs={logs} setIsPrintMode={setIsPrintMode} setUsers={setUsers} setSchedules={setSchedules} setLogs={setLogs} setChangeLogs={setChangeLogs} changeLogs={changeLogs} appBgImage={appBgImage} setAppBgImage={setAppBgImage} handleAppBgUpload={handleAppBgUpload} />} 
                             </div>
                         </div>
+
                         { isMobile && <MobileTab activeTab={activeTab} setActiveTab={setActiveTab} /> }
+                        
                         {isPrintMode && <BadgePrintView users={users} config={badgeConfig} onClose={() => setIsPrintMode(false)} />}
                         {selectedSession && <SessionDetailModal session={selectedSession} users={users} logs={logs} onClose={() => setSelectedSession(null)} onManualComplete={handleManualComplete} />}
                         {refundRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in no-print"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-rose-50 p-6 text-center border-b border-rose-100"><div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">$</div><h3 className="text-xl font-black text-rose-600 mb-1">지급금 반환 필요</h3><p className="text-slate-600 font-bold text-sm">{refundRequest.user.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{refundRequest.amount}</span>을 지급받았습니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2">기존 일정: {refundRequest.oldVal} <br/>▼ <br/>변경 일정: {refundRequest.session.title}</div><button onClick={() => resolveRefundRequest(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>반환 받았습니다</span><span className="text-[10px] opacity-80 font-normal">(패널티 없음)</span></button><button onClick={() => resolveRefundRequest(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>반환받지 못했습니다</span><span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 처리)</span></button><button onClick={() => setRefundRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">취소</button></div></div></div>)}
                         {forfeitRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in no-print"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-indigo-50 p-6 text-center border-b border-indigo-100"><div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div><h3 className="text-xl font-black text-indigo-900 mb-1">일정 변경 확인 (Case 2)</h3><p className="text-slate-600 font-bold text-sm">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div><button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span></button><button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span></button><button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">취소</button></div></div></div>)}
                     </main>
+                    
                     <ResultModal result={scanResult} onClose={() => setScanResult(null)} onForceUpdate={handleForceUpdateAndProcess} />
                 </div>
             );
