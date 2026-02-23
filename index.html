@@ -390,6 +390,12 @@
             const targetUsers = useMemo(() => {
                 if (!session) return [];
                 if (session.targetKey === 'ALL') return users;
+                
+                // 버스 관련 타겟인 경우 user.bus 필드 확인 (제1원칙 대응)
+                if (['버스', '탑승버스', 'Bus'].includes(session.targetKey)) {
+                    return users.filter(u => u.bus && u.bus.includes(session.targetVal));
+                }
+
                 return users.filter(u => u.options && u.options[session.targetKey] && u.options[session.targetKey].includes(session.targetVal));
             }, [session, users]);
 
@@ -1894,6 +1900,10 @@
                 return schedules.map(s => {
                     let targetCount = 0;
                     if(s.targetKey === 'ALL') targetCount = users.length;
+                    else if(['버스', '탑승버스', 'Bus'].includes(s.targetKey)) {
+                        // 버스를 타겟옵션으로 설정한 경우 user.bus 값 검사
+                        targetCount = users.filter(u => u.bus && u.bus.includes(s.targetVal)).length;
+                    }
                     else targetCount = users.filter(u => u.options && u.options[s.targetKey] && u.options[s.targetKey].includes(s.targetVal)).length;
                     
                     const doneCount = logs.filter(l => {
@@ -1902,18 +1912,28 @@
                         if (!currentUser) return false; 
                         
                         if (s.targetKey === 'ALL') return true;
+                        
+                        if (['버스', '탑승버스', 'Bus'].includes(s.targetKey)) {
+                            return s.targetVal === 'ALL' || (currentUser.bus && currentUser.bus.includes(s.targetVal));
+                        }
+
                         const userOpt = currentUser.options?.[s.targetKey];
                         if (!userOpt) return false;
                         return s.targetVal === 'ALL' || userOpt.includes(s.targetVal);
                     }).length;
 
-                    const percent = targetCount > 0 ? Math.round((doneCount / targetCount) * 100) : 0;
+                    const percent = targetCount > 0 ? Math.round((doneCount / targetCount) * 100) : (doneCount > 0 ? 100 : 0);
                     const expectedAmount = targetCount * (s.price || 0);
                     const actualAmount = logs.filter(l => {
                         if (l.sessionId !== s.id) return false;
                         const currentUser = users.find(u => u.uid === l.uid);
                         if (!currentUser) return false;
                         if (s.targetKey === 'ALL') return true;
+                        
+                        if (['버스', '탑승버스', 'Bus'].includes(s.targetKey)) {
+                            return s.targetVal === 'ALL' || (currentUser.bus && currentUser.bus.includes(s.targetVal));
+                        }
+
                         const userOpt = currentUser.options?.[s.targetKey];
                         if (!userOpt) return false;
                         return s.targetVal === 'ALL' || userOpt.includes(s.targetVal);
@@ -2336,7 +2356,14 @@
                 if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user }); 
                 
                 if (session.targetKey !== 'ALL') { 
-                    const userChoice = user.options[session.targetKey]; 
+                    let userChoice;
+                    // 버스 관련 타겟인 경우 user.bus 필드 확인 (제1원칙 대응)
+                    if (['버스', '탑승버스', 'Bus'].includes(session.targetKey)) {
+                        userChoice = user.bus;
+                    } else {
+                        userChoice = user.options[session.targetKey];
+                    }
+                    
                     const requiredChoice = session.targetVal; 
                     if (!userChoice || (requiredChoice !== 'ALL' && !userChoice.includes(requiredChoice))) { 
                         return setScanResult({ status: 'error', msg: '대상자 아님', subMsg: `필요: ${requiredChoice} / 본인: ${userChoice || '선택없음'}`, user, requiredChoice, session }); 
