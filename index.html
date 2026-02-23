@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>INCARPASS PRO - Universal Event Platform</title>
     
-    <!-- 필수 라이브러리 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -17,12 +16,10 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 
-    <!-- 이미지 및 압축 관련 라이브러리 추가 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     
-    <!-- 폰트 다양화 (20종 추가) -->
     <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Cute+Font&family=Do+Hyeon&family=Dongle&family=Gaegu&family=Gamja+Flower&family=Gowun+Batang&family=Gowun+Dodum&family=Gugi&family=Hi+Melody&family=Jua&family=Nanum+Brush+Script&family=Nanum+Gothic&family=Nanum+Myeongjo&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@100;300;400;500;700;900&family=Poor+Story&family=Single+Day&family=Song+Myung&family=Stylish&family=Sunflower:wght@300;500;700&family=Yeon+Sung&display=swap" rel="stylesheet">
     
     <script>
@@ -174,7 +171,7 @@
             bottom: 0;
             width: 1px;
             background-color: #ef4444;
-            z-index: 200; /* Ensure it is above layers */
+            z-index: 200;
             pointer-events: none;
             border-left: 1px dashed #ef4444;
         }
@@ -185,7 +182,7 @@
             right: 0;
             height: 1px;
             background-color: #ef4444;
-            z-index: 200; /* Ensure it is above layers */
+            z-index: 200;
             pointer-events: none;
             border-top: 1px dashed #ef4444;
         }
@@ -193,10 +190,12 @@
         .layer-item:hover { background-color: #f1f5f9; }
         .layer-item.active { background-color: #eef2ff; border-color: #27398C; }
         
-        /* 스크롤바 숨기기 (프린트시) */
-        @media print {
-            ::-webkit-scrollbar { display: none; }
-        }
+        /* 커스텀 스크롤바 */
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
         /* 데이터 테이블 인쇄용 */
         .no-print-scroll { -ms-overflow-style: none; scrollbar-width: none; }
         .no-print-scroll::-webkit-scrollbar { display: none; }
@@ -233,6 +232,27 @@
             { name: 'Gaegu (개구쟁이)', value: "'Gaegu', cursive" }
         ];
 
+        // 일정(Session)에 맞는 사용자의 예상 버스(Expected Bus)를 동적으로 도출하는 유틸리티 함수
+        // 제1원칙: 하드코딩된 '버스' 컬럼이 아니라, 스케줄의 타겟키(예: '1일차')를 기반으로 '1일차 버스'를 탐색합니다.
+        const getExpectedBus = (user, session) => {
+            if (!user || !session) return '미정';
+            
+            // 1. 세션 타겟키를 활용한 동적 버스 컬럼명 유추 (예: 타겟키가 '1일차'라면 '1일차 버스' 컬럼 확인)
+            if (session.targetKey && session.targetKey !== 'ALL') {
+                const dynamicBusKey = `${session.targetKey} 버스`;
+                if (user.options && user.options[dynamicBusKey] && user.options[dynamicBusKey].trim() !== '') {
+                    return user.options[dynamicBusKey];
+                }
+            }
+            
+            // 2. 기본 버스 필드 확인 (사용자 정보에 직접 기입된 경우)
+            if (user.bus && user.bus !== '미정') return user.bus;
+            if (user.options && user.options['버스']) return user.options['버스'];
+            if (user.options && user.options['탑승버스']) return user.options['탑승버스'];
+            
+            return '미정';
+        };
+
         const Icon = ({ name, size = 20, className = "" }) => {
             const icons = {
                 menu: <path d="M3 12h18M3 6h18M3 18h18"/>,
@@ -261,7 +281,8 @@
                 down: <g><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></g>,
                 chevronsUp: <g><polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/></g>,
                 chevronsDown: <g><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></g>,
-                image: <g><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></g>
+                image: <g><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></g>,
+                chevronRight: <polyline points="9 18 15 12 9 6" />
             };
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="2"/>}</svg>;
         };
@@ -272,7 +293,7 @@
                     <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
                     <h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PC</span></h1>
                 </div>
-                <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+                <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
                     {[
                         {id:'dashboard', icon:'dashboard', label:'현황 (Status)'},
                         {id:'boarding', icon:'bus', label:'탑승 (Boarding)'},
@@ -332,7 +353,8 @@
                                     <div>
                                         <div className="font-bold text-lg text-slate-900">{user.name}</div>
                                         <div className="text-xs text-slate-400 font-medium">{user.org} | {user.uid}</div>
-                                        {user.bus && <div className="text-xs text-incar font-bold mt-1">배정차량: {user.bus}</div>}
+                                        {/* 제1원칙: 세션 정보가 있으면 세션에 맞는 예상 버스를 표기하고, 없으면 기본 버스 표기 */}
+                                        <div className="text-xs text-incar font-bold mt-1">배정차량: {session ? getExpectedBus(user, session) : getExpectedBus(user, null)}</div>
                                     </div>
                                 </div>
                                 {isSuccess && logs && logs.finalAmount !== undefined && (
@@ -358,7 +380,7 @@
                                 {isBusMismatch && (
                                     <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-center">
                                         <p className="text-sm font-bold text-rose-600 mb-2">차량이 일치하지 않습니다</p>
-                                        <p className="text-xs text-slate-500 mb-1">해당 인원은 <strong>{user.bus}</strong> 탑승 대상입니다.</p>
+                                        <p className="text-xs text-slate-500 mb-1">해당 인원은 <strong>{getExpectedBus(user, session)}</strong> 탑승 대상입니다.</p>
                                         <p className="text-xs text-slate-400">다른 차량으로 안내하거나, 관리자에게 문의하세요.</p>
                                     </div>
                                 )}
@@ -387,18 +409,23 @@
         const SessionDetailModal = ({ session, users, logs, onClose, onManualComplete }) => {
             const [tab, setTab] = useState('done');
             
+            // 1. 해당 일정의 "목표(Target) 사용자" 추출
             const targetUsers = useMemo(() => {
                 if (!session) return [];
                 if (session.targetKey === 'ALL') return users;
                 
-                // 버스 관련 타겟인 경우 user.bus 필드 확인 (제1원칙 대응)
+                // 버스 관련 타겟인 경우 일자별/세션별 버스를 동적으로 확인 (제1원칙 대응)
                 if (['버스', '탑승버스', 'Bus'].includes(session.targetKey)) {
-                    return users.filter(u => u.bus && u.bus.includes(session.targetVal));
+                    return users.filter(u => {
+                        const expected = getExpectedBus(u, session);
+                        return expected !== '미정' && expected.includes(session.targetVal);
+                    });
                 }
 
                 return users.filter(u => u.options && u.options[session.targetKey] && u.options[session.targetKey].includes(session.targetVal));
             }, [session, users]);
 
+            // 2. 완료(Done) 목록과 미완료(Yet) 목록 분리
             const { doneList, yetList } = useMemo(() => {
                 const doneIds = new Set(logs.filter(l => l.sessionId === session.id).map(l => l.uid));
                 const done = [];
@@ -414,16 +441,45 @@
                 return { doneList: done, yetList: yet };
             }, [targetUsers, logs, session]);
 
-            const currentList = tab === 'done' ? doneList : yetList;
+            // 3. 완료 목록을 "실제 탑승한 버스(log.bus)" 기준으로 그룹핑
+            const doneGroups = useMemo(() => {
+                const groups = {};
+                doneList.forEach(u => {
+                    const busName = (u.log && u.log.bus && u.log.bus !== '-') ? u.log.bus : '기타/미정';
+                    if(!groups[busName]) groups[busName] = [];
+                    groups[busName].push(u);
+                });
+                return groups;
+            }, [doneList]);
+
+            // 4. 미완료 목록을 "예상 호차(getExpectedBus)" 기준으로 그룹핑
+            const yetGroups = useMemo(() => {
+                const groups = {};
+                yetList.forEach(u => {
+                    const expectedBus = getExpectedBus(u, session);
+                    if(!groups[expectedBus]) groups[expectedBus] = [];
+                    groups[expectedBus].push(u);
+                });
+                return groups;
+            }, [yetList, session]);
+
+            // 아코디언 상태 관리용
+            const [expandedGroups, setExpandedGroups] = useState({});
+            const toggleGroup = (groupName) => {
+                setExpandedGroups(prev => ({ ...prev, [groupName]: !prev[groupName] }));
+            };
+
+            const currentGroups = tab === 'done' ? doneGroups : yetGroups;
+            const groupKeys = Object.keys(currentGroups).sort();
 
             return (
                 <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in no-print" onClick={onClose}>
-                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
                             <div>
                                 <span className={`inline-block px-2 py-1 rounded text-[10px] font-bold mb-1 ${session.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-indigo-100 text-incar'}`}>{session.type==='PAYMENT'?'지급':'탑승'}</span>
                                 <h3 className="font-bold text-lg text-slate-800 leading-tight">{session.title}</h3>
-                                <p className="text-xs text-slate-500 mt-1">{session.displayDate} | 대상 {targetUsers.length}명</p>
+                                <p className="text-xs text-slate-500 mt-1">{session.displayDate} | 전체 대상 {targetUsers.length}명</p>
                             </div>
                             <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600"><Icon name="x" size={24}/></button>
                         </div>
@@ -437,32 +493,56 @@
                             </button>
                         </div>
 
-                        <div className="overflow-y-auto flex-1 p-4 space-y-2">
-                            {currentList.length === 0 ? (
+                        <div className="overflow-y-auto flex-1 p-4 space-y-4 custom-scrollbar bg-slate-50/30">
+                            {groupKeys.length === 0 ? (
                                 <div className="py-10 text-center text-slate-400 text-sm">해당 인원이 없습니다.</div>
                             ) : (
-                                currentList.map(u => (
-                                    <div key={u.uid} className="flex justify-between items-center p-3 rounded-xl border border-slate-100 hover:border-slate-300 transition-colors">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${tab==='done'?'bg-emerald-500':'bg-slate-300'}`}>{u.name[0]}</div>
-                                            <div>
-                                                <div className="font-bold text-slate-800 text-sm">{u.name} <span className="text-xs font-normal text-slate-500">({u.options && (u.options['직책'] || u.org)})</span></div>
-                                                <div className="text-[10px] text-slate-400 font-mono">{u.uid}</div>
-                                                {u.bus && <div className="text-[10px] text-incar font-bold">배정: {u.bus}</div>}
+                                groupKeys.map(groupName => (
+                                    <div key={groupName} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                                        <button 
+                                            onClick={() => toggleGroup(groupName)} 
+                                            className="w-full p-4 flex justify-between items-center bg-slate-50 hover:bg-slate-100 transition-colors"
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-8 h-8 rounded-lg bg-incar text-white flex items-center justify-center">
+                                                    <Icon name="bus" size={16} />
+                                                </div>
+                                                <div className="text-left">
+                                                    <div className="font-bold text-slate-800 text-sm">{groupName}</div>
+                                                    <div className="text-[10px] text-slate-500">{currentGroups[groupName].length}명 {tab === 'done' ? '탑승/지급 완료' : '대기중'}</div>
+                                                </div>
                                             </div>
-                                        </div>
-                                        {tab === 'done' && u.log && (
-                                            <div className="text-right">
-                                                {session.type === 'PAYMENT' && (
-                                                    <div className="font-bold text-emerald-600 text-sm">{CURRENCY}{u.log.finalAmount}</div>
-                                                )}
-                                                <div className="text-[10px] text-slate-400">{new Date(u.log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                                            <Icon name={expandedGroups[groupName] ? "up" : "down"} size={20} className="text-slate-400" />
+                                        </button>
+                                        
+                                        {/* 아코디언 내용 */}
+                                        {expandedGroups[groupName] && (
+                                            <div className="p-2 space-y-2 border-t border-slate-100 bg-white">
+                                                {currentGroups[groupName].map(u => (
+                                                    <div key={u.uid} className="flex justify-between items-center p-3 rounded-lg border border-slate-50 hover:bg-slate-50 transition-colors">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${tab==='done'?'bg-emerald-500':'bg-slate-300'}`}>{u.name[0]}</div>
+                                                            <div>
+                                                                <div className="font-bold text-slate-800 text-sm">{u.name} <span className="text-xs font-normal text-slate-500">({u.options && (u.options['직책'] || u.org)})</span></div>
+                                                                <div className="text-[10px] text-slate-400 font-mono">{u.uid}</div>
+                                                            </div>
+                                                        </div>
+                                                        {tab === 'done' && u.log && (
+                                                            <div className="text-right">
+                                                                {session.type === 'PAYMENT' && (
+                                                                    <div className="font-bold text-emerald-600 text-sm">{CURRENCY}{u.log.finalAmount}</div>
+                                                                )}
+                                                                <div className="text-[10px] text-slate-400">{new Date(u.log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                                                            </div>
+                                                        )}
+                                                        {tab === 'yet' && (
+                                                            <button onClick={() => onManualComplete(u, session)} className="px-3 py-1.5 bg-slate-800 text-white text-[10px] font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-sm">
+                                                                수동 완료
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                ))}
                                             </div>
-                                        )}
-                                        {tab === 'yet' && (
-                                            <button onClick={() => onManualComplete(u, session)} className="px-3 py-1.5 bg-slate-800 text-white text-[10px] font-bold rounded-lg hover:bg-slate-700 transition-colors shadow-sm">
-                                                수동 완료
-                                            </button>
                                         )}
                                     </div>
                                 ))
@@ -675,7 +755,8 @@
                     const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
                     scannerRef.current.start({ facingMode: "environment" }, config, (decodedText) => {
                         stopScanner();
-                        processScan(decodedText, isStrictBusMode); // Strict Mode 상태 전달
+                        // 제1원칙: Strict Mode (검증 모드) 여부를 파라미터로 전달하여, processScan 내부에서 검증 로직을 실행하도록 함.
+                        processScan(decodedText, isStrictBusMode); 
                     }, () => {}).then(() => {
                         isRunningRef.current = true;
                     }).catch(err => {
@@ -727,7 +808,7 @@
                                                 <div className={`w-7 sm:w-8 h-4 rounded-full relative transition-colors shrink-0 ${isStrictBusMode ? 'bg-incar' : 'bg-slate-300'}`}>
                                                     <div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${isStrictBusMode ? 'translate-x-3 sm:translate-x-4' : 'translate-x-0'}`}></div>
                                                 </div>
-                                                <span className={`text-[9px] sm:text-[10px] font-bold ${isStrictBusMode ? 'text-incar' : 'text-slate-400'}`}>배정 차량 검증</span>
+                                                <span className={`text-[9px] sm:text-[10px] font-bold ${isStrictBusMode ? 'text-incar' : 'text-slate-400'}`}>배차 검증 (ON 시 지정호차만 허용)</span>
                                             </div>
                                             <button onClick={()=>setManualBus(!manualBus)} className={`text-[10px] sm:text-xs font-bold px-2 sm:px-3 py-1.5 rounded-lg transition-colors shrink-0 whitespace-nowrap ${manualBus ? 'bg-incar text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
                                                 {manualBus ? '관리 완료' : '차량 관리'}
@@ -777,7 +858,7 @@
                         <button onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform ${mode==='BOARDING'?'bg-incar shadow-incar/30':'bg-emerald-500 shadow-emerald-500/30'}`}>
                             <Icon name="qr" size={28}/> {mode==='BOARDING' ? '탑승 스캔 시작' : '지급 스캔 시작'}
                         </button>
-                        {!isMobile && users.length > 0 && <button onClick={()=>processScan(users[0].uid)} className="mt-4 text-xs text-slate-400 underline text-center">테스트: 첫번째 유저 강제 인식</button>}
+                        {!isMobile && users.length > 0 && <button onClick={()=>processScan(users[0].uid, isStrictBusMode)} className="mt-4 text-xs text-slate-400 underline text-center">테스트: 첫번째 유저 강제 인식</button>}
                     </div>
 
                     {isScanning && (
@@ -904,6 +985,11 @@
                 if (!selectedUser || !schedules) return [];
                 return schedules.filter(s => {
                     if (s.targetKey === 'ALL') return true;
+                    // 버스 로직 포함 검사
+                    if (['버스', '탑승버스', 'Bus'].includes(s.targetKey)) {
+                        const expected = getExpectedBus(selectedUser, s);
+                        return expected !== '미정' && expected.includes(s.targetVal);
+                    }
                     const userOpt = selectedUser.options?.[s.targetKey];
                     if (!userOpt) return false;
                     return s.targetVal === 'ALL' || userOpt.includes(s.targetVal);
@@ -1062,6 +1148,7 @@
                                                     <div>
                                                         <span className="text-[10px] font-bold text-slate-400 block">{s.displayDate}</span>
                                                         <span className="font-bold text-slate-800">{s.title}</span>
+                                                        {s.type === 'BOARDING' && <div className="text-[10px] text-incar mt-0.5 font-bold">배정호차: {getExpectedBus(selectedUser, s)}</div>}
                                                     </div>
                                                     <div className="text-right">
                                                         <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-slate-100 text-slate-500'}`}>
@@ -1901,8 +1988,11 @@
                     let targetCount = 0;
                     if(s.targetKey === 'ALL') targetCount = users.length;
                     else if(['버스', '탑승버스', 'Bus'].includes(s.targetKey)) {
-                        // 버스를 타겟옵션으로 설정한 경우 user.bus 값 검사
-                        targetCount = users.filter(u => u.bus && u.bus.includes(s.targetVal)).length;
+                        // 제1원칙: 버스를 타겟으로 설정한 경우, 일자별 버스를 도출하여 필터링
+                        targetCount = users.filter(u => {
+                            const expected = getExpectedBus(u, s);
+                            return expected !== '미정' && expected.includes(s.targetVal);
+                        }).length;
                     }
                     else targetCount = users.filter(u => u.options && u.options[s.targetKey] && u.options[s.targetKey].includes(s.targetVal)).length;
                     
@@ -1914,7 +2004,8 @@
                         if (s.targetKey === 'ALL') return true;
                         
                         if (['버스', '탑승버스', 'Bus'].includes(s.targetKey)) {
-                            return s.targetVal === 'ALL' || (currentUser.bus && currentUser.bus.includes(s.targetVal));
+                            const expected = getExpectedBus(currentUser, s);
+                            return s.targetVal === 'ALL' || (expected !== '미정' && expected.includes(s.targetVal));
                         }
 
                         const userOpt = currentUser.options?.[s.targetKey];
@@ -1931,7 +2022,8 @@
                         if (s.targetKey === 'ALL') return true;
                         
                         if (['버스', '탑승버스', 'Bus'].includes(s.targetKey)) {
-                            return s.targetVal === 'ALL' || (currentUser.bus && currentUser.bus.includes(s.targetVal));
+                            const expected = getExpectedBus(currentUser, s);
+                            return s.targetVal === 'ALL' || (expected !== '미정' && expected.includes(s.targetVal));
                         }
 
                         const userOpt = currentUser.options?.[s.targetKey];
@@ -2340,26 +2432,29 @@
                 const session = schedules.find(s => s.id === targetSessionId); 
                 if (!session) return setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' }); 
 
-                // 차량 배정 검증 로직 추가
+                // 제1원칙: 세션에 맞는 예상 버스 추출
+                const expectedBus = getExpectedBus(user, session);
+
+                // 제1원칙: Strict Mode (지정호차 검증 모드) 활성화 시에만 에러 반환
                 if (strictMode && session.type === 'BOARDING') {
-                    if (user.bus && user.bus.trim() !== targetBus.trim()) {
+                    if (expectedBus !== '미정' && expectedBus.trim() !== targetBus.trim()) {
                          return setScanResult({ 
                              status: 'error', 
                              msg: '탑승 불가 (차량 불일치)', 
-                             subMsg: `배정: ${user.bus} / 현재: ${targetBus}`, 
-                             user 
+                             subMsg: `배정: ${expectedBus} / 현재: ${targetBus}`, 
+                             user,
+                             session
                          });
                     }
                 }
                 
                 const isDuplicate = logs.some(l => l.uid === user.uid && l.sessionId === session.id); 
-                if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user }); 
+                if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
                 
                 if (session.targetKey !== 'ALL') { 
                     let userChoice;
-                    // 버스 관련 타겟인 경우 user.bus 필드 확인 (제1원칙 대응)
                     if (['버스', '탑승버스', 'Bus'].includes(session.targetKey)) {
-                        userChoice = user.bus;
+                        userChoice = expectedBus;
                     } else {
                         userChoice = user.options[session.targetKey];
                     }
@@ -2389,6 +2484,7 @@
                     action: session.type === 'PAYMENT' ? '지급' : '탑승', 
                     sessionId: session.id, 
                     sessionTitle: session.title, 
+                    // 무조건 현재 관리자가 선택하여 스캔 중인 버스(targetBus)로 확정 기록
                     bus: session.type === 'BOARDING' ? targetBus : '-', 
                     amount: session.type === 'PAYMENT' ? session.price : 0, 
                     penaltyApplied: penaltyApplied, 
@@ -2410,7 +2506,7 @@
                 } 
                 
                 const todayLogs = logs.filter(l => l.uid === user.uid && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급'); 
-                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs }); 
+                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
             };
 
             const handleUserUpdate = async () => { 
@@ -2498,4 +2594,3 @@
     </script>
 </body>
 </html>
-
