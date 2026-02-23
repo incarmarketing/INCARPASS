@@ -235,41 +235,53 @@
             { name: 'Gaegu (개구쟁이)', value: "'Gaegu', cursive" }
         ];
 
-        // [제1원칙 재구축] 스마트 버스 도출기
-        // 일자별 버스를 100% 매칭하기 위해 정규식 패턴을 도입하여 강제 매칭합니다.
-        const getExpectedBus = (user, session) => {
-            if (!user) return '미정';
-            if (!session) return user.bus || '미정';
+        // [제1원칙 재구축] 역방향 매칭(Reverse Matching)을 포함한 타겟 및 버스 도출기
+        const getUserSessionInfo = (user, session) => {
+            if (!user) return { isTarget: false, expectedBus: '미정' };
+            if (!session) return { isTarget: false, expectedBus: user.bus || '미정' };
             
-            let expectedBus = null;
+            let isTarget = false;
+            let expectedBus = '미정';
+            let matchedKey = null;
 
-            // 1. 세션 타겟키 자체가 "N일차 버스"인 경우
-            if (session.targetKey && session.targetKey.includes('일차 버스')) {
-                expectedBus = user.options[session.targetKey];
-            } 
-            // 2. 세션 타겟키에서 "N일차" 추출 시도
-            else if (session.targetKey && session.targetKey.match(/(\d+)일차/)) {
-                const dayMatch = session.targetKey.match(/(\d+)일차/)[1];
-                expectedBus = user.options[`${dayMatch}일차 버스`];
+            // 1. 역방향 매칭: 세션 제목(title)을 유저의 옵션값들 중에서 찾기
+            for (const key of Object.keys(user.options)) {
+                if (key.includes('버스')) continue; // 버스 컬럼은 제외
+                const val = user.options[key];
+                // 유저의 일정(예: '고궁박물관 역사투어')이 세션 타이틀과 일치하면 타겟
+                if (val && typeof val === 'string' && val.includes(session.title)) {
+                    isTarget = true;
+                    matchedKey = key; // 예: '2일차'
+                    break;
+                }
             }
-            // 3. 세션 타이틀(표시되는 일정 이름)에서 "N일차" 추출 시도
-            else if (session.displayDate && session.displayDate.match(/(\d+)일/)) {
-                const dayMatch = session.displayDate.match(/(\d+)일/)[1];
-                expectedBus = user.options[`${dayMatch}일차 버스`];
-            }
-            else if (session.title && session.title.match(/(\d+)일차/)) {
-                const dayMatch = session.title.match(/(\d+)일차/)[1];
-                expectedBus = user.options[`${dayMatch}일차 버스`];
-            }
-            
-            if (expectedBus && expectedBus.trim() !== '') return expectedBus.trim();
 
-            // 4. Fallback: 사용자의 기본 정보
-            if (user.bus && user.bus !== '미정') return user.bus;
-            if (user.options && user.options['버스']) return user.options['버스'];
-            if (user.options && user.options['탑승버스']) return user.options['탑승버스'];
-            
-            return '미정';
+            // 2. 명시적 타겟 옵션 매칭 (역방향 매칭 실패 시 보완)
+            if (!isTarget && session.targetKey && session.targetKey !== 'ALL') {
+                const userVal = user.options[session.targetKey];
+                if (session.targetVal === 'ALL' ? !!userVal : (userVal && userVal.includes(session.targetVal))) {
+                    isTarget = true;
+                    matchedKey = session.targetKey;
+                }
+            }
+
+            // 3. 타겟 옵션이 ALL인 경우 무조건 포함
+            if (!isTarget && session.targetKey === 'ALL') {
+                isTarget = true;
+            }
+
+            // 4. 매칭된 키(예: '2일차')가 있다면 '2일차 버스' 컬럼에서 버스 확인
+            if (matchedKey && user.options[`${matchedKey} 버스`]) {
+                expectedBus = user.options[`${matchedKey} 버스`].trim();
+            } else if (user.bus && user.bus !== '미정') {
+                expectedBus = user.bus;
+            } else if (user.options['버스']) {
+                expectedBus = user.options['버스'];
+            } else if (user.options['탑승버스']) {
+                expectedBus = user.options['탑승버스'];
+            }
+
+            return { isTarget, expectedBus };
         };
 
         const Icon = ({ name, size = 20, className = "" }) => {
@@ -373,7 +385,7 @@
                                         <div className="font-bold text-lg text-slate-900">{user.name}</div>
                                         <div className="text-xs text-slate-400 font-medium">{user.org} | {user.uid}</div>
                                         {/* 제1원칙: 세션 정보가 있으면 세션에 맞는 예상 버스를 표기하고, 없으면 기본 버스 표기 */}
-                                        <div className="text-xs text-incar font-bold mt-1">배정차량: {session ? getExpectedBus(user, session) : getExpectedBus(user, null)}</div>
+                                        <div className="text-xs text-incar font-bold mt-1">배정차량: {session ? getUserSessionInfo(user, session).expectedBus : getUserSessionInfo(user, null).expectedBus}</div>
                                     </div>
                                 </div>
                                 {isSuccess && logs && logs.finalAmount !== undefined && (
@@ -399,7 +411,7 @@
                                 {isBusMismatch && (
                                     <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-center">
                                         <p className="text-sm font-bold text-rose-600 mb-2">차량이 일치하지 않습니다</p>
-                                        <p className="text-xs text-slate-500 mb-1">해당 인원은 <strong>{getExpectedBus(user, session)}</strong> 탑승 대상입니다.</p>
+                                        <p className="text-xs text-slate-500 mb-1">해당 인원은 <strong>{getUserSessionInfo(user, session).expectedBus}</strong> 탑승 대상입니다.</p>
                                         <p className="text-xs text-slate-400">다른 차량으로 안내하거나, 관리자에게 문의하세요.</p>
                                     </div>
                                 )}
@@ -433,21 +445,14 @@
                 if (!session) return [];
                 
                 return users.filter(u => {
-                    // [핵심] 탑승 세션인 경우 '비탑승' 이나 결측치는 무조건 대상에서 제외
-                    if (session.type === 'BOARDING') {
-                        const expected = getExpectedBus(u, session);
-                        if (!expected || ['비탑승', '제외', '-', '미정'].includes(expected)) return false;
-                    }
-
-                    if (session.targetKey === 'ALL') return true;
+                    const { isTarget, expectedBus } = getUserSessionInfo(u, session);
+                    if (!isTarget) return false;
                     
-                    if (['버스', '탑승버스', 'Bus'].includes(session.targetKey) || session.targetKey.includes('일차 버스')) {
-                        const expected = getExpectedBus(u, session);
-                        return session.targetVal === 'ALL' ? true : (expected !== '미정' && expected.includes(session.targetVal));
+                    // [핵심] 탑승 세션인 경우 '비탑승' 이나 결측치는 무조건 대상에서 제외
+                    if (session.type === 'BOARDING' && ['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) {
+                        return false;
                     }
-
-                    const userOpt = u.options && u.options[session.targetKey];
-                    return session.targetVal === 'ALL' ? !!userOpt : (userOpt && userOpt.includes(session.targetVal));
+                    return true;
                 });
             }, [session, users]);
 
@@ -478,11 +483,11 @@
                 return groups;
             }, [doneList]);
 
-            // 4. 미완료 목록을 "예상 호차(getExpectedBus)" 기준으로 그룹핑
+            // 4. 미완료 목록을 "예상 호차(expectedBus)" 기준으로 그룹핑
             const yetGroups = useMemo(() => {
                 const groups = {};
                 yetList.forEach(u => {
-                    const expectedBus = getExpectedBus(u, session);
+                    const expectedBus = getUserSessionInfo(u, session).expectedBus;
                     if(!groups[expectedBus]) groups[expectedBus] = [];
                     groups[expectedBus].push(u);
                 });
@@ -1010,15 +1015,7 @@
             const userSchedules = useMemo(() => {
                 if (!selectedUser || !schedules) return [];
                 return schedules.filter(s => {
-                    if (s.targetKey === 'ALL') return true;
-                    // 버스 로직 포함 검사
-                    if (['버스', '탑승버스', 'Bus'].includes(s.targetKey)) {
-                        const expected = getExpectedBus(selectedUser, s);
-                        return expected !== '미정' && expected.includes(s.targetVal);
-                    }
-                    const userOpt = selectedUser.options?.[s.targetKey];
-                    if (!userOpt) return false;
-                    return s.targetVal === 'ALL' || userOpt.includes(s.targetVal);
+                    return getUserSessionInfo(selectedUser, s).isTarget;
                 }).sort((a,b) => a.date > b.date ? 1 : -1);
             }, [selectedUser, schedules]);
 
@@ -1174,7 +1171,7 @@
                                                     <div>
                                                         <span className="text-[10px] font-bold text-slate-400 block">{s.displayDate}</span>
                                                         <span className="font-bold text-slate-800">{s.title}</span>
-                                                        {s.type === 'BOARDING' && <div className="text-[10px] text-incar mt-0.5 font-bold">배정호차: {getExpectedBus(selectedUser, s)}</div>}
+                                                        {s.type === 'BOARDING' && <div className="text-[10px] text-incar mt-0.5 font-bold">배정호차: {getUserSessionInfo(selectedUser, s).expectedBus}</div>}
                                                     </div>
                                                     <div className="text-right">
                                                         <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':'bg-slate-100 text-slate-500'}`}>
@@ -2013,21 +2010,14 @@
                 return schedules.map(s => {
                     // 1. 올바른 타겟 유저 필터링 (비탑승 제외 로직 포함)
                     const validUsers = users.filter(u => {
-                        // 탑승 스케줄인데 예상 버스가 '비탑승' 관련 키워드면 모수에서 배제
-                        if (s.type === 'BOARDING') {
-                            const expected = getExpectedBus(u, s);
-                            if (!expected || ['비탑승', '제외', '-', '미정'].includes(expected)) return false;
-                        }
-
-                        if (s.targetKey === 'ALL') return true;
+                        const { isTarget, expectedBus } = getUserSessionInfo(u, s);
+                        if (!isTarget) return false;
                         
-                        if (['버스', '탑승버스', 'Bus'].includes(s.targetKey) || s.targetKey.includes('일차 버스')) {
-                            const expected = getExpectedBus(u, s);
-                            return s.targetVal === 'ALL' ? true : (expected !== '미정' && expected.includes(s.targetVal));
+                        // 탑승 스케줄인데 예상 버스가 '비탑승' 관련 키워드면 모수에서 배제
+                        if (s.type === 'BOARDING' && ['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) {
+                            return false;
                         }
-
-                        const userOpt = u.options && u.options[s.targetKey];
-                        return s.targetVal === 'ALL' ? !!userOpt : (userOpt && userOpt.includes(s.targetVal));
+                        return true;
                     });
 
                     const targetCount = validUsers.length;
@@ -2448,10 +2438,21 @@
                 const session = schedules.find(s => s.id === targetSessionId); 
                 if (!session) return setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' }); 
 
-                const expectedBus = getExpectedBus(user, session);
+                const { isTarget, expectedBus } = getUserSessionInfo(user, session);
+
+                if (!isTarget) {
+                     return setScanResult({ 
+                         status: 'error', 
+                         msg: '대상자 아님', 
+                         subMsg: '해당 일정에 신청되지 않은 참가자입니다.', 
+                         user,
+                         session,
+                         requiredChoice: session.targetVal !== 'ALL' ? session.targetVal : session.title
+                     });
+                }
 
                 // [제1원칙] '비탑승' 대상자 방어 로직 추가
-                if (session.type === 'BOARDING' && ['비탑승', '제외', '-', '미정'].includes(expectedBus)) {
+                if (session.type === 'BOARDING' && ['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) {
                      return setScanResult({ 
                          status: 'error', 
                          msg: '탑승 대상 아님', 
@@ -2463,7 +2464,7 @@
 
                 // 지정호차 검증 모드
                 if (strictMode && session.type === 'BOARDING') {
-                    if (expectedBus !== '미정' && expectedBus.trim() !== targetBus.trim()) {
+                    if (expectedBus.trim() !== targetBus.trim()) {
                          return setScanResult({ 
                              status: 'error', 
                              msg: '탑승 불가 (차량 불일치)', 
@@ -2476,20 +2477,6 @@
                 
                 const isDuplicate = logs.some(l => l.uid === user.uid && l.sessionId === session.id); 
                 if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
-                
-                if (session.targetKey !== 'ALL') { 
-                    let userChoice;
-                    if (['버스', '탑승버스', 'Bus'].includes(session.targetKey)) {
-                        userChoice = expectedBus;
-                    } else {
-                        userChoice = user.options[session.targetKey];
-                    }
-                    
-                    const requiredChoice = session.targetVal; 
-                    if (!userChoice || (requiredChoice !== 'ALL' && !userChoice.includes(requiredChoice))) { 
-                        return setScanResult({ status: 'error', msg: '대상자 아님', subMsg: `필요: ${requiredChoice} / 본인: ${userChoice || '선택없음'}`, user, requiredChoice, session }); 
-                    } 
-                } 
                 
                 let finalAmount = 0; 
                 let penaltyApplied = 0; 
