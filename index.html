@@ -69,21 +69,21 @@
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
         const CURRENCY = '₩';
 
-        // 기본 대만 일정 데이터 세팅
+        // 기본 대만 일정 데이터 세팅 (order 필드 추가)
         const defaultSchedules = [
-            { id: 'S01', date: '2026-03-11', displayDate: '1일차 13:30', title: '단수이 옛거리', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S02', date: '2026-03-11', displayDate: '1일차 14:00', title: '홍마오청', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S03', date: '2026-03-11', displayDate: '1일차 14:30', title: '진리대학', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S04', date: '2026-03-11', displayDate: '1일차 18:00', title: '석식 (타카오 샤브샤브)', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S05', date: '2026-03-11', displayDate: '1일차 19:30', title: '타이베이 101 전망대', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S06', date: '2026-03-12', displayDate: '2일차 08:30', title: '티엔라이 온천 (1안)', type: 'BOARDING', targetKey: '2일차 선택', targetVal: '1안' },
-            { id: 'S07', date: '2026-03-12', displayDate: '2일차 09:00', title: '고궁박물관 (2안)', type: 'BOARDING', targetKey: '2일차 선택', targetVal: '2안' },
-            { id: 'S08', date: '2026-03-12', displayDate: '2일차 14:30', title: '서문정 (시먼딩)', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S09', date: '2026-03-12', displayDate: '2일차 18:00', title: 'INCAR 만찬 행사', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S10', date: '2026-03-13', displayDate: '3일차 11:00', title: '예류 해양국립공원', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S11', date: '2026-03-13', displayDate: '3일차 14:30', title: '스펀 천등 날리기', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S12', date: '2026-03-13', displayDate: '3일차 17:00', title: '지우펀 야경', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S13', date: '2026-03-14', displayDate: '4일차 08:00', title: '호텔 체크아웃 및 공항 이동', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' }
+            { id: 'S01', order: 1, date: '2026-03-11', displayDate: '1일차 13:30', title: '단수이 옛거리', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S02', order: 2, date: '2026-03-11', displayDate: '1일차 14:00', title: '홍마오청', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S03', order: 3, date: '2026-03-11', displayDate: '1일차 14:30', title: '진리대학', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S04', order: 4, date: '2026-03-11', displayDate: '1일차 18:00', title: '석식 (타카오 샤브샤브)', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S05', order: 5, date: '2026-03-11', displayDate: '1일차 19:30', title: '타이베이 101 전망대', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S06', order: 6, date: '2026-03-12', displayDate: '2일차 08:30', title: '티엔라이 온천 (1안)', type: 'BOARDING', targetKey: '2일차 선택', targetVal: '1안' },
+            { id: 'S07', order: 7, date: '2026-03-12', displayDate: '2일차 09:00', title: '고궁박물관 (2안)', type: 'BOARDING', targetKey: '2일차 선택', targetVal: '2안' },
+            { id: 'S08', order: 8, date: '2026-03-12', displayDate: '2일차 14:30', title: '서문정 (시먼딩)', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S09', order: 9, date: '2026-03-12', displayDate: '2일차 18:00', title: 'INCAR 만찬 행사', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S10', order: 10, date: '2026-03-13', displayDate: '3일차 11:00', title: '예류 해양국립공원', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S11', order: 11, date: '2026-03-13', displayDate: '3일차 14:30', title: '스펀 천등 날리기', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S12', order: 12, date: '2026-03-13', displayDate: '3일차 17:00', title: '지우펀 야경', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S13', order: 13, date: '2026-03-14', displayDate: '4일차 08:00', title: '호텔 체크아웃 및 공항 이동', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' }
         ];
 
         // 기본 테스트 참가자 세팅
@@ -774,7 +774,10 @@
 
             const userSchedules = useMemo(() => {
                 if (!selectedUser || !schedules) return [];
-                return schedules.filter(s => getUserSessionInfo(selectedUser, s).isTarget).sort((a,b) => a.date > b.date ? 1 : -1);
+                return schedules.filter(s => getUserSessionInfo(selectedUser, s).isTarget).sort((a,b) => {
+                    if (a.date === b.date) return (a.order || 0) - (b.order || 0);
+                    return a.date > b.date ? 1 : -1;
+                });
             }, [selectedUser, schedules]);
 
             const uniqueValues = useMemo(() => {
@@ -1254,6 +1257,11 @@
                         localStorage.setItem('incar_pro_schedules', JSON.stringify(defaultSchedules));
                     } else {
                         setUsers(loadedUsers);
+                        // 순서(order) 보장 정렬 적용
+                        loadedSched.sort((a,b) => {
+                            if (a.date === b.date) return (a.order || 0) - (b.order || 0);
+                            return a.date > b.date ? 1 : -1;
+                        });
                         setSchedules(loadedSched);
                     }
                     
@@ -1280,7 +1288,10 @@
                         setDb(_db);
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('admins').onSnapshot(snap => { setAdmins(snap.docs.map(d => d.data())); setIsAdminsLoaded(true); });
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').onSnapshot(snap => { 
-                            const list = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b)=>a.date>b.date?1:-1); 
+                            const list = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => {
+                                if (a.date === b.date) return (a.order || 0) - (b.order || 0);
+                                return a.date > b.date ? 1 : -1;
+                            }); 
                             setSchedules(list); 
                             if(list.length > 0 && !targetSessionId) {
                                 const scanOnly = list.filter(s => s.type !== 'NONE');
@@ -1632,7 +1643,8 @@
                             else if (title.includes('자유') || title.includes('휴식') || title.includes('개인') || title.includes('안내')) type = 'NONE';
 
                             return { 
-                                id: `SCHED_${idx}`, 
+                                id: `SCHED_${String(idx).padStart(4, '0')}`, // 정렬 안정성을 위한 패딩
+                                order: idx, // 엑셀에 입력된 순서 기록
                                 date: dateStr, 
                                 displayDate: rawDate, 
                                 title: title, 
