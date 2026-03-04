@@ -636,8 +636,11 @@
                         setIsLookupScanning(false); html5QrCodeRef.current = null;
                         
                         let scannedUid = decodedText;
-                        if (decodedText.includes('?uid=')) {
-                            try { scannedUid = new URL(decodedText).searchParams.get('uid') || decodedText; } catch(e) {}
+                        if (decodedText.includes('?uid=') || decodedText.includes('?eid=')) {
+                            try { 
+                                const url = new URL(decodedText);
+                                scannedUid = url.searchParams.get('uid') || url.searchParams.get('eid') || decodedText; 
+                            } catch(e) {}
                         } else if (decodedText.includes('_')) {
                             scannedUid = decodedText.split('_')[0];
                         }
@@ -1506,8 +1509,11 @@
             const processScan = async (scannedText, strictMode = false) => { 
                 // [스마트 QR 파싱 로직 추가] "1612001_김해빛나" 형식 또는 URL 파라미터에서 ID 추출
                 let scannedUid = scannedText;
-                if (scannedText.includes('?uid=')) {
-                    try { scannedUid = new URL(scannedText).searchParams.get('uid') || scannedText; } catch(e){}
+                if (scannedText.includes('?uid=') || scannedText.includes('?eid=')) {
+                    try { 
+                        const url = new URL(scannedText);
+                        scannedUid = url.searchParams.get('uid') || url.searchParams.get('eid') || scannedText; 
+                    } catch(e){}
                 } else if (scannedText.includes('_')) {
                     scannedUid = scannedText.split('_')[0]; // "_" 앞부분 사번만 추출
                 }
