@@ -171,14 +171,14 @@
             </nav>
         );
 
-        const QRCodeCanvas = ({ text, size = 100, transparent = false }) => {
+        const QRCodeCanvas = ({ text, size = 100, transparent = false, id }) => {
             const canvasRef = useRef(null);
             useEffect(() => {
                 if (canvasRef.current && window.QRious) {
                     new QRious({ element: canvasRef.current, value: text, size: size, level: 'H', background: transparent ? 'transparent' : 'white', foreground: 'black' });
                 }
             }, [text, size, transparent]);
-            return <canvas ref={canvasRef} />;
+            return <canvas ref={canvasRef} id={id} />;
         };
 
         const ResultModal = ({ result, onClose, onForceUpdate, currentAdmin }) => {
@@ -607,6 +607,7 @@
             const [showAllHistory, setShowAllHistory] = useState(false);
             const [isLookupScanning, setIsLookupScanning] = useState(false);
             const [financialImpact, setFinancialImpact] = useState(null);
+            const [showQrModal, setShowQrModal] = useState(false);
             const html5QrCodeRef = useRef(null);
 
             useEffect(() => { return () => { if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) { html5QrCodeRef.current.stop(); html5QrCodeRef.current.clear(); } }; }, []);
@@ -624,10 +625,16 @@
                         setIsLookupScanning(false); html5QrCodeRef.current = null;
                         
                         let scannedUid = decodedText;
-                        if (decodedText.includes('?uid=')) scannedUid = new URL(decodedText).searchParams.get('uid') || decodedText;
+                        if (decodedText.includes('?uid=')) {
+                            try { scannedUid = new URL(decodedText).searchParams.get('uid') || decodedText; } catch(e) {}
+                        } else if (decodedText.includes('_')) {
+                            scannedUid = decodedText.split('_')[0];
+                        }
                         
-                        const found = users.find(u => String(u.uid) === String(scannedUid));
-                        if (found) setSelectedUser(found); else alert(`미등록 사용자입니다. (ID: ${scannedUid})`);
+                        let found = users.find(u => String(u.uid) === String(scannedUid));
+                        if (!found) found = users.find(u => decodedText.includes(String(u.uid))); 
+
+                        if (found) setSelectedUser(found); else alert(`미등록 사용자입니다. (스캔된 값: ${decodedText})`);
                     }, () => {}).catch(err => { setIsLookupScanning(false); alert("카메라 권한을 확인해주세요."); });
                 }, 300);
             };
@@ -722,8 +729,9 @@
                                         <div className="flex justify-between items-start mb-2"><div><div className="font-black text-2xl text-slate-800">{selectedUser.name}</div><div className="text-sm font-bold text-slate-500">{selectedUser.org}</div></div><div className="text-right"><div className="text-[10px] font-bold text-slate-400 uppercase">사번(ID)</div><div className="font-mono font-bold text-incar">{selectedUser.uid}</div></div></div>
                                         <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-between items-center"><span className="text-xs font-bold text-slate-400">누적 패널티</span><span className="font-black text-rose-500 text-lg">-{CURRENCY}{selectedUser.penaltyTotal || 0}</span></div>
                                     </div>
-                                    <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center w-full md:w-auto">
-                                        <div className="mb-2 w-32 h-32 flex items-center justify-center bg-slate-50"><QRCodeCanvas text={selectedUser.uid} /></div>
+                                    <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center w-full md:w-auto cursor-pointer hover:bg-slate-50 hover:border-incar/30 transition-all group" onClick={() => setShowQrModal(true)} title="QR코드 확대 및 다운로드">
+                                        <div className="mb-2 w-28 h-28 flex items-center justify-center bg-white rounded-xl shadow-sm border border-slate-100 p-2 group-hover:scale-105 transition-transform"><QRCodeCanvas text={`${selectedUser.uid}_${selectedUser.name}`} size={100} /></div>
+                                        <span className="text-[10px] font-bold text-incar flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-full"><Icon name="search" size={10}/> QR 확대/저장</span>
                                     </div>
                                 </div>
 
@@ -780,6 +788,39 @@
                                 <div><label className="block text-xs font-bold text-slate-400 mb-1">패널티 ({CURRENCY})</label><input type="number" value={editForm.penalty} onChange={e=>setEditForm({...editForm, penalty: e.target.value})} className="w-full p-3 border border-rose-200 bg-rose-50 rounded-xl font-bold text-rose-600" /><p className="text-[10px] text-slate-400 mt-1">* 검증 로직에 의해 자동 계산된 값입니다. 현장에서 반환을 받았다면 0으로 수정하세요.</p></div>
                                 <div><label className="block text-xs font-bold text-slate-400 mb-1">변경 사유</label><input type="text" value={editForm.reason} onChange={e=>setEditForm({...editForm, reason: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm" /></div>
                                 <button onClick={handleUserUpdate} className="w-full py-4 bg-incar text-white font-bold rounded-2xl shadow-lg mt-4 hover:bg-incar-dark">저장하기</button>
+                            </div>
+                        )}
+
+                        {showQrModal && selectedUser && (
+                            <div className="fixed inset-0 z-[400] bg-slate-900/80 backdrop-blur-sm flex flex-col items-center justify-center p-6 animate-fade-in" onClick={() => setShowQrModal(false)}>
+                                <div className="bg-white p-8 rounded-3xl shadow-2xl flex flex-col items-center text-center max-w-sm w-full animate-slide-up" onClick={e => e.stopPropagation()}>
+                                    <div className="w-12 h-12 bg-incar/10 text-incar rounded-full flex items-center justify-center mb-4">
+                                        <Icon name="qr" size={24} />
+                                    </div>
+                                    <h3 className="font-black text-2xl text-slate-800 mb-1">{selectedUser.name}</h3>
+                                    <p className="text-sm font-bold text-slate-400 mb-6">{selectedUser.org} | {selectedUser.uid}</p>
+                                    
+                                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6 shadow-inner">
+                                        <QRCodeCanvas text={`${selectedUser.uid}_${selectedUser.name}`} size={200} id="user-qr-canvas-large" />
+                                    </div>
+                                    
+                                    <p className="text-xs text-slate-500 mb-6 font-medium">명찰을 분실한 참가자에게 이 화면을 보여주거나,<br/>이미지로 다운로드하여 재발급할 수 있습니다.</p>
+                                    
+                                    <div className="flex gap-3 w-full">
+                                        <button onClick={() => setShowQrModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">닫기</button>
+                                        <button onClick={() => {
+                                            const canvas = document.getElementById('user-qr-canvas-large');
+                                            if(canvas) {
+                                                const link = document.createElement('a');
+                                                link.download = `QR_${selectedUser.name}_${selectedUser.uid}.png`;
+                                                link.href = canvas.toDataURL();
+                                                link.click();
+                                            }
+                                        }} className="flex-1 py-3 bg-incar text-white font-bold rounded-xl shadow-lg hover:bg-incar-dark transition-colors flex items-center justify-center gap-2">
+                                            <Icon name="download" size={16} /> 저장
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -1450,11 +1491,18 @@
             };
 
             const processScan = async (scannedText, strictMode = false) => { 
+                // [스마트 QR 파싱 로직 추가] "1612001_김해빛나" 형식 또는 URL 파라미터에서 ID 추출
                 let scannedUid = scannedText;
-                if (scannedText.includes('?uid=')) scannedUid = new URL(scannedText).searchParams.get('uid') || scannedText;
+                if (scannedText.includes('?uid=')) {
+                    try { scannedUid = new URL(scannedText).searchParams.get('uid') || scannedText; } catch(e){}
+                } else if (scannedText.includes('_')) {
+                    scannedUid = scannedText.split('_')[0]; // "_" 앞부분 사번만 추출
+                }
 
-                const user = users.find(u => String(u.uid) === String(scannedUid)); 
-                if (!user) return setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `ID: ${scannedUid}` }); 
+                let user = users.find(u => String(u.uid) === String(scannedUid)); 
+                if (!user) user = users.find(u => scannedText.includes(String(u.uid))); // 예비 파싱
+
+                if (!user) return setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `스캔된 값: ${scannedText}` }); 
                 
                 const session = schedules.find(s => s.id === targetSessionId); 
                 if (!session) return setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' }); 
