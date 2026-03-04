@@ -610,6 +610,17 @@
             const [showQrModal, setShowQrModal] = useState(false);
             const html5QrCodeRef = useRef(null);
 
+            // 컴포넌트 마운트 시 useEffect로 users 데이터 변경 시 selectedUser 상태 정리
+            useEffect(() => {
+                if (selectedUser) {
+                    const isStillExist = users.find(u => u.uid === selectedUser.uid);
+                    if (!isStillExist) {
+                        setSelectedUser(null);
+                        setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' });
+                    }
+                }
+            }, [users]); // users 배열이 업데이트될 때마다 실행
+
             useEffect(() => { return () => { if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) { html5QrCodeRef.current.stop(); html5QrCodeRef.current.clear(); } }; }, []);
 
             const startLookupScanner = () => {
@@ -905,6 +916,7 @@
                                             <td className="p-3 font-bold text-slate-800">{a.name}</td>
                                             <td className="p-3 text-slate-600 font-mono">{a.id}</td>
                                             <td className="p-3 text-center">
+                                                {/* 마스터 계정은 다른 관리자의 권한을 변경 가능 (자기 자신이나 마스터 권한은 변경 불가) */}
                                                 {isMaster && a.role !== 'master' ? (
                                                     <select 
                                                         value={a.role} 
@@ -1189,6 +1201,7 @@
                     const pad = n => n < 10 ? '0'+n : n; return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
                 };
                 const combinedData = [];
+                // [감사로그] 처리자 항목 추가 반영
                 logs.forEach(l => combinedData.push({ rawTime: l.timestamp, 일시: formatLogDate(l.timestamp), 사번: l.uid, 성명: l.name, 구분: l.action, 일정명: l.sessionTitle, 금액: l.finalAmount || 0, 패널티: l.penaltyApplied || 0, 탑승차량: l.bus, 비고: '', 처리자: l.processedBy || '시스템' }));
                 changeLogs.forEach(c => combinedData.push({ rawTime: c.timestamp, 일시: formatLogDate(c.timestamp), 사번: c.uid, 성명: c.name, 구분: '변경', 일정명: c.targetOption, 금액: 0, 패널티: c.penalty || 0, 탑승차량: '', 비고: `${c.oldVal} -> ${c.newVal} | ${c.reason}`, 처리자: c.processedBy || '시스템' }));
                 combinedData.sort((a, b) => new Date(b.rawTime) - new Date(a.rawTime));
