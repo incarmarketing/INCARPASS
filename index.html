@@ -671,22 +671,25 @@
                     const element = document.getElementById("reader"); if (!element) return;
                     if (!scannerRef.current) scannerRef.current = new Html5Qrcode("reader");
                     
-                    // ✅ 종이 인쇄된 조밀한 QR 인식을 위한 해상도 및 포커스 최적화 (후면카메라 고정)
-                    const cameraConfig = { 
-                        facingMode: "environment",
-                        width: { min: 640, ideal: 1280, max: 1920 },
-                        height: { min: 480, ideal: 720, max: 1080 }
-                    };
+                    // ✅ 종이 인쇄된 조밀한 QR 인식을 위한 해상도 및 포커스 최적화 (후면카메라 고정 & 세로모드 충돌 방지)
+                    const cameraConfig = { facingMode: "environment" };
                     const config = { 
-                        fps: 10, 
-                        qrbox: { width: 250, height: 250 },
-                        aspectRatio: 1.0
+                        fps: 15, 
+                        qrbox: function(viewfinderWidth, viewFinderHeight) {
+                            const minEdgeSize = Math.min(viewfinderWidth, viewFinderHeight);
+                            return { width: Math.floor(minEdgeSize * 0.75), height: Math.floor(minEdgeSize * 0.75) };
+                        },
+                        aspectRatio: 1.0,
+                        videoConstraints: {
+                            facingMode: "environment",
+                            width: { ideal: 1920 } // height를 생략하여 모바일 세로/가로 화면 비율 충돌로 인한 에러(권한 팝업 안 뜸) 방지
+                        }
                     };
 
                     scannerRef.current.start(cameraConfig, config, (decodedText) => {
                         stopScanner();
                         processScan(decodedText, isStrictBusMode); 
-                    }, () => {}).then(() => { isRunningRef.current = true; }).catch(err => { setIsScanning(false); alert("카메라 권한을 확인해주세요."); });
+                    }, () => {}).then(() => { isRunningRef.current = true; }).catch(err => { setIsScanning(false); alert("카메라 접근 실패: " + err); });
                 }, 100);
             };
 
@@ -811,16 +814,19 @@
                     const html5QrCode = new Html5Qrcode(elementId);
                     html5QrCodeRef.current = html5QrCode;
                     
-                    // ✅ 조회용 스캐너도 고해상도 + 넓은 인식 영역 적용 (후면카메라 고정)
-                    const cameraConfig = { 
-                        facingMode: "environment",
-                        width: { min: 640, ideal: 1280, max: 1920 },
-                        height: { min: 480, ideal: 720, max: 1080 }
-                    };
+                    // ✅ 조회용 스캐너도 고해상도 + 넓은 인식 영역 적용 (후면카메라 고정 & 세로모드 충돌 방지)
+                    const cameraConfig = { facingMode: "environment" };
                     const config = { 
-                        fps: 10, 
-                        qrbox: { width: 250, height: 250 }, 
-                        aspectRatio: 1.0
+                        fps: 15, 
+                        qrbox: function(viewfinderWidth, viewFinderHeight) {
+                            const minEdgeSize = Math.min(viewfinderWidth, viewFinderHeight);
+                            return { width: Math.floor(minEdgeSize * 0.75), height: Math.floor(minEdgeSize * 0.75) };
+                        }, 
+                        aspectRatio: 1.0,
+                        videoConstraints: {
+                            facingMode: "environment",
+                            width: { ideal: 1920 }
+                        }
                     };
 
                     html5QrCode.start(cameraConfig, config, async (decodedText) => {
@@ -841,7 +847,7 @@
                         if (!found) found = users.find(u => decodedText.includes(String(u.uid))); 
 
                         if (found) setSelectedUser(found); else alert(`미등록 사용자입니다. (스캔된 값: ${decodedText})`);
-                    }, () => {}).catch(err => { setIsLookupScanning(false); alert("카메라 권한을 확인해주세요."); });
+                    }, () => {}).catch(err => { setIsLookupScanning(false); alert("카메라 접근 실패: " + err); });
                 }, 300);
             };
 
@@ -1124,9 +1130,9 @@
                                         <p className="text-slate-600 font-bold text-sm break-keep">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p>
                                     </div>
                                     <div className="p-6 space-y-4">
-                                        <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {localForfeitReq.oldVal} (예약취소)<br/>▼ <br/>변경: {localForfeitReq.newVal} (예상 지급액 {CURRENCY}{localForfeitReq.price})</div>
+                                        <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div>
                                         <button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(지급액을 패널티로 상계)</span>
+                                            <span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span>
                                         </button>
                                         <button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
                                             <span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span>
