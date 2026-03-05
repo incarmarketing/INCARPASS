@@ -671,8 +671,7 @@
                     const element = document.getElementById("reader"); if (!element) return;
                     if (!scannerRef.current) scannerRef.current = new Html5Qrcode("reader");
                     
-                    // ✅ 종이 인쇄된 조밀한 QR 인식을 위한 해상도 및 포커스 최적화 (후면카메라 고정 & 세로모드 충돌 방지)
-                    const cameraConfig = { facingMode: "environment" };
+                    // ✅ 기기 호환성을 높이면서 고화질 후방 카메라를 요청하는 가장 안전한 설정
                     const config = { 
                         fps: 15, 
                         qrbox: function(viewfinderWidth, viewFinderHeight) {
@@ -681,12 +680,13 @@
                         },
                         aspectRatio: 1.0,
                         videoConstraints: {
-                            facingMode: "environment",
-                            width: { ideal: 1920 } // height를 생략하여 모바일 세로/가로 화면 비율 충돌로 인한 에러(권한 팝업 안 뜸) 방지
+                            facingMode: "environment", // 후방 카메라
+                            // ideal 값을 사용하여 기기가 지원하는 가장 가까운 고해상도를 선택하도록 유도 (에러 방지)
+                            width: { ideal: 1280 }
                         }
                     };
 
-                    scannerRef.current.start(cameraConfig, config, (decodedText) => {
+                    scannerRef.current.start({ facingMode: "environment" }, config, (decodedText) => {
                         stopScanner();
                         processScan(decodedText, isStrictBusMode); 
                     }, () => {}).then(() => { isRunningRef.current = true; }).catch(err => { setIsScanning(false); alert("카메라 접근 실패: " + err); });
@@ -814,8 +814,7 @@
                     const html5QrCode = new Html5Qrcode(elementId);
                     html5QrCodeRef.current = html5QrCode;
                     
-                    // ✅ 조회용 스캐너도 고해상도 + 넓은 인식 영역 적용 (후면카메라 고정 & 세로모드 충돌 방지)
-                    const cameraConfig = { facingMode: "environment" };
+                    // ✅ 기기 호환성을 높이면서 고화질 후방 카메라를 요청하는 가장 안전한 설정
                     const config = { 
                         fps: 15, 
                         qrbox: function(viewfinderWidth, viewFinderHeight) {
@@ -824,12 +823,13 @@
                         }, 
                         aspectRatio: 1.0,
                         videoConstraints: {
-                            facingMode: "environment",
-                            width: { ideal: 1920 }
+                            facingMode: "environment", // 후방 카메라
+                            // ideal 값을 사용하여 기기가 지원하는 가장 가까운 고해상도를 선택하도록 유도 (에러 방지)
+                            width: { ideal: 1280 }
                         }
                     };
 
-                    html5QrCode.start(cameraConfig, config, async (decodedText) => {
+                    html5QrCode.start({ facingMode: "environment" }, config, async (decodedText) => {
                         try { if (html5QrCode.isScanning) await html5QrCode.stop(); html5QrCode.clear(); } catch (err) { console.warn(err); }
                         setIsLookupScanning(false); html5QrCodeRef.current = null;
                         
