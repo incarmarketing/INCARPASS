@@ -87,6 +87,12 @@
             return `${d.getMonth()+1}/${d.getDate()} ${formatTimeSafe(ts)}`;
         };
 
+        // 헤더 정리 함수 (예: '1일차_1' -> '1일차')
+        const cleanOptionKey = (key) => {
+            if (!key) return key;
+            return key.replace(/_\d+$/, ''); 
+        };
+
         // 기본 대만 일정 데이터 세팅 (order 필드 추가)
         const defaultSchedules = [
             { id: 'S01', order: 1, date: '2026-03-11', displayDate: '1일차 13:30', title: '단수이 옛거리', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
@@ -309,6 +315,8 @@
             const [tab, setTab] = useState('done');
             const [searchTerm, setSearchTerm] = useState('');
             
+            const isPaymentSession = session.type === 'PAYMENT';
+
             const targetUsers = useMemo(() => {
                 if (!session) return [];
                 return users.filter(u => {
@@ -331,25 +339,35 @@
 
             // 완료된 사람들의 버스별 인원 집계 (UI 용)
             const busSummary = useMemo(() => {
+                if(isPaymentSession) return null; // 지급은 버스 요약 필요 없음
                 const counts = {};
                 doneList.forEach(u => {
                     const b = u.log?.bus || '기타';
                     counts[b] = (counts[b] || 0) + 1;
                 });
                 return counts;
-            }, [doneList]);
+            }, [doneList, isPaymentSession]);
 
             const doneGroups = useMemo(() => {
                 const groups = {};
-                doneList.forEach(u => { const busName = (u.log && u.log.bus && u.log.bus !== '-') ? u.log.bus : '기타/미정'; if(!groups[busName]) groups[busName] = []; groups[busName].push(u); });
+                doneList.forEach(u => { 
+                    const groupName = isPaymentSession ? '지급 완료 대상자' : (u.log && u.log.bus && u.log.bus !== '-' ? u.log.bus : '기타/미정'); 
+                    if(!groups[groupName]) groups[groupName] = []; 
+                    groups[groupName].push(u); 
+                });
                 return groups;
-            }, [doneList]);
+            }, [doneList, isPaymentSession]);
 
             const yetGroups = useMemo(() => {
                 const groups = {};
-                yetList.forEach(u => { const expectedBus = getUserSessionInfo(u, session).expectedBus; if(!groups[expectedBus]) groups[expectedBus] = []; groups[expectedBus].push(u); });
+                yetList.forEach(u => { 
+                    const expectedBus = getUserSessionInfo(u, session).expectedBus; 
+                    const groupName = isPaymentSession ? '미지급 대상자' : expectedBus;
+                    if(!groups[groupName]) groups[groupName] = []; 
+                    groups[groupName].push(u); 
+                });
                 return groups;
-            }, [yetList, session]);
+            }, [yetList, session, isPaymentSession]);
 
             const [expandedGroups, setExpandedGroups] = useState({});
             const toggleGroup = (groupName) => setExpandedGroups(prev => ({ ...prev, [groupName]: !prev[groupName] }));
@@ -374,7 +392,7 @@
                     <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
                             <div>
-                                <span className={`inline-block px-2 py-1 rounded text-[10px] font-bold mb-1 ${session.type==='PAYMENT'?'bg-emerald-100 text-emerald-600': session.type==='NONE'?'bg-slate-200 text-slate-600':'bg-indigo-100 text-incar'}`}>{session.type==='PAYMENT'?'지급':session.type==='NONE'?'안내/자유':'탑승'}</span>
+                                <span className={`inline-block px-2 py-1 rounded text-[10px] font-bold mb-1 ${isPaymentSession?'bg-emerald-100 text-emerald-600': session.type==='NONE'?'bg-slate-200 text-slate-600':'bg-indigo-100 text-incar'}`}>{isPaymentSession?'지급':session.type==='NONE'?'안내/자유':'탑승'}</span>
                                 <h3 className="font-bold text-lg text-slate-800 leading-tight break-keep pr-2">{session.title}</h3>
                                 <p className="text-xs text-slate-500 mt-1 break-keep">{session.displayDate} | 전체 대상 {targetUsers.length}명</p>
                             </div>
@@ -399,12 +417,12 @@
                         {session.type !== 'NONE' ? (
                             <>
                                 <div className="flex border-b border-slate-100">
-                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>탑승 완료 ({doneList.length})</button>
-                                    <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>미탑승 ({yetList.length})</button>
+                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '지급 완료' : '탑승 완료'} ({doneList.length})</button>
+                                    <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '미지급' : '미탑승'} ({yetList.length})</button>
                                 </div>
                                 
-                                {/* 탑승 완료 화면일 때 상단에 버스별 요약 표시 */}
-                                {tab === 'done' && doneList.length > 0 && (
+                                {/* 탑승 완료 화면일 때 상단에 버스별 요약 표시 (지급 일정은 제외) */}
+                                {tab === 'done' && doneList.length > 0 && busSummary && !isPaymentSession && (
                                     <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap gap-2 items-center">
                                         <span className="text-xs font-bold text-slate-500 mr-1 break-keep">차량별 탑승현황:</span>
                                         {Object.entries(busSummary).sort().map(([bus, count]) => (
@@ -419,15 +437,15 @@
                                     {groupKeys.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">{searchTerm ? '검색 결과가 없습니다.' : '해당 인원이 없습니다.'}</div> : groupKeys.map(groupName => (
                                         <div key={groupName} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                                             <button onClick={() => toggleGroup(groupName)} className="w-full p-4 flex justify-between items-center bg-slate-50 hover:bg-slate-100 transition-colors">
-                                                <div className="flex items-center gap-2"><div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${tab==='done'?'bg-emerald-500':'bg-incar'}`}><Icon name="bus" size={16} /></div><div className="text-left"><div className="font-bold text-slate-800 text-sm break-keep">{groupName} {tab==='done'?'(실제 탑승)':'(탑승 예정)'}</div><div className="text-[10px] text-slate-500">{filteredGroups[groupName].length}명 {tab === 'done' ? '처리 완료' : '대기중'}</div></div></div>
+                                                <div className="flex items-center gap-2"><div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${tab==='done'?'bg-emerald-500':'bg-incar'}`}><Icon name={isPaymentSession ? 'money' : 'bus'} size={16} /></div><div className="text-left"><div className="font-bold text-slate-800 text-sm break-keep">{groupName} {!isPaymentSession ? (tab==='done'?'(실제 탑승)':'(탑승 예정)') : ''}</div><div className="text-[10px] text-slate-500">{filteredGroups[groupName].length}명 {tab === 'done' ? '처리 완료' : '대기중'}</div></div></div>
                                                 <Icon name={expandedGroups[groupName] || searchTerm ? "up" : "down"} size={20} className="text-slate-400" />
                                             </button>
                                             {(expandedGroups[groupName] || searchTerm) && (
                                                 <div className="p-2 space-y-2 border-t border-slate-100 bg-white">
                                                     {filteredGroups[groupName].map(u => {
                                                         const expectedBus = getUserSessionInfo(u, session).expectedBus;
-                                                        // 교차탑승 여부 확인 (완료탭에서 배정버스와 실제탄버스가 다를경우)
-                                                        const isCrossBoarded = tab === 'done' && u.log && expectedBus !== u.log.bus;
+                                                        // 교차탑승 여부 확인 (완료탭에서 배정버스와 실제탄버스가 다를경우, 지급일정은 무시)
+                                                        const isCrossBoarded = !isPaymentSession && tab === 'done' && u.log && expectedBus !== u.log.bus;
                                                         
                                                         return (
                                                             <div key={u.uid} className={`flex justify-between items-center p-3 rounded-lg border ${isCrossBoarded ? 'border-amber-200 bg-amber-50' : 'border-slate-50 hover:bg-slate-50'}`}>
@@ -442,7 +460,7 @@
                                                                         {isCrossBoarded && <div className="text-[10px] text-amber-600 font-bold mt-0.5 break-keep">원래 배정: {expectedBus}</div>}
                                                                     </div>
                                                                 </div>
-                                                                {tab === 'done' && u.log && <div className="text-right shrink-0 ml-2">{session.type === 'PAYMENT' && <div className="font-bold text-emerald-600 text-sm">{CURRENCY}{u.log.finalAmount}</div>}<div className="text-[10px] text-slate-400">{formatTimeSafe(u.log.timestamp)}</div></div>}
+                                                                {tab === 'done' && u.log && <div className="text-right shrink-0 ml-2">{isPaymentSession && <div className="font-bold text-emerald-600 text-sm">{CURRENCY}{u.log.finalAmount}</div>}<div className="text-[10px] text-slate-400">{formatTimeSafe(u.log.timestamp)}</div></div>}
                                                                 {tab === 'yet' && <button onClick={() => onManualComplete(u, session)} className="px-3 py-1.5 bg-slate-800 text-white text-[10px] font-bold rounded-lg hover:bg-slate-700 shadow-sm shrink-0 ml-2">수동 완료</button>}
                                                             </div>
                                                         )
@@ -711,33 +729,36 @@
                         )}
                     </div>
                     
+                    <div className="mt-2 mb-2">
+                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> {mode==='BOARDING' ? '카메라 스캔 시작' : '카메라 스캔 시작'}</button>
+                    </div>
+
                     {/* 수동 입력 및 바코드 스캐너 안내 영역 */}
                     {filteredSchedules.length > 0 && (
-                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
-                            <form onSubmit={handleManualSubmit} className="flex gap-2">
-                                <div className="flex-1 relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-                                        <Icon name="user" size={16} />
+                        <div className="flex-1 flex flex-col justify-end">
+                            <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mt-auto">
+                                <form onSubmit={handleManualSubmit} className="flex gap-2">
+                                    <div className="flex-1 relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                            <Icon name="user" size={16} />
+                                        </div>
+                                        <input 
+                                            type="text" 
+                                            value={manualCode}
+                                            onChange={(e) => setManualCode(e.target.value)}
+                                            placeholder="사번 직접 입력 (바코드 스캐너 가능)" 
+                                            className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-incar/20 transition-all break-keep"
+                                        />
                                     </div>
-                                    <input 
-                                        type="text" 
-                                        value={manualCode}
-                                        onChange={(e) => setManualCode(e.target.value)}
-                                        placeholder="사번 직접 입력 (바코드 스캐너 가능)" 
-                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-incar/20 transition-all break-keep"
-                                    />
-                                </div>
-                                <button type="submit" className="bg-slate-800 text-white px-6 rounded-xl font-bold text-sm shadow-md hover:bg-slate-700 shrink-0 break-keep">입력</button>
-                            </form>
-                            <p className="text-[10px] text-slate-400 mt-2 text-center break-keep">
-                                * USB/블루투스 바코드 스캐너 사용 시 화면 어디서나 스캔하면 자동 인식됩니다.
-                            </p>
+                                    <button type="submit" className="bg-slate-800 text-white px-6 rounded-xl font-bold text-sm shadow-md hover:bg-slate-700 shrink-0 break-keep">입력</button>
+                                </form>
+                                <p className="text-[10px] text-slate-400 mt-2 text-center break-keep">
+                                    * USB/블루투스 바코드 스캐너 사용 시 화면 어디서나 스캔하면 자동 인식됩니다.
+                                </p>
+                            </div>
                         </div>
                     )}
 
-                    <div className="flex-1 flex flex-col justify-end">
-                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> {mode==='BOARDING' ? '카메라 스캔 시작' : '카메라 스캔 시작'}</button>
-                    </div>
                     {isScanning && (
                         <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-fade-in"><button onClick={stopScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full z-[101]"><Icon name="x" size={32} /></button><div className="scanner-container"><div id="reader"></div></div><p className="text-white mt-10 font-bold text-xl animate-pulse text-center break-keep">참가자 명찰의 QR코드를 비춰주세요</p></div>
                     )}
@@ -967,15 +988,15 @@
                                     <h4 className="font-bold text-sm text-slate-800 mb-3 flex items-center gap-2 break-keep"><Icon name="history" size={16}/> 변경 및 패널티 이력</h4>
                                     {userHistoryLogs.length === 0 ? <p className="text-xs text-slate-400 break-keep">변경 이력이 없습니다.</p> : (
                                         <div className="space-y-3">
-                                            <div className="hidden md:block overflow-x-auto"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-500 font-bold"><tr><th className="p-2">일시</th><th className="p-2">항목</th><th className="p-2">내용</th><th className="p-2 text-right">패널티</th><th className="p-2">사유</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleLogs.map((log, i) => (<tr key={i}><td className="p-2 text-slate-400 whitespace-nowrap">{formatDateSafe(log.timestamp)}</td><td className="p-2 font-bold whitespace-nowrap">{log.targetOption}</td><td className="p-2 break-keep"><span className="line-through text-slate-300">{log.oldVal}</span> <span className="mx-1 text-slate-300">→</span> <span className="text-incar font-bold">{log.newVal}</span></td><td className="p-2 text-right font-bold text-rose-500 whitespace-nowrap">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</td><td className="p-2 text-slate-500 truncate max-w-[100px]">{log.reason}</td></tr>))}</tbody></table></div>
-                                            <div className="md:hidden space-y-2">{visibleLogs.map((log, i) => (<div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2"><div className="flex justify-between items-center text-xs text-slate-400 font-medium border-b border-slate-200 pb-2 mb-1"><span>{formatDateSafe(log.timestamp)}</span><span className="bg-white px-2 py-0.5 rounded border border-slate-200 break-keep">{log.targetOption}</span></div><div className="flex items-center justify-center gap-2 text-sm break-keep text-center"><span className="line-through text-slate-400">{log.oldVal}</span><Icon name="chevronsDown" size={12} className="rotate-[-90deg] text-slate-300" /><span className="font-bold text-incar">{log.newVal}</span></div><div className="flex justify-between items-end mt-1 pt-2 border-t border-slate-200/50"><span className="text-xs text-slate-500 flex-1 break-keep pr-2">{log.reason}</span><span className="text-sm font-bold text-rose-500 break-keep">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</span></div></div>))}</div>
+                                            <div className="hidden md:block overflow-x-auto"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-500 font-bold"><tr><th className="p-2">일시</th><th className="p-2">항목</th><th className="p-2">내용</th><th className="p-2 text-right">패널티</th><th className="p-2">사유</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleLogs.map((log, i) => (<tr key={i}><td className="p-2 text-slate-400 whitespace-nowrap">{formatDateSafe(log.timestamp)}</td><td className="p-2 font-bold whitespace-nowrap">{cleanOptionKey(log.targetOption)}</td><td className="p-2 break-keep"><span className="line-through text-slate-300">{log.oldVal}</span> <span className="mx-1 text-slate-300">→</span> <span className="text-incar font-bold">{log.newVal}</span></td><td className="p-2 text-right font-bold text-rose-500 whitespace-nowrap">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</td><td className="p-2 text-slate-500 truncate max-w-[100px]">{log.reason}</td></tr>))}</tbody></table></div>
+                                            <div className="md:hidden space-y-2">{visibleLogs.map((log, i) => (<div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2"><div className="flex justify-between items-center text-xs text-slate-400 font-medium border-b border-slate-200 pb-2 mb-1"><span>{formatDateSafe(log.timestamp)}</span><span className="bg-white px-2 py-0.5 rounded border border-slate-200 break-keep">{cleanOptionKey(log.targetOption)}</span></div><div className="flex items-center justify-center gap-2 text-sm break-keep text-center"><span className="line-through text-slate-400">{log.oldVal}</span><Icon name="chevronsDown" size={12} className="rotate-[-90deg] text-slate-300" /><span className="font-bold text-incar">{log.newVal}</span></div><div className="flex justify-between items-end mt-1 pt-2 border-t border-slate-200/50"><span className="text-xs text-slate-500 flex-1 break-keep pr-2">{log.reason}</span><span className="text-sm font-bold text-rose-500 break-keep">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</span></div></div>))}</div>
                                             {userHistoryLogs.length > 1 && <button onClick={() => setShowAllHistory(!showAllHistory)} className="w-full py-2 text-xs font-bold text-slate-400 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center justify-center gap-1 break-keep">{showAllHistory ? '접기' : `더보기 (${userHistoryLogs.length - 1}건 더 있음)`} <Icon name={showAllHistory ? "up" : "down"} size={12} /></button>}
                                         </div>
                                     )}
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4 mt-4">
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 전 옵션</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{key} (현재: {selectedUser.options[key]})</option>)}</select></div>
+                                    <div><label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 전 옵션</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{cleanOptionKey(key)} (현재: {selectedUser.options[key]})</option>)}</select></div>
                                     <div><div className="flex justify-between items-center mb-1"><label className="block text-xs font-bold text-slate-400 break-keep">변경 후 옵션</label><button onClick={()=>setManualInput(!manualInput)} className="text-[10px] text-incar underline font-bold break-keep">{manualInput ? '목록에서 선택' : '직접 입력'}</button></div>{manualInput ? <input type="text" value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white break-keep" placeholder="직접 입력하세요" /> : <select value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{uniqueValues.map(val => <option key={val} value={val}>{val}</option>)}<option value="직접입력">[목록에 없음]</option></select>}</div>
                                 </div>
 
@@ -983,7 +1004,7 @@
                                     <div className={`mt-2 p-4 rounded-xl border ${financialImpact.needsRefund ? 'bg-rose-50 border-rose-200' : financialImpact.needsExtraPay ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
                                         <h5 className={`font-bold text-sm mb-2 break-keep ${financialImpact.needsRefund ? 'text-rose-700' : financialImpact.needsExtraPay ? 'text-emerald-700' : 'text-amber-700'}`}>
                                             <Icon name="info" size={16} className="inline mr-1 -mt-0.5" />
-                                            일정 변경에 따른 정산 검증
+                                            일정 변경에 따른 정산 필요
                                         </h5>
                                         <ul className="text-xs space-y-1 text-slate-600 break-keep">
                                             <li>• 기존 예상지급액: {CURRENCY}{financialImpact.oldPrice}</li>
@@ -1576,16 +1597,17 @@
 
             const { groupKeys, groupedStats } = useMemo(() => {
                 const groups = {};
-                const keys = [];
+                // 날짜(displayDate) 기준으로 그룹화하되, 그룹핑 순서는 스케줄 원본의 등장 순서를 따름
+                const keyOrder = [];
                 scheduleStats.forEach(stat => { 
                     const date = stat.displayDate || '기타'; 
                     if(!groups[date]) {
                         groups[date] = []; 
-                        keys.push(date);
+                        keyOrder.push(date);
                     }
                     groups[date].push(stat); 
                 });
-                return { groupKeys: keys, groupedStats: groups };
+                return { groupKeys: keyOrder, groupedStats: groups };
             }, [scheduleStats]);
 
             const cleanupOldLogs = async (uid, targetKey, oldVal, performUpdate = true) => {
