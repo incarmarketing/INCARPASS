@@ -156,10 +156,29 @@
             
             if (!isTarget && session.targetKey === 'ALL') isTarget = true;
             
-            if (matchedKey && user.options[`${matchedKey} 버스`]) expectedBus = user.options[`${matchedKey} 버스`].trim();
-            else if (user.bus && user.bus !== '미정') expectedBus = user.bus;
-            else if (user.options['버스']) expectedBus = user.options['버스'];
-            else if (user.options['탑승버스']) expectedBus = user.options['탑승버스'];
+            // 🔥 [추가/수정] 2일차버스 등 날짜별 예외 버스 반영 로직
+            let foundSpecificBus = false;
+            if (session.displayDate) {
+                const dayMatch = session.displayDate.match(/(\d+일차)/);
+                if (dayMatch) {
+                    const dayStr = dayMatch[1]; // 예: "2일차"
+                    if (user.options[`${dayStr}버스`]) {
+                        expectedBus = user.options[`${dayStr}버스`].trim();
+                        foundSpecificBus = true;
+                    } else if (user.options[`${dayStr} 버스`]) {
+                        expectedBus = user.options[`${dayStr} 버스`].trim();
+                        foundSpecificBus = true;
+                    }
+                }
+            }
+
+            // 예외 버스가 발견되지 않았을 경우에만 기존 기본 배정 로직 동작
+            if (!foundSpecificBus) {
+                if (matchedKey && user.options[`${matchedKey} 버스`]) expectedBus = user.options[`${matchedKey} 버스`].trim();
+                else if (user.bus && user.bus !== '미정') expectedBus = user.bus;
+                else if (user.options['버스']) expectedBus = user.options['버스'];
+                else if (user.options['탑승버스']) expectedBus = user.options['탑승버스'];
+            }
 
             if (expectedBus !== '미정' && expectedBus !== '-' && !expectedBus.includes('호차') && !isNaN(parseInt(expectedBus))) {
                 expectedBus += '호차';
