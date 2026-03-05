@@ -713,17 +713,23 @@
                 
                 let cams = cameraList;
                 if (cams.length === 0) {
-                    try { cams = await Html5Qrcode.getCameras(); setCameraList(cams); } catch(e){}
+                    try { 
+                        const allCams = await Html5Qrcode.getCameras(); 
+                        // 🔥 수정: 셀카(정면) 렌즈 배제 (이름에 front, 전면, user가 들어간 렌즈 제외)
+                        cams = allCams.filter(c => {
+                            const label = c.label.toLowerCase();
+                            return !label.includes('front') && !label.includes('전면') && !label.includes('user');
+                        });
+                        // 만약 필터링 후 아무 렌즈도 안 남으면 안전장치로 원복
+                        if(cams.length === 0) cams = allCams;
+                        setCameraList(cams); 
+                    } catch(e){}
                 }
 
                 let targetId = camIdToUse;
                 if (!targetId && cams.length > 0) {
-                    const backCams = cams.filter(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('후면') || c.label.toLowerCase().includes('environment'));
-                    if (backCams.length > 0) {
-                        targetId = backCams[backCams.length - 1].id;
-                    } else if (cams.length > 1) {
-                         targetId = cams[1].id; 
-                    }
+                    // 🔥 가장 마지막 렌즈를 메인 후면 렌즈로 가정하여 기본 선택
+                    targetId = cams[cams.length - 1].id; 
                 }
                 if (targetId) setCurrentCamId(targetId);
 
@@ -944,17 +950,21 @@
                 
                 let cams = cameraList;
                 if (cams.length === 0) {
-                    try { cams = await Html5Qrcode.getCameras(); setCameraList(cams); } catch(e){}
+                    try { 
+                        const allCams = await Html5Qrcode.getCameras(); 
+                        // 🔥 수정: 조회용 스캐너에서도 전면 카메라 제외
+                        cams = allCams.filter(c => {
+                            const label = c.label.toLowerCase();
+                            return !label.includes('front') && !label.includes('전면') && !label.includes('user');
+                        });
+                        if(cams.length === 0) cams = allCams;
+                        setCameraList(cams); 
+                    } catch(e){}
                 }
 
                 let targetId = camIdToUse;
                 if (!targetId && cams.length > 0) {
-                    const backCams = cams.filter(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('후면') || c.label.toLowerCase().includes('environment'));
-                    if (backCams.length > 0) {
-                        targetId = backCams[backCams.length - 1].id;
-                    } else if (cams.length > 1) {
-                         targetId = cams[1].id; 
-                    }
+                    targetId = cams[cams.length - 1].id; 
                 }
                 if (targetId) setCurrentCamId(targetId);
 
@@ -1880,7 +1890,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: "=\"" + String(user.uid) + "\"", // 🔥 구글 시트 0 탈락 방지 (수식 형태로 텍스트 강제 변환)
+                            id: "\u200B" + String(user.uid), // 🔥 구글 시트 0 탈락 완벽 방지 (투명 공백 문자 삽입으로 텍스트 강제 변환)
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
@@ -1962,7 +1972,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: "=\"" + String(user.uid) + "\"", // 🔥 구글 시트 0 탈락 방지 (수식 형태로 텍스트 강제 변환)
+                            id: "\u200B" + String(user.uid), // 🔥 구글 시트 0 탈락 완벽 방지 (투명 공백 문자 삽입으로 텍스트 강제 변환)
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
@@ -2220,7 +2230,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: "=\"" + String(user.uid) + "\"", // 🔥 구글 시트 0 탈락 방지 (수식 형태로 텍스트 강제 변환)
+                            id: "\u200B" + String(user.uid), // 🔥 구글 시트 0 탈락 방지 (보이지 않는 투명 공백 추가로 텍스트 강제 인식)
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
