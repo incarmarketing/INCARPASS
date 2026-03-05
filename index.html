@@ -671,21 +671,39 @@
                     const element = document.getElementById("reader"); if (!element) return;
                     if (!scannerRef.current) scannerRef.current = new Html5Qrcode("reader");
                     
-                    // ✅ 종이 인쇄된 명찰 스캔을 위한 가장 안정적인 기본 설정 (화질 강제 X, 초점 방해 X)
+                    // ✅ 종이 명찰 스캔의 근본적 문제(초점/해상도) 해결을 위한 완벽한 세팅
+                    const cameraConfig = { 
+                        facingMode: "environment",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    };
                     const config = { 
-                        fps: 10, 
-                        qrbox: function(viewfinderWidth, viewFinderHeight) {
-                            const minEdgeSize = Math.min(viewfinderWidth, viewFinderHeight);
-                            // 화면의 80% 크기로 박스를 키워, 약간 멀리서도 큼직하게 들어오도록 유도 (초점 잡기 유리함)
-                            return { width: Math.floor(minEdgeSize * 0.8), height: Math.floor(minEdgeSize * 0.8) };
-                        },
-                        aspectRatio: 1.0
+                        fps: 15, 
+                        qrbox: 250, // 박스를 고정 크기(250)로 만들어 멀리서 찍도록 유도 (렌즈 초점거리 확보)
+                        aspectRatio: 1.0,
+                        experimentalFeatures: { useBarCodeDetectorIfSupported: true } // 🔥 최신 스마트폰 네이티브 바코드 엔진 사용 (초고속/초정밀)
                     };
 
-                    scannerRef.current.start({ facingMode: "environment" }, config, (decodedText) => {
+                    scannerRef.current.start(cameraConfig, config, (decodedText) => {
                         stopScanner();
                         processScan(decodedText, isStrictBusMode); 
-                    }, () => {}).then(() => { isRunningRef.current = true; }).catch(err => { setIsScanning(false); alert("카메라 접근 실패: " + err); });
+                    }, undefined).then(() => { 
+                        isRunningRef.current = true; 
+                        
+                        // 🔥 카메라 켜진 후 자동으로 화면 확대(줌) - 종이 인쇄물 스캔용 필살기
+                        setTimeout(() => {
+                            try {
+                                const track = scannerRef.current.getRunningTrack();
+                                if (track && track.getCapabilities) {
+                                    const caps = track.getCapabilities();
+                                    if (caps.zoom) {
+                                        track.applyConstraints({ advanced: [{ zoom: Math.min(caps.zoom.max, 2.0) }] });
+                                    }
+                                }
+                            } catch(e) {}
+                        }, 500);
+
+                    }).catch(err => { setIsScanning(false); alert("카메라 접근 실패: " + err); });
                 }, 100);
             };
 
@@ -771,7 +789,12 @@
                     )}
 
                     {isScanning && (
-                        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-fade-in"><button onClick={stopScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full z-[101]"><Icon name="x" size={32} /></button><div className="scanner-container"><div id="reader"></div></div><p className="text-white mt-10 font-bold text-xl animate-pulse text-center break-keep">참가자 명찰의 QR코드를 비춰주세요</p></div>
+                        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-fade-in">
+                            <button onClick={stopScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full z-[101]"><Icon name="x" size={32} /></button>
+                            <div className="scanner-container"><div id="reader"></div></div>
+                            <p className="text-white mt-10 font-bold text-xl animate-pulse text-center break-keep">참가자 명찰의 QR코드를 비춰주세요</p>
+                            <p className="text-amber-400 mt-3 text-sm text-center break-keep font-bold">💡 초점이 맞지 않으면<br/>명찰에서 15cm 정도 떨어뜨려보세요.</p>
+                        </div>
                     )}
                 </div>
             );
@@ -810,17 +833,19 @@
                     const html5QrCode = new Html5Qrcode(elementId);
                     html5QrCodeRef.current = html5QrCode;
                     
-                    // ✅ 종이 인쇄된 명찰 스캔을 위한 가장 안정적인 기본 설정 (화질 강제 X, 초점 방해 X)
+                    const cameraConfig = { 
+                        facingMode: "environment",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    };
                     const config = { 
-                        fps: 10, 
-                        qrbox: function(viewfinderWidth, viewFinderHeight) {
-                            const minEdgeSize = Math.min(viewfinderWidth, viewFinderHeight);
-                            return { width: Math.floor(minEdgeSize * 0.8), height: Math.floor(minEdgeSize * 0.8) };
-                        }, 
-                        aspectRatio: 1.0
+                        fps: 15, 
+                        qrbox: 250, 
+                        aspectRatio: 1.0,
+                        experimentalFeatures: { useBarCodeDetectorIfSupported: true }
                     };
 
-                    html5QrCode.start({ facingMode: "environment" }, config, async (decodedText) => {
+                    html5QrCode.start(cameraConfig, config, async (decodedText) => {
                         try { if (html5QrCode.isScanning) await html5QrCode.stop(); html5QrCode.clear(); } catch (err) { console.warn(err); }
                         setIsLookupScanning(false); html5QrCodeRef.current = null;
                         
@@ -838,7 +863,17 @@
                         if (!found) found = users.find(u => decodedText.includes(String(u.uid))); 
 
                         if (found) setSelectedUser(found); else alert(`미등록 사용자입니다. (스캔된 값: ${decodedText})`);
-                    }, () => {}).catch(err => { setIsLookupScanning(false); alert("카메라 접근 실패: " + err); });
+                    }, undefined).then(() => {
+                        setTimeout(() => {
+                            try {
+                                const track = html5QrCode.getRunningTrack();
+                                if (track && track.getCapabilities) {
+                                    const caps = track.getCapabilities();
+                                    if (caps.zoom) track.applyConstraints({ advanced: [{ zoom: Math.min(caps.zoom.max, 2.0) }] });
+                                }
+                            } catch(e) {}
+                        }, 500);
+                    }).catch(err => { setIsLookupScanning(false); alert("카메라 접근 실패: " + err); });
                 }, 300);
             };
 
@@ -979,6 +1014,7 @@
                                 <button onClick={stopLookupScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full z-[101]"><Icon name="x" size={32} /></button>
                                 <div className="scanner-container"><div id="lookup-reader"></div></div>
                                 <p className="text-white mt-10 font-bold text-xl animate-pulse text-center break-keep">조회할 QR코드를 스캔하세요</p>
+                                <p className="text-amber-400 mt-3 text-sm text-center break-keep font-bold">💡 초점이 맞지 않으면<br/>명찰에서 15cm 정도 떨어뜨려보세요.</p>
                             </div>
                         )}
 
