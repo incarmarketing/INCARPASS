@@ -67,7 +67,7 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
-        const CURRENCY = '$';
+        const CURRENCY = '₩';
 
         // 기본 대만 일정 데이터 세팅 (order 필드 추가)
         const defaultSchedules = [
@@ -101,25 +101,27 @@
             
             let isTarget = false; let expectedBus = '미정'; let matchedKey = null;
 
-            // 1. 타겟값이 텍스트 자체에 포함되어 있는지 검사 (CSV 중복 헤더 대응)
             for (const key of Object.keys(user.options)) {
                 if (key.includes('버스')) continue;
                 const val = user.options[key];
-                if (typeof val === 'string') {
-                    if (val.includes(session.title) || 
-                       (session.targetVal !== 'ALL' && val.includes(session.targetVal)) ||
-                       (session.targetKey !== 'ALL' && val.includes(session.targetKey))) {
+                if (val && typeof val === 'string') {
+                    // 코스명이 포함된 경우
+                    if (val.includes(session.title)) {
+                        isTarget = true; matchedKey = key; break;
+                    }
+                    // "전체" 라고 적혀있는 경우 해당 일자의 모든 일정을 타겟으로 인식
+                    if (val.includes('전체') && (session.targetKey === key || session.displayDate.includes(key))) {
                         isTarget = true; matchedKey = key; break;
                     }
                 }
             }
-            
-            // 2. 명시적인 타겟옵션(Key)과 매칭
             if (!isTarget && session.targetKey && session.targetKey !== 'ALL') {
                 const userVal = user.options[session.targetKey];
-                if (session.targetVal === 'ALL' ? !!userVal : (userVal && userVal.includes(session.targetVal))) { isTarget = true; matchedKey = session.targetKey; }
+                // "전체" 라고 적혀있는 경우 타겟옵션 매칭에도 인식되도록 추가
+                if (session.targetVal === 'ALL' ? !!userVal : (userVal && (userVal.includes(session.targetVal) || userVal.includes('전체')))) { 
+                    isTarget = true; matchedKey = session.targetKey; 
+                }
             }
-            
             if (!isTarget && session.targetKey === 'ALL') isTarget = true;
             
             // 버스 확인
@@ -465,6 +467,11 @@
         };
 
         const DashboardView = ({ users, logs, scheduleStats, groupedStats, changeLogs, onSessionClick }) => {
+            const actionableStats = useMemo(() => scheduleStats.filter(s => s.type !== 'NONE'), [scheduleStats]);
+            const totalTarget = actionableStats.reduce((sum, s) => sum + s.targetCount, 0);
+            const totalDone = actionableStats.reduce((sum, s) => sum + s.doneCount, 0);
+            const globalPercent = totalTarget > 0 ? Math.round((totalDone / totalTarget) * 100) : 0;
+
             return (
                 <div className="space-y-6 animate-slide-up">
                     
@@ -760,8 +767,11 @@
                         setIsLookupScanning(false); html5QrCodeRef.current = null;
                         
                         let scannedUid = decodedText;
-                        if (decodedText.includes('?uid=')) {
-                            try { scannedUid = new URL(decodedText).searchParams.get('uid') || decodedText; } catch(e) {}
+                        if (decodedText.includes('?uid=') || decodedText.includes('?eid=')) {
+                            try { 
+                                const url = new URL(decodedText);
+                                scannedUid = url.searchParams.get('uid') || url.searchParams.get('eid') || decodedText; 
+                            } catch(e) {}
                         } else if (decodedText.includes('_')) {
                             scannedUid = decodedText.split('_')[0];
                         }
@@ -929,7 +939,7 @@
                                             {userSchedules.map((s, idx) => (
                                                 <div key={idx} className="bg-white p-3 rounded-xl border border-indigo-100 shadow-sm flex justify-between items-center">
                                                     <div><span className="text-[10px] font-bold text-slate-400 block break-keep">{s.displayDate}</span><span className="font-bold text-slate-800 break-keep">{s.title}</span>{s.type === 'BOARDING' && <div className="text-[10px] text-incar mt-0.5 font-bold break-keep">배정호차: {getUserSessionInfo(selectedUser, s).expectedBus}</div>}</div>
-                                                    <div className="text-right shrink-0 ml-2"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':s.type==='NONE'?'bg-slate-100 text-slate-500':'bg-slate-100 text-slate-500'}`}>{s.type==='PAYMENT' ? `지급 ${CURRENCY}${s.price}` : s.type==='NONE' ? '단순안내' : '탑승'}</span></div>
+                                                    <div className="text-right"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':s.type==='NONE'?'bg-slate-100 text-slate-500':'bg-slate-100 text-slate-500'}`}>{s.type==='PAYMENT' ? `지급 ${CURRENCY}${s.price}` : s.type==='NONE' ? '단순안내' : '탑승'}</span></div>
                                                 </div>
                                             ))}
                                         </div>
@@ -1016,50 +1026,6 @@
                                 </div>
                             </div>
                         )}
-
-                        {localRefundReq && (
-                            <div className="fixed inset-0 z-[400] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
-                                <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
-                                    <div className="bg-rose-50 p-6 text-center border-b border-rose-100">
-                                        <div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">{CURRENCY}</div>
-                                        <h3 className="text-xl font-black text-rose-600 mb-1 break-keep">지급금 반환 확인</h3>
-                                        <p className="text-slate-600 font-bold text-sm break-keep">{selectedUser.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{localRefundReq.amount}</span>을 지급받았습니다.</p>
-                                    </div>
-                                    <div className="p-6 space-y-4">
-                                        <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {localRefundReq.oldVal} <br/>▼ <br/>변경: {localRefundReq.newVal}</div>
-                                        <button onClick={() => resolveLocalRefund(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>반환 받았습니다</span><span className="text-[10px] opacity-80 font-normal">(패널티 0 처리)</span>
-                                        </button>
-                                        <button onClick={() => resolveLocalRefund(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>반환받지 못했습니다</span><span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 부과)</span>
-                                        </button>
-                                        <button onClick={() => setLocalRefundReq(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                        
-                        {localForfeitReq && (
-                            <div className="fixed inset-0 z-[400] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
-                                <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
-                                    <div className="bg-indigo-50 p-6 text-center border-b border-indigo-100">
-                                        <div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div>
-                                        <h3 className="text-xl font-black text-indigo-900 mb-1 break-keep">일정 변경 확인 (위약금)</h3>
-                                        <p className="text-slate-600 font-bold text-sm break-keep">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p>
-                                    </div>
-                                    <div className="p-6 space-y-4">
-                                        <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {localForfeitReq.oldVal} <br/>▼ <br/>변경: {localForfeitReq.newVal} (예상 지급액 {CURRENCY}{localForfeitReq.price})</div>
-                                        <button onClick={() => resolveLocalForfeit(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>위약금 적용 (부지급)</span><span className="text-[10px] opacity-80 font-normal">(지급액을 패널티로 상계)</span>
-                                        </button>
-                                        <button onClick={() => resolveLocalForfeit(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>위약금 면제</span><span className="text-[10px] opacity-80 font-normal">(추후 정상 지급)</span>
-                                        </button>
-                                        <button onClick={() => setLocalForfeitReq(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
             );
@@ -1142,6 +1108,7 @@
                                             <td className="p-3 font-bold text-slate-800 whitespace-nowrap">{a.name}</td>
                                             <td className="p-3 text-slate-600 font-mono whitespace-nowrap">{a.id}</td>
                                             <td className="p-3 text-center">
+                                                {/* 마스터 계정은 다른 관리자의 권한을 변경 가능 (자기 자신이나 마스터 권한은 변경 불가) */}
                                                 {isMaster && a.role !== 'master' ? (
                                                     <select 
                                                         value={a.role} 
@@ -1445,6 +1412,7 @@
                     const pad = n => n < 10 ? '0'+n : n; return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
                 };
                 const combinedData = [];
+                // [감사로그] 처리자 항목 추가 반영
                 logs.forEach(l => combinedData.push({ rawTime: l.timestamp, 일시: formatLogDate(l.timestamp), 사번: l.uid, 성명: l.name, 구분: l.action, 일정명: l.sessionTitle, 금액: l.finalAmount || 0, 패널티: l.penaltyApplied || 0, 탑승차량: l.bus, 비고: '', 처리자: l.processedBy || '시스템' }));
                 changeLogs.forEach(c => combinedData.push({ rawTime: c.timestamp, 일시: formatLogDate(c.timestamp), 사번: c.uid, 성명: c.name, 구분: '변경', 일정명: c.targetOption, 금액: 0, 패널티: c.penalty || 0, 탑승차량: '', 비고: `${c.oldVal} -> ${c.newVal} | ${c.reason}`, 처리자: c.processedBy || '시스템' }));
                 combinedData.sort((a, b) => new Date(b.rawTime) - new Date(a.rawTime));
@@ -1775,95 +1743,6 @@
                     } 
                 }); 
             };
-            
-            const processScan = useCallback(async (scannedText, strictMode = false) => { 
-                let scannedUid = scannedText;
-                if (scannedText.includes('?uid=')) {
-                    try { scannedUid = new URL(scannedText).searchParams.get('uid') || scannedText; } catch(e){}
-                } else if (scannedText.includes('_')) {
-                    scannedUid = scannedText.split('_')[0]; 
-                }
-
-                let user = users.find(u => String(u.uid) === String(scannedUid)); 
-                if (!user) user = users.find(u => scannedText.includes(String(u.uid))); 
-
-                if (!user) return setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `스캔된 값: ${scannedText}` }); 
-                
-                const session = schedules.find(s => s.id === targetSessionId); 
-                if (!session) return setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' }); 
-
-                const { isTarget, expectedBus } = getUserSessionInfo(user, session);
-
-                if (!isTarget) {
-                     return setScanResult({ status: 'error', msg: '대상자 아님', subMsg: '해당 일정에 신청되지 않은 참가자입니다.', user, session, requiredChoice: session.targetVal !== 'ALL' ? session.targetVal : session.title });
-                }
-
-                if (session.type === 'BOARDING' && ['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) {
-                     return setScanResult({ status: 'error', msg: '탑승 대상 아님', subMsg: `해당 일정은 [${expectedBus}] 대상자입니다.`, user, session });
-                }
-
-                if (strictMode && session.type === 'BOARDING') {
-                    if (expectedBus.trim() !== targetBus.trim()) {
-                         return setScanResult({ status: 'error', msg: '탑승 불가 (차량 불일치)', subMsg: `배정: ${expectedBus} / 현재: ${targetBus}`, user, session });
-                    }
-                }
-                
-                const isDuplicate = logs.some(l => l.uid === user.uid && l.sessionId === session.id); 
-                if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
-                
-                let finalAmount = 0; let penaltyApplied = 0; 
-                if (session.type === 'PAYMENT') { 
-                    const baseAmount = session.price; const deduction = user.penaltyTotal || 0; 
-                    finalAmount = Math.max(0, baseAmount - deduction); penaltyApplied = (baseAmount - finalAmount); 
-                } 
-                
-                const newLog = { 
-                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toLocaleString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: session.type === 'BOARDING' ? targetBus : '-', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`
-                }; 
-                
-                if (db) { 
-                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); 
-                    if (penaltyApplied > 0) { 
-                        const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
-                        await userRef.update({ penaltyTotal: user.penaltyTotal - penaltyApplied }); 
-                    } 
-                } else { 
-                    setLogs(prev => [newLog, ...prev]); 
-                    if (penaltyApplied > 0) { 
-                        setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u)); 
-                    } 
-                } 
-                
-                const todayLogs = logs.filter(l => l.uid === user.uid && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급'); 
-                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
-            }, [db, users, schedules, logs, targetSessionId, targetBus, currentAdmin]);
-
-            // 일정 변경 탭 내부에서 사용하는 유저 업데이트 로직
-            const handleUserUpdate = async (overridePenalty = null, overrideReason = null) => { 
-                if (!selectedUser || !editForm.optKey) return; 
-                const oldVal = selectedUser.options[editForm.optKey]; 
-                const logIdsToRemove = await cleanupOldLogs(selectedUser.uid, editForm.optKey, oldVal, !!db); 
-                
-                const newPenalty = overridePenalty !== null ? overridePenalty : parseInt(editForm.penalty || 0); 
-                const finalReason = overrideReason !== null ? overrideReason : editForm.reason;
-
-                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toLocaleString(), uid: selectedUser.uid, name: selectedUser.name, targetOption: editForm.optKey, oldVal: oldVal, newVal: editForm.optVal, penalty: newPenalty, reason: finalReason, processedBy: `${currentAdmin.name}(${currentAdmin.id})` }; 
-                
-                if (db) { 
-                    const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(selectedUser.uid)); 
-                    await userRef.update({ options: { ...selectedUser.options, [editForm.optKey]: editForm.optVal }, penaltyTotal: (selectedUser.penaltyTotal || 0) + newPenalty }); 
-                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog); 
-                } else { 
-                    if(logIdsToRemove.length > 0) setLogs(prevLogs => prevLogs.filter(l => !logIdsToRemove.includes(l.id))); 
-                    const totalPenalty = (selectedUser.penaltyTotal || 0) + newPenalty;
-                    setUsers(users.map(u => String(u.uid) === String(selectedUser.uid) ? { ...u, options: { ...u.options, [editForm.optKey]: editForm.optVal }, penaltyTotal: totalPenalty } : u)); 
-                    setSelectedUser({...selectedUser, options: { ...selectedUser.options, [editForm.optKey]: editForm.optVal }, penaltyTotal: totalPenalty});
-                    setChangeLogs([changeLog, ...changeLogs]); 
-                } 
-                alert("변경 및 패널티 적용이 완료되었습니다."); 
-                setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' }); 
-                setSearchQuery(''); 
-            };
 
             return (
                 <div className={`h-full flex flex-row w-full relative ${appBgImage ? 'bg-cover bg-center' : 'bg-slate-50'}`} style={appBgImage ? {backgroundImage: `url(${appBgImage})`} : {}}>
@@ -1900,4 +1779,4 @@
         const root = ReactDOM.createRoot(document.getElementById('root')); root.render(<App />);
     </script>
 </body>
-</html>
+</html>ㄹ
