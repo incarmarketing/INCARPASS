@@ -128,13 +128,18 @@
             
             let isTarget = false; let expectedBus = '미정'; let matchedKey = null;
 
+            // 🔥 [수정] 다중 타겟 옵션 (콤마 분리) 지원: 
+            // session.targetVal이 콤마로 연결되어 있다면(예: "티엔라이,고궁박물관"), 
+            // 유저의 값이 그 중 하나라도 일치하면 대상자로 판단합니다.
+            const targetVals = session.targetVal !== 'ALL' ? session.targetVal.split(',').map(s => s.trim()) : [];
+
             // 1. 타겟값이 텍스트 자체에 포함되어 있는지 검사 (CSV 중복 헤더 대응)
             for (const key of Object.keys(user.options)) {
                 if (key.includes('버스')) continue;
                 const val = user.options[key];
                 if (typeof val === 'string') {
                     if (val.includes(session.title) || 
-                       (session.targetVal !== 'ALL' && val.includes(session.targetVal)) ||
+                       (session.targetVal !== 'ALL' && targetVals.some(tv => val.includes(tv))) ||
                        (session.targetKey !== 'ALL' && val.includes(session.targetKey))) {
                         isTarget = true; matchedKey = key; break;
                     }
@@ -144,7 +149,13 @@
             // 2. 명시적인 타겟옵션(Key)과 매칭
             if (!isTarget && session.targetKey && session.targetKey !== 'ALL') {
                 const userVal = user.options[session.targetKey];
-                if (session.targetVal === 'ALL' ? !!userVal : (userVal && userVal.includes(session.targetVal))) { isTarget = true; matchedKey = session.targetKey; }
+                if (session.targetVal === 'ALL') {
+                    if(!!userVal) { isTarget = true; matchedKey = session.targetKey; }
+                } else if (userVal) {
+                    if(targetVals.some(tv => userVal.includes(tv))) {
+                        isTarget = true; matchedKey = session.targetKey;
+                    }
+                }
             }
             
             if (!isTarget && session.targetKey === 'ALL') isTarget = true;
@@ -525,7 +536,7 @@
                             <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">전체 참가자</div>
                             <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800">{users.length}명</div>
                         </div>
-                        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-emerald-500 flex flex-col justify-center">
+                        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-emerald-50 flex flex-col justify-center">
                             <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">총 지급액</div>
                             <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 break-keep">{CURRENCY}{logs.reduce((sum, l) => sum + (l.finalAmount||0), 0).toLocaleString()}</div>
                         </div>
@@ -973,7 +984,7 @@
                     } else if (decodedText.includes('_')) {
                         scannedUid = decodedText.split('_')[0];
                     }
-                    scannedUid = scannedUid.trim();
+                    scannedUid = String(scannedUid).trim();
                     
                     let found = users.find(u => String(u.uid) === String(scannedUid));
                     if (!found) found = users.find(u => decodedText.includes(String(u.uid))); 
@@ -1045,7 +1056,12 @@
                 if (!editForm.optKey) return [];
                 const values = new Set();
                 if (users) users.forEach(u => { if (u.options && u.options[editForm.optKey]) values.add(u.options[editForm.optKey]); });
-                if (schedules) schedules.forEach(s => { if (s.targetKey === editForm.optKey && s.targetVal !== 'ALL') values.add(s.targetVal); });
+                if (schedules) schedules.forEach(s => { 
+                    if (s.targetKey === editForm.optKey && s.targetVal !== 'ALL') {
+                        // 콤마로 연결된 값들을 분리해서 유니크 목록에 추가
+                        s.targetVal.split(',').forEach(tv => values.add(tv.trim()));
+                    } 
+                });
                 return Array.from(values).sort();
             }, [editForm.optKey, users, schedules]);
 
@@ -1723,8 +1739,8 @@
                 if(logs.length === 0 && changeLogs.length === 0) return alert("내보낼 데이터가 없습니다.");
                 
                 const combinedData = [];
-                logs.forEach(l => combinedData.push({ rawTime: l.timestamp, 일시: formatDateSafe(l.timestamp), 사번: l.uid, 성명: l.name, 구분: l.action, 일정명: l.sessionTitle, 금액: l.finalAmount || 0, 패널티: l.penaltyApplied || 0, 탑승차량: l.bus, 비고: '', 처리자: l.processedBy || '시스템' }));
-                changeLogs.forEach(c => combinedData.push({ rawTime: c.timestamp, 일시: formatDateSafe(c.timestamp), 사번: c.uid, 성명: c.name, 구분: '변경', 일정명: c.targetOption, 금액: 0, 패널티: c.penalty || 0, 탑승차량: '', 비고: `${c.oldVal} -> ${c.newVal} | ${c.reason}`, 처리자: c.processedBy || '시스템' }));
+                logs.forEach(l => combinedData.push({ rawTime: l.timestamp, 일시: formatDateSafe(l.timestamp), 사번: String(l.uid), 성명: l.name, 구분: l.action, 일정명: l.sessionTitle, 금액: l.finalAmount || 0, 패널티: l.penaltyApplied || 0, 탑승차량: l.bus, 비고: '', 처리자: l.processedBy || '시스템' }));
+                changeLogs.forEach(c => combinedData.push({ rawTime: c.timestamp, 일시: formatDateSafe(c.timestamp), 사번: String(c.uid), 성명: c.name, 구분: '변경', 일정명: c.targetOption, 금액: 0, 패널티: c.penalty || 0, 탑승차량: '', 비고: `${c.oldVal} -> ${c.newVal} | ${c.reason}`, 처리자: c.processedBy || '시스템' }));
                 
                 combinedData.sort((a, b) => {
                     const tA = new Date(a.rawTime).getTime();
@@ -1811,10 +1827,10 @@
                         return true;
                     });
                     const targetCount = validUsers.length;
-                    const doneCount = logs.filter(l => l.sessionId === s.id && validUsers.some(vu => vu.uid === l.uid)).length;
+                    const doneCount = logs.filter(l => l.sessionId === s.id && validUsers.some(vu => String(vu.uid) === String(l.uid))).length;
                     const percent = targetCount > 0 ? Math.round((doneCount / targetCount) * 100) : (doneCount > 0 ? 100 : 0);
                     const expectedAmount = targetCount * (s.price || 0);
-                    const actualAmount = logs.filter(l => l.sessionId === s.id && validUsers.some(vu => vu.uid === l.uid)).reduce((sum, l) => sum + (l.finalAmount || 0), 0);
+                    const actualAmount = logs.filter(l => l.sessionId === s.id && validUsers.some(vu => String(vu.uid) === String(l.uid))).reduce((sum, l) => sum + (l.finalAmount || 0), 0);
                     return { ...s, targetCount, doneCount, percent, expectedAmount, actualAmount, diffCount: doneCount - targetCount, diffAmount: actualAmount - expectedAmount };
                 });
             }, [schedules, users, logs]);
@@ -1836,7 +1852,7 @@
 
             const cleanupOldLogs = async (uid, targetKey, oldVal, performUpdate = true) => {
                 const relatedSessions = schedules.filter(s => s.targetKey === targetKey);
-                const logsToDelete = logs.filter(l => l.uid === uid && relatedSessions.some(s => s.id === l.sessionId));
+                const logsToDelete = logs.filter(l => String(l.uid) === String(uid) && relatedSessions.some(s => s.id === l.sessionId));
                 const oldLogIds = logsToDelete.map(l => l.id);
                 if(performUpdate && oldLogIds.length > 0) {
                     if (db) { const batch = db.batch(); oldLogIds.forEach(logId => { const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logId); batch.delete(ref); }); await batch.commit(); } 
@@ -1847,7 +1863,7 @@
 
             const handleManualComplete = async (user, session) => {
                 if(!confirm(`${user.name}님을 수동으로 [${session.type==='PAYMENT'?'지급완료':'탑승완료'}] 처리하시겠습니까?`)) return;
-                const newLog = { id: `LOG_${Date.now()}_MANUAL`, timestamp: new Date().toISOString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: '수동처리', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: 0, finalAmount: session.type === 'PAYMENT' ? session.price : 0, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
+                const newLog = { id: `LOG_${Date.now()}_MANUAL`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: '수동처리', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: 0, finalAmount: session.type === 'PAYMENT' ? session.price : 0, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
                 if(db) { await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); } else { setLogs([newLog, ...logs]); }
                 
                 // 🔥 [추가] 관리자가 수동으로 지급 처리할 때 구글 시트 연동
@@ -1856,7 +1872,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: user.uid, 
+                            id: String(user.uid), 
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
@@ -1882,7 +1898,7 @@
                     await userRef.update({ options: updatedOptions, penaltyTotal: (user.penaltyTotal || 0) + newPenalty }); 
                 } else { 
                     const updatedUsers = users.map(u => { 
-                        if (u.uid === user.uid) { 
+                        if (String(u.uid) === String(user.uid)) { 
                             const newOptions = { ...u.options, [session.targetKey]: requiredChoice }; 
                             return { ...u, options: newOptions, penaltyTotal: (u.penaltyTotal || 0) + newPenalty }; 
                         } 
@@ -1891,7 +1907,7 @@
                     setUsers([...updatedUsers]); 
                 }
 
-                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toISOString(), uid: user.uid, name: user.name, targetOption: session.targetKey, oldVal: oldVal || '미선택', newVal: requiredChoice, penalty: newPenalty, reason: reason, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
+                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, targetOption: session.targetKey, oldVal: oldVal || '미선택', newVal: requiredChoice, penalty: newPenalty, reason: reason, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
                 if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog); 
                 else setChangeLogs([changeLog, ...changeLogs]);
 
@@ -1910,7 +1926,7 @@
                     } 
                 }
 
-                const newLog = { id: `LOG_${Date.now()}_FORCE`, timestamp: new Date().toISOString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: targetBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
+                const newLog = { id: `LOG_${Date.now()}_FORCE`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: targetBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
                 
                 if(db) { 
                     await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); 
@@ -1926,7 +1942,7 @@
                     }); 
                     if (penaltyApplied > 0) { 
                         const currentPenalty = (user.penaltyTotal || 0) + newPenalty; 
-                        const updatedUsers2 = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: currentPenalty - penaltyApplied } : u); 
+                        const updatedUsers2 = users.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: currentPenalty - penaltyApplied } : u); 
                         setUsers([...updatedUsers2]); 
                     } 
                 }
@@ -1937,7 +1953,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: user.uid, 
+                            id: String(user.uid), 
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
@@ -1963,7 +1979,7 @@
                 if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
                 const oldVal = user.options[session.targetKey];
                 const oldPaymentSchedules = schedules.filter(s => s.targetKey === session.targetKey && s.targetVal === oldVal && s.type === 'PAYMENT');
-                const oldPaymentLogs = logs.filter(l => l.uid === user.uid && oldPaymentSchedules.some(s => s.id === l.sessionId));
+                const oldPaymentLogs = logs.filter(l => String(l.uid) === String(user.uid) && oldPaymentSchedules.some(s => s.id === l.sessionId));
                 const recoupAmount = oldPaymentLogs.reduce((sum, l) => sum + (l.finalAmount || 0), 0);
                 
                 if (recoupAmount > 0) { 
@@ -2044,7 +2060,8 @@
                                 bus = bus + '호차';
                             }
                             
-                            if (uid) parsed.push({ uid, name, org, bus, options, penaltyTotal: 0 });
+                            // 🔥 [수정] 사번을 무조건 문자로 저장
+                            if (uid) parsed.push({ uid: String(uid), name, org, bus, options, penaltyTotal: 0 });
                         }
                         
                         if(confirm(`${parsed.length}명의 참가자 명단을 로드하시겠습니까?`)) { 
@@ -2132,7 +2149,7 @@
                 } else if (scannedText.includes('_')) {
                     scannedUid = scannedText.split('_')[0]; 
                 }
-                scannedUid = scannedUid.trim();
+                scannedUid = String(scannedUid).trim(); // 🔥 사번을 무조건 문자로 취급
 
                 let user = users.find(u => String(u.uid) === String(scannedUid)); 
                 if (!user) user = users.find(u => scannedText.includes(String(u.uid))); 
@@ -2159,7 +2176,7 @@
                 }
                 
                 // 🔥 [핵심수정] 이미 처리되었는지 확인할 때 상태(logs)를 직접 읽어와서 카운트 누적 방지!
-                const isDuplicate = logs.some(l => l.uid === user.uid && l.sessionId === session.id); 
+                const isDuplicate = logs.some(l => String(l.uid) === String(user.uid) && l.sessionId === session.id); 
                 if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
                 
                 let finalAmount = 0; let penaltyApplied = 0; 
@@ -2169,7 +2186,7 @@
                 } 
                 
                 const newLog = { 
-                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toISOString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: session.type === 'BOARDING' ? targetBus : '-', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`
+                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: session.type === 'BOARDING' ? targetBus : '-', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`
                 }; 
                 
                 if (db) { 
@@ -2191,7 +2208,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: user.uid, 
+                            id: String(user.uid), 
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
@@ -2200,7 +2217,7 @@
                     }).catch(console.error);
                 }
 
-                const todayLogs = logs.filter(l => l.uid === user.uid && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급'); 
+                const todayLogs = logs.filter(l => String(l.uid) === String(user.uid) && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급'); 
                 setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
             }, [db, users, schedules, logs, targetSessionId, targetBus, currentAdmin]);
 
@@ -2213,7 +2230,7 @@
                 const newPenalty = overridePenalty !== null ? overridePenalty : parseInt(editForm.penalty || 0); 
                 const finalReason = overrideReason !== null ? overrideReason : editForm.reason;
 
-                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toISOString(), uid: selectedUser.uid, name: selectedUser.name, targetOption: editForm.optKey, oldVal: oldVal, newVal: editForm.optVal, penalty: newPenalty, reason: finalReason, processedBy: `${currentAdmin.name}(${currentAdmin.id})` }; 
+                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toISOString(), uid: String(selectedUser.uid), name: selectedUser.name, targetOption: editForm.optKey, oldVal: oldVal, newVal: editForm.optVal, penalty: newPenalty, reason: finalReason, processedBy: `${currentAdmin.name}(${currentAdmin.id})` }; 
                 
                 if (db) { 
                     const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(selectedUser.uid)); 
