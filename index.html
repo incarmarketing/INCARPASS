@@ -671,7 +671,7 @@
                     const element = document.getElementById("reader"); if (!element) return;
                     if (!scannerRef.current) scannerRef.current = new Html5Qrcode("reader");
                     
-                    // ✅ 종이 인쇄된 조밀한 QR 인식을 위한 해상도 및 포커스 최적화
+                    // ✅ 종이 인쇄된 조밀한 QR 인식을 위한 해상도 및 포커스 최적화 (후면카메라 고정)
                     const cameraConfig = { facingMode: "environment" };
                     const config = { 
                         fps: 15, 
@@ -681,6 +681,7 @@
                         },
                         aspectRatio: 1.0,
                         videoConstraints: {
+                            facingMode: "environment", // 후면 카메라 강제 지정
                             width: { ideal: 1920 },
                             height: { ideal: 1080 }
                         }
@@ -814,7 +815,7 @@
                     const html5QrCode = new Html5Qrcode(elementId);
                     html5QrCodeRef.current = html5QrCode;
                     
-                    // ✅ 조회용 스캐너도 고해상도 + 넓은 인식 영역 적용
+                    // ✅ 조회용 스캐너도 고해상도 + 넓은 인식 영역 적용 (후면카메라 고정)
                     const cameraConfig = { facingMode: "environment" };
                     const config = { 
                         fps: 15, 
@@ -824,6 +825,7 @@
                         }, 
                         aspectRatio: 1.0,
                         videoConstraints: {
+                            facingMode: "environment", // 후면 카메라 강제 지정
                             width: { ideal: 1920 },
                             height: { ideal: 1080 }
                         }
