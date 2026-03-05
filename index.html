@@ -33,7 +33,6 @@
         }
     </script>
     <style>
-        /* 🔥 수정: PC 레이아웃 증발(Collapse)을 막기 위한 절대 높이/너비 구조 지정 */
         html, body, #root { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
         body { font-family: 'Noto Sans KR', sans-serif; background-color: #f1f5f9; color: #334155; -webkit-tap-highlight-color: transparent; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
@@ -73,9 +72,20 @@
 
         const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbx2tVkT00Z8uXQWl6EeTIUUhZ3_NJHx3JDqSCHC5oJWkUCm0OtcTmaV6g20cNKoh0no9w/exec";
 
-        // 🔥 완벽한 중복 스캔 차단을 위한 전역 락(Global Lock) 메모리
-        // 이 변수는 React 렌더링 주기와 무관하게 즉시 상태를 기억하여 데이터 중복 생성을 막습니다.
         const GLOBAL_PROCESSED_SCANS = new Set();
+
+        const getSessionDomainInfo = (session) => {
+            if (!session) return { isFlight: false, label: '탑승', icon: 'bus' };
+            const isFlight = session.title && (session.title.includes('아시아나') || session.title.includes('대한항공') || session.title.includes('항공') || session.title.includes('공항'));
+            let label = '탑승';
+            if (session.type === 'PAYMENT') label = '지급';
+            else if (session.type === 'NONE') label = '안내';
+            else if (isFlight) {
+                // 1일차는 출국, 그 외 마지막 날짜(4일차 등)는 귀국으로 판별
+                label = session.displayDate && session.displayDate.includes('1일차') ? '출국' : '귀국';
+            }
+            return { isFlight, label, icon: isFlight ? 'plane' : 'bus' };
+        };
 
         const formatTimeSafe = (ts) => {
             if (!ts) return '';
@@ -100,27 +110,14 @@
         };
 
         const defaultSchedules = [
-            { id: 'S01', order: 1, date: '2026-03-11', displayDate: '1일차 13:30', title: '단수이 옛거리', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S02', order: 2, date: '2026-03-11', displayDate: '1일차 14:00', title: '홍마오청', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S03', order: 3, date: '2026-03-11', displayDate: '1일차 14:30', title: '진리대학', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S04', order: 4, date: '2026-03-11', displayDate: '1일차 18:00', title: '석식 (타카오 샤브샤브)', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S05', order: 5, date: '2026-03-11', displayDate: '1일차 19:30', title: '타이베이 101 전망대', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S06', order: 6, date: '2026-03-12', displayDate: '2일차 08:30', title: '티엔라이 온천 (1안)', type: 'BOARDING', targetKey: '2일차 선택', targetVal: '1안' },
-            { id: 'S07', order: 7, date: '2026-03-12', displayDate: '2일차 09:00', title: '고궁박물관 (2안)', type: 'BOARDING', targetKey: '2일차 선택', targetVal: '2안' },
-            { id: 'S08', order: 8, date: '2026-03-12', displayDate: '2일차 14:30', title: '서문정 (시먼딩)', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S09', order: 9, date: '2026-03-12', displayDate: '2일차 18:00', title: 'INCAR 만찬 행사', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S10', order: 10, date: '2026-03-13', displayDate: '3일차 11:00', title: '예류 해양국립공원', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S11', order: 11, date: '2026-03-13', displayDate: '3일차 14:30', title: '스펀 천등 날리기', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S12', order: 12, date: '2026-03-13', displayDate: '3일차 17:00', title: '지우펀 야경', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
-            { id: 'S13', order: 13, date: '2026-03-14', displayDate: '4일차 08:00', title: '호텔 체크아웃 및 공항 이동', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' }
+            { id: 'S01', order: 1, date: '2026-03-11', displayDate: '1일차 13:30', title: '아시아나', type: 'BOARDING', targetKey: '아시아나', targetVal: '아시아나' },
+            { id: 'S02', order: 2, date: '2026-03-11', displayDate: '1일차 14:00', title: '대한항공', type: 'BOARDING', targetKey: '대한항공', targetVal: '대한항공' },
+            { id: 'S03', order: 3, date: '2026-03-11', displayDate: '1일차 14:30', title: '타이베이 101 전망대', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' }
         ];
 
         const defaultUsers = [
-            { uid: '10001', name: '홍길동', org: '강남지사', bus: '1호차', options: { '2일차 선택': '1안' }, penaltyTotal: 0 },
-            { uid: '10002', name: '김철수', org: '본사', bus: '1호차', options: { '2일차 선택': '2안' }, penaltyTotal: 0 },
-            { uid: '10003', name: '이영희', org: '부산지사', bus: '2호차', options: { '2일차 선택': '1안' }, penaltyTotal: 0 },
-            { uid: '10004', name: '박민수', org: '대구지사', bus: '2호차', options: { '2일차 선택': '3안' }, penaltyTotal: 0 },
-            { uid: '10005', name: '정지훈', org: '광주지사', bus: '3호차', options: { '2일차 선택': '2안' }, penaltyTotal: 0 }
+            { uid: '10001', name: '홍길동', org: '강남지사', bus: '1호차', options: { '항공': '아시아나' }, penaltyTotal: 0 },
+            { uid: '10002', name: '김철수', org: '본사', bus: '1호차', options: { '항공': '대한항공' }, penaltyTotal: 0 }
         ];
 
         const getUserSessionInfo = (user, session) => {
@@ -156,12 +153,19 @@
             
             if (!isTarget && session.targetKey === 'ALL') isTarget = true;
             
-            // 🔥 [추가/수정] 2일차버스 등 날짜별 예외 버스 반영 로직
             let foundSpecificBus = false;
-            if (session.displayDate) {
+            
+            // 🔥 [수정] 귀국은 버스로 이동하므로 출국일 때만 항공 옵션을 배정수단으로 덮어씌움
+            const domainInfo = getSessionDomainInfo(session);
+            if (domainInfo.isFlight && domainInfo.label === '출국' && user.options['항공']) {
+                expectedBus = user.options['항공'].trim();
+                foundSpecificBus = true;
+            }
+
+            if (!foundSpecificBus && session.displayDate) {
                 const dayMatch = session.displayDate.match(/(\d+일차)/);
                 if (dayMatch) {
-                    const dayStr = dayMatch[1]; // 예: "2일차"
+                    const dayStr = dayMatch[1]; 
                     if (user.options[`${dayStr}버스`]) {
                         expectedBus = user.options[`${dayStr}버스`].trim();
                         foundSpecificBus = true;
@@ -172,7 +176,6 @@
                 }
             }
 
-            // 예외 버스가 발견되지 않았을 경우에만 기존 기본 배정 로직 동작
             if (!foundSpecificBus) {
                 if (matchedKey && user.options[`${matchedKey} 버스`]) expectedBus = user.options[`${matchedKey} 버스`].trim();
                 else if (user.bus && user.bus !== '미정') expectedBus = user.bus;
@@ -194,14 +197,15 @@
                 users: <g><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></g>,
                 money: <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>,
                 edit: <g><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></g>,
-                settings: <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2zM12 15a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"/>,
+                settings: <g><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></g>,
                 check: <polyline points="20 6 9 17 4 12"/>,
                 x: <g><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></g>,
                 alert: <g><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/></g>,
                 history: <g><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></g>,
                 download: <g><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></g>,
-                table: <g><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7m0-18H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7m0-18v18"/></g>,
-                bus: <g><path d="M19 17h2l.64-2.54c.24-1.12.36-2.26.36-3.41V8.5a4.5 4.5 0 0 0-4.5-4.5h-11A4.5 4.5 0 0 0 2 8.5v2.55c0 1.15.12 2.29.36 3.41L3 17h2"/><path d="M15 17v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2"/><path d="M16 8.5h.01"/><path d="M8 8.5h.01"/></g>,
+                table: <g><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 0 2 2h7m0-18v18"/></g>,
+                bus: <g><path d="M8 6v6"/><path d="M15 6v6"/><path d="M2 12h19.6"/><path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/><circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/></g>,
+                plane: <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21.5 4c0 0-2 .5-3.5 2L14.5 9.5 6.3 7.7a1 1 0 0 0-1.2.5l-1.5 1.5c-.3.3-.3.8 0 1.1L8.2 13l-3.5 3.5-2.2-.7a1 1 0 0 0-1 .3L.5 17a1 1 0 0 0 0 1.1L4.3 22l3.8 3.8a1 1 0 0 0 1.1 0l1-1a1 1 0 0 0 .3-1l-.7-2.2L13 18.2l2.2 4.7a1 1 0 0 0 1.1 0l1.5-1.5a1 1 0 0 0 .5-1.2z"/>,
                 trash: <g><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></g>,
                 plus: <g><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></g>,
                 up: <g><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></g>,
@@ -235,7 +239,7 @@
                         {[{id:'dashboard', icon:'dashboard', label:'현황 (Status)', roles: ['master', 'manager', 'staff']},
                           {id:'boarding', icon:'bus', label:'탑승 (Boarding)', roles: ['master', 'manager', 'staff']},
                           {id:'payment', icon:'money', label:'지급 (Payment)', roles: ['master', 'manager', 'staff']},
-                          {id:'change', icon:'edit', label:'일정관리 (Change)', roles: ['master', 'manager']},
+                          {id:'change', icon:'edit', label:'관리 (Change)', roles: ['master', 'manager']},
                           {id:'manage', icon:'settings', label:'설정 (Settings)', roles: ['master', 'manager']}
                         ].filter(menu => menu.roles.includes(currentAdmin?.role)).map(menu => (
                             <button key={menu.id} onClick={()=>setActiveTab(menu.id)} className={`w-full flex items-center gap-3 p-3 rounded-xl font-bold transition-all ${activeTab===menu.id ? 'bg-incar text-white shadow-md' : 'text-slate-400 hover:bg-slate-50'}`}>
@@ -259,7 +263,7 @@
         const MobileTab = ({ activeTab, setActiveTab, currentAdmin }) => (
             <nav className="fixed bottom-0 w-full bg-white border-t border-slate-200 pb-safe pt-2 px-4 flex justify-around items-center z-30 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] md:hidden">
                 <button onClick={()=>setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='dashboard'?'text-incar':'text-slate-300'}`}><Icon name="dashboard" size={20}/><span className="text-[9px] font-bold">현황</span></button>
-                <button onClick={()=>setActiveTab('boarding')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='boarding'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='boarding'?'bg-incar text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="bus" size={20} /></div>{activeTab!=='boarding' && <span className="text-[9px] font-bold">탑승</span>}</button>
+                <button onClick={()=>setActiveTab('boarding')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='boarding'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='boarding'?'bg-incar text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="plane" size={20} /></div>{activeTab!=='boarding' && <span className="text-[9px] font-bold">탑승</span>}</button>
                 <button onClick={()=>setActiveTab('payment')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='payment'?'text-emerald-500':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='payment'?'bg-emerald-500 text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="money" size={20} /></div>{activeTab!=='payment' && <span className="text-[9px] font-bold">지급</span>}</button>
                 {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('change')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='change'?'text-incar':'text-slate-300'}`}><Icon name="edit" size={20}/><span className="text-[9px] font-bold">관리</span></button>}
                 {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('manage')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='manage'?'text-incar':'text-slate-300'}`}><Icon name="settings" size={20}/><span className="text-[9px] font-bold">설정</span></button>}
@@ -283,6 +287,8 @@
             const isDuplicate = status === 'duplicate';
             const isTargetMismatch = status === 'error' && msg === '대상자 아님';
             const isBusMismatch = status === 'error' && msg === '탑승 불가 (차량 불일치)';
+            
+            const domainInfo = getSessionDomainInfo(session);
             
             useEffect(() => { 
                 if(isSuccess || isDuplicate || isBusMismatch) { 
@@ -310,7 +316,7 @@
                                     <div>
                                         <div className="font-bold text-lg text-slate-900 break-keep">{user.name}</div>
                                         <div className="text-xs text-slate-400 font-medium break-all">{user.org} | {user.uid}</div>
-                                        <div className="text-xs text-incar font-bold mt-1">배정차량: {session ? getUserSessionInfo(user, session).expectedBus : getUserSessionInfo(user, null).expectedBus}</div>
+                                        <div className="text-xs text-incar font-bold mt-1">배정{domainInfo.isFlight && domainInfo.label === '출국' ? '항공' : '차량'}: {session ? getUserSessionInfo(user, session).expectedBus : getUserSessionInfo(user, null).expectedBus}</div>
                                     </div>
                                 </div>
                                 {isSuccess && logs && logs.finalAmount !== undefined && (
@@ -334,9 +340,9 @@
                                 )}
                                 {isBusMismatch && (
                                     <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-center">
-                                        <p className="text-sm font-bold text-rose-600 mb-2 break-keep">차량이 일치하지 않습니다</p>
+                                        <p className="text-sm font-bold text-rose-600 mb-2 break-keep">배정수단({domainInfo.isFlight && domainInfo.label === '출국' ? '항공편' : '차량'})이 일치하지 않습니다</p>
                                         <p className="text-xs text-slate-500 mb-1 break-keep">해당 인원은 <strong>{getUserSessionInfo(user, session).expectedBus}</strong> 탑승 대상입니다.</p>
-                                        <p className="text-xs text-slate-400 break-keep">다른 차량으로 안내하거나, 관리자에게 문의하세요.</p>
+                                        <p className="text-xs text-slate-400 break-keep">다른 수단으로 안내하거나, 관리자에게 문의하세요.</p>
                                     </div>
                                 )}
                             </div>
@@ -351,6 +357,7 @@
             const [tab, setTab] = useState('done');
             const [searchTerm, setSearchTerm] = useState('');
             
+            const domainInfo = getSessionDomainInfo(session);
             const isPaymentSession = session.type === 'PAYMENT';
 
             const targetUsers = useMemo(() => {
@@ -427,7 +434,9 @@
                     <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
                             <div>
-                                <span className={`inline-block px-2 py-1 rounded text-[10px] font-bold mb-1 ${isPaymentSession?'bg-emerald-100 text-emerald-600': session.type==='NONE'?'bg-slate-200 text-slate-600':'bg-indigo-100 text-incar'}`}>{isPaymentSession?'지급':session.type==='NONE'?'안내/자유':'탑승'}</span>
+                                <span className={`inline-block px-2 py-1 rounded text-[10px] font-bold mb-1 ${isPaymentSession?'bg-emerald-100 text-emerald-600': session.type==='NONE'?'bg-slate-200 text-slate-600':'bg-indigo-100 text-incar'}`}>
+                                    {domainInfo.label}
+                                </span>
                                 <h3 className="font-bold text-lg text-slate-800 leading-tight break-keep pr-2">{session.title}</h3>
                                 <p className="text-xs text-slate-500 mt-1 break-keep">{session.displayDate} | 전체 대상 {targetUsers.length}명</p>
                             </div>
@@ -452,13 +461,13 @@
                         {session.type !== 'NONE' ? (
                             <>
                                 <div className="flex border-b border-slate-100">
-                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '지급 완료' : '탑승 완료'} ({doneList.length})</button>
-                                    <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '미지급' : '미탑승'} ({yetList.length})</button>
+                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '지급 완료' : `${domainInfo.label} 완료`} ({doneList.length})</button>
+                                    <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '미지급' : `미${domainInfo.label}`} ({yetList.length})</button>
                                 </div>
                                 
                                 {tab === 'done' && doneList.length > 0 && busSummary && !isPaymentSession && (
                                     <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap gap-2 items-center">
-                                        <span className="text-xs font-bold text-slate-500 mr-1 break-keep">차량별 탑승현황:</span>
+                                        <span className="text-xs font-bold text-slate-500 mr-1 break-keep">{domainInfo.isFlight && domainInfo.label === '출국' ? '항공' : '차량'}별 현황:</span>
                                         {Object.entries(busSummary).sort().map(([bus, count]) => (
                                             <span key={bus} className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-incar shadow-sm break-keep">
                                                 {bus}: {count}명
@@ -471,7 +480,7 @@
                                     {groupKeys.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">{searchTerm ? '검색 결과가 없습니다.' : '해당 인원이 없습니다.'}</div> : groupKeys.map(groupName => (
                                         <div key={groupName} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                                             <button onClick={() => toggleGroup(groupName)} className="w-full p-4 flex justify-between items-center bg-slate-50 hover:bg-slate-100 transition-colors">
-                                                <div className="flex items-center gap-2"><div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${tab==='done'?'bg-emerald-500':'bg-incar'}`}><Icon name={isPaymentSession ? 'money' : 'bus'} size={16} /></div><div className="text-left"><div className="font-bold text-slate-800 text-sm break-keep">{groupName} {!isPaymentSession ? (tab==='done'?'(실제 탑승)':'(탑승 예정)') : ''}</div><div className="text-[10px] text-slate-500">{filteredGroups[groupName].length}명 {tab === 'done' ? '처리 완료' : '대기중'}</div></div></div>
+                                                <div className="flex items-center gap-2"><div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${tab==='done'?'bg-emerald-500':'bg-incar'}`}><Icon name={isPaymentSession ? 'money' : domainInfo.icon} size={16} /></div><div className="text-left"><div className="font-bold text-slate-800 text-sm break-keep">{groupName} {!isPaymentSession ? (tab==='done'?`(실제 ${domainInfo.label})`:`(배정 ${domainInfo.isFlight && domainInfo.label === '출국' ? '항공' : '차량'})`) : ''}</div><div className="text-[10px] text-slate-500">{filteredGroups[groupName].length}명 {tab === 'done' ? '처리 완료' : '대기중'}</div></div></div>
                                                 <Icon name={expandedGroups[groupName] || searchTerm ? "up" : "down"} size={20} className="text-slate-400" />
                                             </button>
                                             {(expandedGroups[groupName] || searchTerm) && (
@@ -487,7 +496,7 @@
                                                                     <div>
                                                                         <div className="font-bold text-slate-800 text-sm flex items-center gap-1 flex-wrap break-keep">
                                                                             {u.name} 
-                                                                            {isCrossBoarded && <span className="text-[9px] bg-amber-500 text-white px-1.5 py-0.5 rounded ml-1 shrink-0">교차탑승</span>}
+                                                                            {isCrossBoarded && <span className="text-[9px] bg-amber-500 text-white px-1.5 py-0.5 rounded ml-1 shrink-0">수단변경</span>}
                                                                         </div>
                                                                         <div className="text-[10px] text-slate-400 font-mono break-all">{u.uid}</div>
                                                                         {isCrossBoarded && <div className="text-[10px] text-amber-600 font-bold mt-0.5 break-keep">원래 배정: {expectedBus}</div>}
@@ -563,12 +572,13 @@
                         <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2"><Icon name="dashboard" className="text-incar"/> 관광/일정별 진행 현황</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {scheduleStats.map(stat => {
+                                const domainInfo = getSessionDomainInfo(stat);
                                 const sessionPenalties = logs.filter(l => l.sessionId === stat.id).reduce((sum, l) => sum + (l.penaltyApplied || 0), 0);
                                 return (
                                     <div key={stat.id} onClick={() => onSessionClick(stat)} className="cursor-pointer bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow active:scale-[0.98] transition-transform">
-                                        <div className="absolute right-0 top-0 p-3 opacity-10"><Icon name={stat.type === 'PAYMENT' ? 'money' : stat.type === 'NONE' ? 'info' : 'bus'} size={60} /></div>
+                                        <div className="absolute right-0 top-0 p-3 opacity-10"><Icon name={stat.type === 'PAYMENT' ? 'money' : stat.type === 'NONE' ? 'info' : domainInfo.icon} size={60} /></div>
                                         <div className="relative z-10">
-                                            <div className="flex justify-between items-start mb-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded ${stat.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':stat.type==='NONE'?'bg-slate-200 text-slate-600':'bg-indigo-50 text-incar'}`}>{stat.type==='PAYMENT'?'지급':stat.type==='NONE'?'안내':'탑승'}</span><span className="text-xs font-bold text-slate-400">{stat.displayDate}</span></div>
+                                            <div className="flex justify-between items-start mb-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded ${stat.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':stat.type==='NONE'?'bg-slate-200 text-slate-600':'bg-indigo-50 text-incar'}`}>{domainInfo.label}</span><span className="text-xs font-bold text-slate-400">{stat.displayDate}</span></div>
                                             <h4 className="font-bold text-slate-800 mb-4 pr-2 leading-tight break-keep min-h-[2.5rem]">{stat.title}</h4>
                                             {stat.type !== 'NONE' ? (
                                                 <>
@@ -610,12 +620,14 @@
                                             <h4 className="text-xs font-bold text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-3">{date}</h4>
                                             <div className="overflow-x-auto rounded-xl border border-slate-200">
                                                 <table className="w-full text-left data-table">
-                                                    <thead><tr><th className="min-w-[120px]">관광/일정명</th><th className="text-center">속성</th><th className="text-right">대상(Target)</th><th className="text-right">탑승(Done)</th><th className="text-center border-l border-slate-200">상태</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
+                                                    <thead><tr><th className="min-w-[120px]">관광/일정명</th><th className="text-center">속성</th><th className="text-right">대상(Target)</th><th className="text-right">완료(Done)</th><th className="text-center border-l border-slate-200">상태</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
                                                     <tbody>
-                                                        {stats.map(s => (
+                                                        {stats.map(s => {
+                                                            const dInfo = getSessionDomainInfo(s);
+                                                            return (
                                                             <tr key={s.id} onClick={() => onSessionClick(s)} className="cursor-pointer hover:bg-slate-50 transition-colors">
                                                                 <td className="font-bold text-slate-700 whitespace-nowrap">{s.title}</td>
-                                                                <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':s.type==='NONE'?'bg-slate-100 text-slate-500 border-slate-200':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':s.type==='NONE'?'안내/자유':'탑승'}</span></td>
+                                                                <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':s.type==='NONE'?'bg-slate-100 text-slate-500 border-slate-200':'bg-indigo-50 text-incar border-indigo-100'}`}>{dInfo.label}</span></td>
                                                                 <td className="text-right text-slate-500">{s.type === 'NONE' ? '-' : s.targetCount}</td>
                                                                 <td className="text-right font-bold text-slate-900">{s.type === 'NONE' ? '-' : s.doneCount}</td>
                                                                 <td className="text-center border-l border-slate-50">{s.type === 'NONE' ? <span className="text-slate-400 text-xs">스캔없음</span> : s.targetCount - s.doneCount === 0 ? <span className="text-emerald-500 font-bold text-xs whitespace-nowrap">Complete</span> : <span className="text-rose-500 font-bold text-xs whitespace-nowrap">{s.targetCount - s.doneCount}명 남음</span>}</td>
@@ -623,7 +635,7 @@
                                                                 <td className="text-right font-bold text-emerald-600 whitespace-nowrap">{s.type==='PAYMENT'?`${CURRENCY}${s.actualAmount.toLocaleString()}`:'-'}</td>
                                                                 <td className="text-center border-l border-slate-50">{s.type !== 'PAYMENT' ? '-' : (s.diffAmount === 0 ? <span className="text-emerald-500 font-bold text-xs">OK</span> : s.diffAmount < 0 ? <span className="text-rose-500 font-bold text-xs">{s.diffAmount}</span> : <span className="text-blue-500 font-bold text-xs">+{s.diffAmount}</span>)}</td>
                                                             </tr>
-                                                        ))}
+                                                        )})}
                                                     </tbody>
                                                 </table>
                                             </div>
@@ -657,6 +669,9 @@
             const filteredSchedules = useMemo(() => schedules.filter(s => s.type === mode), [schedules, mode]);
             useEffect(() => { if (filteredSchedules.length > 0) { const exists = filteredSchedules.find(s => s.id === targetSessionId); if (!exists) setTargetSessionId(filteredSchedules[0].id); } else { setTargetSessionId(''); } }, [mode, filteredSchedules]);
             
+            const selectedSession = useMemo(() => filteredSchedules.find(s => s.id === targetSessionId), [filteredSchedules, targetSessionId]);
+            const domainInfo = getSessionDomainInfo(selectedSession);
+
             useEffect(() => {
                 let barcodeStr = '';
                 let timeout = null;
@@ -715,12 +730,10 @@
                 if (cams.length === 0) {
                     try { 
                         const allCams = await Html5Qrcode.getCameras(); 
-                        // 🔥 수정: 셀카(정면) 렌즈 배제 (이름에 front, 전면, user가 들어간 렌즈 제외)
                         cams = allCams.filter(c => {
                             const label = c.label.toLowerCase();
                             return !label.includes('front') && !label.includes('전면') && !label.includes('user');
                         });
-                        // 만약 필터링 후 아무 렌즈도 안 남으면 안전장치로 원복
                         if(cams.length === 0) cams = allCams;
                         setCameraList(cams); 
                     } catch(e){}
@@ -728,7 +741,6 @@
 
                 let targetId = camIdToUse;
                 if (!targetId && cams.length > 0) {
-                    // 🔥 가장 마지막 렌즈를 메인 후면 렌즈로 가정하여 기본 선택
                     targetId = cams[cams.length - 1].id; 
                 }
                 if (targetId) setCurrentCamId(targetId);
@@ -831,46 +843,72 @@
             return (
                 <div className="space-y-6 h-full flex flex-col animate-slide-up">
                     <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
-                        <div className="flex items-center gap-2 mb-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING' ? 'STEP 1' : '지급'}</span><h3 className="text-lg font-bold text-slate-800 break-keep">{mode==='BOARDING' ? '탑승 관광/일정 선택' : '지급 항목 선택'}</h3></div>
+                        <div className="flex items-center gap-2 mb-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING' ? 'STEP 1' : '지급'}</span><h3 className="text-lg font-bold text-slate-800 break-keep">{mode==='BOARDING' ? '탑승/수속 일정 선택' : '지급 항목 선택'}</h3></div>
                         <div className="mb-6">
                             {filteredSchedules.length > 0 ? (
-                                <select value={targetSessionId} onChange={(e) => setTargetSessionId(e.target.value)} className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-lg outline-none focus:ring-4 transition-all break-keep ${mode==='BOARDING'?'focus:ring-incar/20':'focus:ring-emerald-500/20'}`}>{filteredSchedules.map(s => <option key={s.id} value={s.id}>[{s.displayDate}] {s.title}</option>)}</select>
+                                <select value={targetSessionId} onChange={(e) => setTargetSessionId(e.target.value)} className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-lg outline-none focus:ring-4 transition-all break-keep ${mode==='BOARDING'?'focus:ring-incar/20':'focus:ring-emerald-500/20'}`}>
+                                    {filteredSchedules.map(s => {
+                                        const dInfo = getSessionDomainInfo(s);
+                                        return <option key={s.id} value={s.id}>[{s.displayDate}] {s.title} ({dInfo.label})</option>
+                                    })}
+                                </select>
                             ) : (
                                 <div className="p-4 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200 break-keep">진행 가능한 일정이 없습니다.</div>
                             )}
                         </div>
                         {mode === 'BOARDING' && filteredSchedules.length > 0 && (
                             <div className="animate-slide-up">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 w-full">
-                                    <div className="flex items-center gap-2 shrink-0"><span className="px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-slate-800 text-white">STEP 2</span><h3 className="text-base sm:text-lg font-bold text-slate-800 break-keep">현장 탑승 차량 선택</h3></div>
-                                    <div className="flex gap-2 items-center shrink-0 w-full sm:w-auto">
-                                        <div className="flex flex-1 sm:flex-none items-center justify-center sm:justify-start bg-slate-100 rounded-lg px-2 py-1.5 gap-2 cursor-pointer" onClick={() => setIsStrictBusMode(!isStrictBusMode)}>
-                                            <div className={`w-8 h-4 rounded-full relative transition-colors shrink-0 ${isStrictBusMode ? 'bg-incar' : 'bg-slate-300'}`}><div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${isStrictBusMode ? 'translate-x-4' : 'translate-x-0'}`}></div></div>
-                                            <span className={`text-[10px] font-bold break-keep ${isStrictBusMode ? 'text-incar' : 'text-slate-400'}`}>배차 검증 (지정호차)</span>
+                                {domainInfo.isFlight && domainInfo.label === '출국' ? (
+                                    <div className="flex items-center gap-3 bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                                        <div className="w-10 h-10 rounded-full bg-white text-incar flex items-center justify-center shadow-sm shrink-0"><Icon name="plane" size={24} /></div>
+                                        <div>
+                                            <h4 className="font-bold text-indigo-900 text-sm">해당 일정은 항공({domainInfo.label}) 일정입니다.</h4>
+                                            <p className="text-xs text-indigo-700 mt-0.5">버스 호차 대신 참가자의 <strong>[배정항공]</strong>을 기준으로 자동 확인합니다.</p>
                                         </div>
-                                        <button onClick={()=>setManualBus(!manualBus)} className={`text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shrink-0 whitespace-nowrap ${manualBus ? 'bg-incar text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
-                                            {manualBus ? '관리 완료' : '차량 관리'}
-                                        </button>
                                     </div>
-                                </div>
-                                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                                    {busList.map((bus, i) => (
-                                        <div key={i} className="relative group">
-                                            <button onClick={() => manualBus ? handleRenameBus(i) : setTargetBus(bus)} className={`w-full py-3 rounded-xl text-sm font-bold transition-all relative break-keep ${targetBus === bus && !manualBus ? 'bg-incar text-white shadow-lg scale-105 z-10' : manualBus ? 'bg-white border-2 border-dashed border-indigo-200 text-indigo-400 hover:bg-indigo-50' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
-                                                {bus}
-                                                {manualBus && <span className="absolute bottom-0.5 right-1 text-[8px] opacity-50">수정</span>}
-                                            </button>
-                                            {manualBus && <button onClick={(e) => handleDeleteBus(i, e)} className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-md z-20 hover:scale-110"><Icon name="x" size={12} /></button>}
+                                ) : (
+                                    <>
+                                        {domainInfo.isFlight && domainInfo.label === '귀국' && (
+                                            <div className="flex items-center gap-3 bg-indigo-50 p-4 rounded-xl border border-indigo-100 mb-3">
+                                                <div className="w-10 h-10 rounded-full bg-white text-incar flex items-center justify-center shadow-sm shrink-0"><Icon name="plane" size={24} /></div>
+                                                <div>
+                                                    <h4 className="font-bold text-indigo-900 text-sm">귀국(공항 이동) 일정입니다.</h4>
+                                                    <p className="text-xs text-indigo-700 mt-0.5">호텔 환송 행사 후 탑승할 <strong>[버스 호차]</strong>를 선택하고 스캔해주세요.</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 w-full">
+                                            <div className="flex items-center gap-2 shrink-0"><span className="px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-slate-800 text-white">STEP 2</span><h3 className="text-base sm:text-lg font-bold text-slate-800 break-keep">현장 탑승 차량 선택</h3></div>
+                                            <div className="flex gap-2 items-center shrink-0 w-full sm:w-auto">
+                                                <div className="flex flex-1 sm:flex-none items-center justify-center sm:justify-start bg-slate-100 rounded-lg px-2 py-1.5 gap-2 cursor-pointer" onClick={() => setIsStrictBusMode(!isStrictBusMode)}>
+                                                    <div className={`w-8 h-4 rounded-full relative transition-colors shrink-0 ${isStrictBusMode ? 'bg-incar' : 'bg-slate-300'}`}><div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${isStrictBusMode ? 'translate-x-4' : 'translate-x-0'}`}></div></div>
+                                                    <span className={`text-[10px] font-bold break-keep ${isStrictBusMode ? 'text-incar' : 'text-slate-400'}`}>배차 검증 (지정호차)</span>
+                                                </div>
+                                                <button onClick={()=>setManualBus(!manualBus)} className={`text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shrink-0 whitespace-nowrap ${manualBus ? 'bg-incar text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
+                                                    {manualBus ? '관리 완료' : '차량 관리'}
+                                                </button>
+                                            </div>
                                         </div>
-                                    ))}
-                                    <button onClick={handleAddBus} className="py-3 rounded-xl text-sm font-bold bg-slate-50 border-2 border-dashed border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all flex items-center justify-center"><Icon name="plus" size={20} /></button>
-                                </div>
+                                        <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                                            {busList.map((bus, i) => (
+                                                <div key={i} className="relative group">
+                                                    <button onClick={() => manualBus ? handleRenameBus(i) : setTargetBus(bus)} className={`w-full py-3 rounded-xl text-sm font-bold transition-all relative break-keep ${targetBus === bus && !manualBus ? 'bg-incar text-white shadow-lg scale-105 z-10' : manualBus ? 'bg-white border-2 border-dashed border-indigo-200 text-indigo-400 hover:bg-indigo-50' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                                                        {bus}
+                                                        {manualBus && <span className="absolute bottom-0.5 right-1 text-[8px] opacity-50">수정</span>}
+                                                    </button>
+                                                    {manualBus && <button onClick={(e) => handleDeleteBus(i, e)} className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-md z-20 hover:scale-110"><Icon name="x" size={12} /></button>}
+                                                </div>
+                                            ))}
+                                            <button onClick={handleAddBus} className="py-3 rounded-xl text-sm font-bold bg-slate-50 border-2 border-dashed border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all flex items-center justify-center"><Icon name="plus" size={20} /></button>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         )}
                     </div>
                     
                     <div className="mt-2 mb-2">
-                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> {mode==='BOARDING' ? '카메라 스캔 시작' : '카메라 스캔 시작'}</button>
+                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> {domainInfo.label} 스캔 시작</button>
                     </div>
 
                     {filteredSchedules.length > 0 && (
@@ -952,7 +990,6 @@
                 if (cams.length === 0) {
                     try { 
                         const allCams = await Html5Qrcode.getCameras(); 
-                        // 🔥 수정: 조회용 스캐너에서도 전면 카메라 제외
                         cams = allCams.filter(c => {
                             const label = c.label.toLowerCase();
                             return !label.includes('front') && !label.includes('전면') && !label.includes('user');
@@ -1219,12 +1256,14 @@
                                     <h4 className="font-bold text-incar mb-3 flex items-center gap-2 break-keep"><Icon name="dashboard" size={16}/> {selectedUser.name}님의 전체 여행 일정</h4>
                                     {userSchedules.length === 0 ? <div className="text-center text-slate-400 text-xs py-4 break-keep">배정된 일정이 없습니다.</div> : (
                                         <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                                            {userSchedules.map((s, idx) => (
+                                            {userSchedules.map((s, idx) => {
+                                                const dInfo = getSessionDomainInfo(s);
+                                                return (
                                                 <div key={idx} className="bg-white p-3 rounded-xl border border-indigo-100 shadow-sm flex justify-between items-center">
-                                                    <div><span className="text-[10px] font-bold text-slate-400 block break-keep">{s.displayDate}</span><span className="font-bold text-slate-800 break-keep">{s.title}</span>{s.type === 'BOARDING' && <div className="text-[10px] text-incar mt-0.5 font-bold break-keep">배정호차: {getUserSessionInfo(selectedUser, s).expectedBus}</div>}</div>
-                                                    <div className="text-right shrink-0 ml-2"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':s.type==='NONE'?'bg-slate-100 text-slate-500':'bg-slate-100 text-slate-500'}`}>{s.type==='PAYMENT' ? `지급 ${CURRENCY}${s.price}` : s.type==='NONE' ? '단순안내' : '탑승'}</span></div>
+                                                    <div><span className="text-[10px] font-bold text-slate-400 block break-keep">{s.displayDate}</span><span className="font-bold text-slate-800 break-keep">{s.title}</span>{s.type === 'BOARDING' && <div className="text-[10px] text-incar mt-0.5 font-bold break-keep">배정수단: {getUserSessionInfo(selectedUser, s).expectedBus}</div>}</div>
+                                                    <div className="text-right shrink-0 ml-2"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':s.type==='NONE'?'bg-slate-100 text-slate-500':'bg-slate-100 text-slate-500'}`}>{s.type==='PAYMENT' ? `지급 ${CURRENCY}${s.price}` : s.type==='NONE' ? '단순안내' : dInfo.label}</span></div>
                                                 </div>
-                                            ))}
+                                            )})}
                                         </div>
                                     )}
                                 </div>
@@ -1373,7 +1412,6 @@
                 }
             };
             
-            // 🔥 수정: MANAGER 계정으로 로그인해도 MASTER 권한 메뉴를 모두 볼 수 있도록 제한 해제
             const isMaster = currentAdmin && ['master', 'manager'].includes(currentAdmin.role);
 
             return (
@@ -1641,7 +1679,6 @@
 
             const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-            // 🔥 추가: 실시간 중복 스캔 완벽 차단 락(Lock)
             const processedScansRef = useRef(new Set());
 
             useEffect(() => {
@@ -1719,7 +1756,6 @@
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_logs', JSON.stringify(logs)); }, [logs, db]);
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
             
-            // 🔥 DB에서 로그를 가져올 때마다 전역 락(Global Lock)에 자동 등록 (동기화)
             useEffect(() => {
                 logs.forEach(l => {
                     if (l.sessionId && l.uid) GLOBAL_PROCESSED_SCANS.add(`${l.sessionId}_${l.uid}`);
@@ -1754,8 +1790,8 @@
                 if(logs.length === 0 && changeLogs.length === 0) return alert("내보낼 데이터가 없습니다.");
                 
                 const combinedData = [];
-                logs.forEach(l => combinedData.push({ rawTime: l.timestamp, 일시: formatDateSafe(l.timestamp), 사번: String(l.uid), 성명: l.name, 구분: l.action, 일정명: l.sessionTitle, 금액: l.finalAmount || 0, 패널티: l.penaltyApplied || 0, 탑승차량: l.bus, 비고: '', 처리자: l.processedBy || '시스템' }));
-                changeLogs.forEach(c => combinedData.push({ rawTime: c.timestamp, 일시: formatDateSafe(c.timestamp), 사번: String(c.uid), 성명: c.name, 구분: '변경', 일정명: c.targetOption, 금액: 0, 패널티: c.penalty || 0, 탑승차량: '', 비고: `${c.oldVal} -> ${c.newVal} | ${c.reason}`, 처리자: c.processedBy || '시스템' }));
+                logs.forEach(l => combinedData.push({ rawTime: l.timestamp, 일시: formatDateSafe(l.timestamp), 사번: String(l.uid), 성명: l.name, 구분: l.action, 일정명: l.sessionTitle, 금액: l.finalAmount || 0, 패널티: l.penaltyApplied || 0, 배정수단: l.bus, 비고: '', 처리자: l.processedBy || '시스템' }));
+                changeLogs.forEach(c => combinedData.push({ rawTime: c.timestamp, 일시: formatDateSafe(c.timestamp), 사번: String(c.uid), 성명: c.name, 구분: '변경', 일정명: c.targetOption, 금액: 0, 패널티: c.penalty || 0, 배정수단: '', 비고: `${c.oldVal} -> ${c.newVal} | ${c.reason}`, 처리자: c.processedBy || '시스템' }));
                 
                 combinedData.sort((a, b) => {
                     const tA = new Date(a.rawTime).getTime();
@@ -1763,8 +1799,8 @@
                     return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
                 });
                 
-                const headers = ['일시', '사번', '성명', '구분', '일정명', '금액', '패널티', '탑승차량', '비고', '처리자'];
-                let rows = ''; combinedData.forEach(d => { rows += `<tr><td>${d.일시}</td><td style="mso-number-format:'@'">${d.사번}</td><td>${d.성명}</td><td>${d.구분}</td><td>${d.일정명}</td><td>${d.금액}</td><td>${d.패널티}</td><td>${d.탑승차량}</td><td>${d.비고}</td><td>${d.처리자}</td></tr>`; });
+                const headers = ['일시', '사번', '성명', '구분', '일정명', '금액', '패널티', '배정수단', '비고', '처리자'];
+                let rows = ''; combinedData.forEach(d => { rows += `<tr><td>${d.일시}</td><td style="mso-number-format:'@'">${d.사번}</td><td>${d.성명}</td><td>${d.구분}</td><td>${d.일정명}</td><td>${d.금액}</td><td>${d.패널티}</td><td>${d.배정수단}</td><td>${d.비고}</td><td>${d.처리자}</td></tr>`; });
                 const tableHTML = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8"><style>table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #000; padding: 5px; text-align: center; white-space: nowrap; vertical-align: middle; } th { background-color: #f0f0f0; font-weight: bold; }</style></head><body><h3>[INCARPASS 통합 운영 로그]</h3><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></body></html>`;
                 const blob = new Blob([tableHTML], { type: 'application/vnd.ms-excel' });
                 const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `INCARPASS_Unified_Log_${new Date().toISOString().slice(0,10)}.xls`; link.click();
@@ -1786,7 +1822,7 @@
                         localStorage.removeItem('incar_pro_changelogs');
                         setUsers([]); setSchedules([]); setLogs([]); setChangeLogs([]);
                     }
-                    GLOBAL_PROCESSED_SCANS.clear(); // 락 초기화
+                    GLOBAL_PROCESSED_SCANS.clear();
                     alert("운영 데이터가 비워졌습니다. 이제 새로운 명단과 일정을 업로드하세요.");
                 } catch(e) { console.error(e); alert("운영 데이터 초기화 중 오류가 발생했습니다: " + e.message); }
             };
@@ -1877,9 +1913,9 @@
             };
 
             const handleManualComplete = async (user, session) => {
-                if(!confirm(`${user.name}님을 수동으로 [${session.type==='PAYMENT'?'지급완료':'탑승완료'}] 처리하시겠습니까?`)) return;
+                const domainInfo = getSessionDomainInfo(session);
+                if(!confirm(`${user.name}님을 수동으로 [${domainInfo.label}완료] 처리하시겠습니까?`)) return;
                 
-                // 🔥 수동 완료 시에도 락(Lock)에 추가하여 중복 방지 보장
                 processedScansRef.current.add(`${session.id}_${user.uid}`);
 
                 const newLog = { id: `LOG_${Date.now()}_MANUAL`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: '수동처리', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: 0, finalAmount: session.type === 'PAYMENT' ? session.price : 0, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
@@ -1890,7 +1926,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: "\u200B" + String(user.uid), // 🔥 구글 시트 0 탈락 완벽 방지 (투명 공백 문자 삽입으로 텍스트 강제 변환)
+                            id: "\u200B" + String(user.uid),
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
@@ -1909,7 +1945,6 @@
                 const logIdsToRemove = await cleanupOldLogs(user.uid, session.targetKey, oldVal, !!db);
                 const newPenalty = penaltyAmount;
 
-                // 🔥 강제 변경 시에도 중복 차단 락(Lock) 추가
                 GLOBAL_PROCESSED_SCANS.add(`${session.id}_${user.uid}`);
 
                 if(db) { 
@@ -1972,7 +2007,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: "\u200B" + String(user.uid), // 🔥 구글 시트 0 탈락 완벽 방지 (투명 공백 문자 삽입으로 텍스트 강제 변환)
+                            id: "\u200B" + String(user.uid),
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
@@ -1985,7 +2020,7 @@
                 setRefundRequest(null); 
                 setForfeitRequest(null);
                 
-                let alertMsg = `${user.name}님의 일정이 [${requiredChoice}]로 변경되고 탑승 처리되었습니다.`; 
+                let alertMsg = `${user.name}님의 일정이 [${requiredChoice}]로 변경되고 정상 처리되었습니다.`; 
                 if(penaltyAmount > 0) alertMsg += `\n\n⚠️ 미반환 처리: ${CURRENCY}${penaltyAmount}가 패널티로 등록되었습니다.`; 
                 else if (reason.includes('반환')) alertMsg += `\n\n✅ 반환 확인: 기존 지급액이 정상적으로 회수되었습니다.`; 
                 else if (payoutOverride === 0) alertMsg += `\n\nℹ️ 지급 보류: 기존 일정 비용을 고려하여 이번 지급은 생략되었습니다.`; 
@@ -2190,7 +2225,6 @@
                     }
                 }
                 
-                // 🔥 [핵심 추가] 실시간 전역 락(Global Lock)을 최상단에서 검사하여 연속 스캔 완벽 방어
                 const scanKey = `${session.id}_${user.uid}`;
                 if (GLOBAL_PROCESSED_SCANS.has(scanKey)) {
                     return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
@@ -2199,7 +2233,6 @@
                 const isDuplicate = logs.some(l => String(l.uid) === String(user.uid) && l.sessionId === session.id); 
                 if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
                 
-                // 🔥 통과하는 즉시 전역 락을 걸어서 0.1초 뒤의 중복 인식도 무시시킴
                 GLOBAL_PROCESSED_SCANS.add(scanKey);
 
                 let finalAmount = 0; let penaltyApplied = 0; 
@@ -2230,7 +2263,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: "\u200B" + String(user.uid), // 🔥 구글 시트 0 탈락 방지 (보이지 않는 투명 공백 추가로 텍스트 강제 인식)
+                            id: "\u200B" + String(user.uid),
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
@@ -2240,7 +2273,7 @@
                 }
 
                 const todayLogs = logs.filter(l => String(l.uid) === String(user.uid) && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급'); 
-                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
+                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':getSessionDomainInfo(session).label+' 완료', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
             }, [db, users, schedules, logs, targetSessionId, targetBus, currentAdmin]);
 
             const handleUserUpdate = async (overridePenalty = null, overrideReason = null) => { 
@@ -2277,16 +2310,13 @@
                         <>
                             {appBgImage && <div className="absolute inset-0 z-0 bg-slate-900/40 backdrop-blur-[2px]"></div>}
                             
-                            {/* PC Sidebar: shrink-0 추가로 구역 압축 방지 */}
                             <div className="z-10 h-full hidden md:block shrink-0">
                                 <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} currentAdmin={currentAdmin} />
                             </div>
                             
-                            {/* Main Content Area: min-w-0, min-h-0 추가로 PC 브라우저 flex 버그 차단 */}
                             <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full z-10 min-w-0 min-h-0">
                                 { window.innerWidth < 768 && <header className="bg-white/90 px-6 py-4 shadow-sm flex justify-between items-center z-20 shrink-0"><div className="flex items-center gap-2"><div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div><h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PRO</span></h1></div><div className="flex items-center gap-3"><div className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{currentAdmin.name}</div><button onClick={() => { sessionStorage.removeItem('incar_pro_admin'); localStorage.removeItem('incar_pro_admin'); window.location.reload(); }} className="text-slate-400 p-2"><Icon name="logOut" size={20}/></button></div></header>}
                                 
-                                {/* 스크롤 영역을 안정적으로 제어 */}
                                 <div className="flex-1 overflow-y-auto p-4 pb-32 md:pb-8 md:p-8 w-full h-full z-10 custom-scrollbar min-h-0">
                                     <div className="max-w-5xl mx-auto w-full">
                                         {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} groupKeys={groupKeys} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
