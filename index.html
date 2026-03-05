@@ -33,7 +33,9 @@
         }
     </script>
     <style>
-        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f1f5f9; color: #334155; overflow: hidden; -webkit-tap-highlight-color: transparent; }
+        /* 🔥 수정: PC 레이아웃 증발(Collapse)을 막기 위한 절대 높이/너비 구조 지정 */
+        html, body, #root { width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #f1f5f9; color: #334155; -webkit-tap-highlight-color: transparent; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
         .animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -62,17 +64,16 @@
         @media print { .no-print { display: none !important; } }
     </style>
 </head>
-<body class="h-[100dvh] w-screen flex flex-col md:flex-row bg-slate-50">
-    <div id="root" class="h-full w-full"></div>
+<!-- 🔥 수정: body에서 flex를 빼고, 내부 div로 구조를 이관하여 PC 레이아웃 안정화 -->
+<body class="bg-slate-50 text-slate-800">
+    <div id="root"></div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
         const CURRENCY = '$';
 
-        // 🔥 고객 시트 연동을 위한 URL
         const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbx2tVkT00Z8uXQWl6EeTIUUhZ3_NJHx3JDqSCHC5oJWkUCm0OtcTmaV6g20cNKoh0no9w/exec";
 
-        // 모바일 사파리 등에서 오류를 방지하기 위한 안전한 시간 포맷팅 함수
         const formatTimeSafe = (ts) => {
             if (!ts) return '';
             const d = new Date(ts);
@@ -90,13 +91,11 @@
             return `${d.getMonth()+1}/${d.getDate()} ${formatTimeSafe(ts)}`;
         };
 
-        // 헤더 정리 함수 (예: '1일차_1' -> '1일차')
         const cleanOptionKey = (key) => {
             if (!key) return key;
             return key.replace(/_\d+$/, ''); 
         };
 
-        // 기본 대만 일정 데이터 세팅 (order 필드 추가)
         const defaultSchedules = [
             { id: 'S01', order: 1, date: '2026-03-11', displayDate: '1일차 13:30', title: '단수이 옛거리', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
             { id: 'S02', order: 2, date: '2026-03-11', displayDate: '1일차 14:00', title: '홍마오청', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
@@ -113,7 +112,6 @@
             { id: 'S13', order: 13, date: '2026-03-14', displayDate: '4일차 08:00', title: '호텔 체크아웃 및 공항 이동', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' }
         ];
 
-        // 기본 테스트 참가자 세팅
         const defaultUsers = [
             { uid: '10001', name: '홍길동', org: '강남지사', bus: '1호차', options: { '2일차 선택': '1안' }, penaltyTotal: 0 },
             { uid: '10002', name: '김철수', org: '본사', bus: '1호차', options: { '2일차 선택': '2안' }, penaltyTotal: 0 },
@@ -128,12 +126,8 @@
             
             let isTarget = false; let expectedBus = '미정'; let matchedKey = null;
 
-            // 🔥 [수정] 다중 타겟 옵션 (콤마 분리) 지원: 
-            // session.targetVal이 콤마로 연결되어 있다면(예: "티엔라이,고궁박물관"), 
-            // 유저의 값이 그 중 하나라도 일치하면 대상자로 판단합니다.
             const targetVals = session.targetVal !== 'ALL' ? session.targetVal.split(',').map(s => s.trim()) : [];
 
-            // 1. 타겟값이 텍스트 자체에 포함되어 있는지 검사 (CSV 중복 헤더 대응)
             for (const key of Object.keys(user.options)) {
                 if (key.includes('버스')) continue;
                 const val = user.options[key];
@@ -146,7 +140,6 @@
                 }
             }
             
-            // 2. 명시적인 타겟옵션(Key)과 매칭
             if (!isTarget && session.targetKey && session.targetKey !== 'ALL') {
                 const userVal = user.options[session.targetKey];
                 if (session.targetVal === 'ALL') {
@@ -160,13 +153,11 @@
             
             if (!isTarget && session.targetKey === 'ALL') isTarget = true;
             
-            // 버스 확인
             if (matchedKey && user.options[`${matchedKey} 버스`]) expectedBus = user.options[`${matchedKey} 버스`].trim();
             else if (user.bus && user.bus !== '미정') expectedBus = user.bus;
             else if (user.options['버스']) expectedBus = user.options['버스'];
             else if (user.options['탑승버스']) expectedBus = user.options['탑승버스'];
 
-            // 호차 포맷팅 보정 ('1' -> '1호차')
             if (expectedBus !== '미정' && expectedBus !== '-' && !expectedBus.includes('호차') && !isNaN(parseInt(expectedBus))) {
                 expectedBus += '호차';
             }
@@ -213,7 +204,7 @@
             const roleColor = currentAdmin?.role === 'master' ? 'text-amber-500' : currentAdmin?.role === 'manager' ? 'text-indigo-500' : 'text-emerald-500';
             
             return (
-                <aside className="w-64 bg-white/95 backdrop-blur-md h-full border-r border-slate-200 flex flex-col shadow-lg z-30 hidden md:flex relative">
+                <aside className="w-64 bg-white/95 backdrop-blur-md h-full border-r border-slate-200 flex flex-col shadow-lg z-30 hidden md:flex relative shrink-0">
                     <div className="p-6 border-b border-slate-100 flex items-center gap-3">
                         <div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div>
                         <h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PRO</span></h1>
@@ -271,13 +262,11 @@
             const isTargetMismatch = status === 'error' && msg === '대상자 아님';
             const isBusMismatch = status === 'error' && msg === '탑승 불가 (차량 불일치)';
             
-            // 🔥 [수정] 팝업 자동 닫기 로직 (성공이든 중복이든 1.5초 후 자동 닫힘)
-            // 단, 사용자의 액션이 필요한 에러(대상자 아님)일 때는 자동으로 안 닫히게 함
             useEffect(() => { 
                 if(isSuccess || isDuplicate || isBusMismatch) { 
                     const timer = setTimeout(() => {
                         onClose();
-                    }, 1500); // 1.5초 (1500ms) 대기 후 자동으로 팝업 닫음
+                    }, 1500); 
                     return () => clearTimeout(timer); 
                 } 
             }, [isSuccess, isDuplicate, isBusMismatch, onClose]);
@@ -362,9 +351,8 @@
                 return { doneList: done, yetList: yet };
             }, [targetUsers, logs, session]);
 
-            // 완료된 사람들의 버스별 인원 집계 (UI 용)
             const busSummary = useMemo(() => {
-                if(isPaymentSession) return null; // 지급은 버스 요약 필요 없음
+                if(isPaymentSession) return null;
                 const counts = {};
                 doneList.forEach(u => {
                     const b = u.log?.bus || '기타';
@@ -446,7 +434,6 @@
                                     <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '미지급' : '미탑승'} ({yetList.length})</button>
                                 </div>
                                 
-                                {/* 탑승 완료 화면일 때 상단에 버스별 요약 표시 (지급 일정은 제외) */}
                                 {tab === 'done' && doneList.length > 0 && busSummary && !isPaymentSession && (
                                     <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap gap-2 items-center">
                                         <span className="text-xs font-bold text-slate-500 mr-1 break-keep">차량별 탑승현황:</span>
@@ -469,7 +456,6 @@
                                                 <div className="p-2 space-y-2 border-t border-slate-100 bg-white">
                                                     {filteredGroups[groupName].map(u => {
                                                         const expectedBus = getUserSessionInfo(u, session).expectedBus;
-                                                        // 교차탑승 여부 확인 (완료탭에서 배정버스와 실제탄버스가 다를경우, 지급일정은 무시)
                                                         const isCrossBoarded = !isPaymentSession && tab === 'done' && u.log && expectedBus !== u.log.bus;
                                                         
                                                         return (
@@ -530,7 +516,6 @@
             return (
                 <div className="space-y-6 animate-slide-up">
                     
-                    {/* 상단 4개 요약 카드 (영문 -> 한글 변경, 모바일 반응형 최적화) */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                         <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-incar flex flex-col justify-center">
                             <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">전체 참가자</div>
@@ -636,16 +621,13 @@
             const [cameraList, setCameraList] = useState([]);
             const [currentCamId, setCurrentCamId] = useState(null);
             
-            // 🚨 연속 스캔을 위한 처리 상태 관리
             const isProcessingRef = useRef(false);
 
             useEffect(() => {
                 if (!scanResult) {
-                    // 모달이 닫히면 약간의 딜레이(500ms) 후 다음 스캔 허용 (중복 스캔 방지)
                     const timer = setTimeout(() => { isProcessingRef.current = false; }, 500);
                     return () => clearTimeout(timer);
                 } else {
-                    // 결과 팝업이 떠있으면 처리 상태로 락(Lock)을 걸어 스캔 방지
                     isProcessingRef.current = true;
                 }
             }, [scanResult]);
@@ -653,7 +635,6 @@
             const filteredSchedules = useMemo(() => schedules.filter(s => s.type === mode), [schedules, mode]);
             useEffect(() => { if (filteredSchedules.length > 0) { const exists = filteredSchedules.find(s => s.id === targetSessionId); if (!exists) setTargetSessionId(filteredSchedules[0].id); } else { setTargetSessionId(''); } }, [mode, filteredSchedules]);
             
-            // 키보드(USB 바코드 스캐너) 입력 리스너
             useEffect(() => {
                 let barcodeStr = '';
                 let timeout = null;
@@ -661,7 +642,7 @@
                     if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
                     if (e.key === 'Enter') {
                         if (barcodeStr.length > 0) {
-                            if (isProcessingRef.current) { barcodeStr = ''; return; } // 처리 중일 때는 바코드 무시
+                            if (isProcessingRef.current) { barcodeStr = ''; return; } 
                             isProcessingRef.current = true;
                             processScan(barcodeStr, isStrictBusMode);
                             barcodeStr = '';
@@ -741,9 +722,8 @@
                 };
 
                 const onScan = (decodedText) => {
-                    if (isProcessingRef.current) return; // 🔥 모달이 떠있을 때는 스캔 무시 (카메라는 유지)
+                    if (isProcessingRef.current) return; 
                     isProcessingRef.current = true;
-                    // stopScanner(); // 🔥 삭제: 카메라를 끄지 않고 백그라운드에 유지합니다.
                     processScan(decodedText, isStrictBusMode);
                 };
 
@@ -865,7 +845,6 @@
                         <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> {mode==='BOARDING' ? '카메라 스캔 시작' : '카메라 스캔 시작'}</button>
                     </div>
 
-                    {/* 수동 입력 및 바코드 스캐너 안내 영역 */}
                     {filteredSchedules.length > 0 && (
                         <div className="flex-1 flex flex-col justify-end">
                             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 mt-auto">
@@ -923,7 +902,6 @@
             const [cameraList, setCameraList] = useState([]);
             const [currentCamId, setCurrentCamId] = useState(null);
             
-            // 일정 변경 팝업 모달을 위한 지역 상태
             const [localRefundReq, setLocalRefundReq] = useState(null);
             const [localForfeitReq, setLocalForfeitReq] = useState(null);
 
@@ -1058,7 +1036,6 @@
                 if (users) users.forEach(u => { if (u.options && u.options[editForm.optKey]) values.add(u.options[editForm.optKey]); });
                 if (schedules) schedules.forEach(s => { 
                     if (s.targetKey === editForm.optKey && s.targetVal !== 'ALL') {
-                        // 콤마로 연결된 값들을 분리해서 유니크 목록에 추가
                         s.targetVal.split(',').forEach(tv => values.add(tv.trim()));
                     } 
                 });
@@ -1118,7 +1095,6 @@
             }, [changeLogs, selectedUser]);
             const visibleLogs = showAllHistory ? userHistoryLogs : userHistoryLogs.slice(0, 1);
 
-            // "저장하기" 클릭 시 정산(팝업) 확인 로직
             const onSaveClick = () => {
                 if (!selectedUser || !editForm.optKey || !editForm.optVal) {
                     return alert("변경할 항목을 선택하거나 입력하세요.");
@@ -1127,13 +1103,11 @@
                 const oldVal = selectedUser.options[editForm.optKey];
                 const newVal = editForm.optVal;
 
-                // 1. 지급액 반환이 필요한 경우 (예: 자유일정 지급 후 -> 일반관광으로 변경 시)
                 if (financialImpact && financialImpact.needsRefund) {
                     setLocalRefundReq({ amount: financialImpact.refundAmount, oldVal, newVal });
                     return;
                 }
 
-                // 2. 일반관광에서 자유일정(지급)으로 변경 시 위약금(Forfeit) 체크
                 const oldBoardingSchedules = schedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === oldVal && s.type === 'BOARDING');
                 const newPaymentSchedules = schedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === newVal && s.type === 'PAYMENT');
                 
@@ -1145,7 +1119,6 @@
                     }
                 }
 
-                // 3. 그 외의 단순 변경이나 페널티 직접 입력건은 바로 저장
                 handleUserUpdate();
             };
 
@@ -1635,6 +1608,9 @@
 
             const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
+            // 🔥 추가: 실시간 중복 스캔 완벽 차단 락(Lock)
+            const processedScansRef = useRef(new Set());
+
             useEffect(() => {
                 const handleResize = () => setIsMobile(window.innerWidth < 768);
                 window.addEventListener('resize', handleResize);
@@ -1657,7 +1633,6 @@
                         localStorage.setItem('incar_pro_schedules', JSON.stringify(defaultSchedules));
                     } else {
                         setUsers(loadedUsers);
-                        // 순서(order) 보장 정렬 적용
                         loadedSched.sort((a,b) => {
                             if (a.date === b.date) return (a.order || 0) - (b.order || 0);
                             return a.date > b.date ? 1 : -1;
@@ -1771,6 +1746,7 @@
                         localStorage.removeItem('incar_pro_changelogs');
                         setUsers([]); setSchedules([]); setLogs([]); setChangeLogs([]);
                     }
+                    processedScansRef.current.clear(); // 락 초기화
                     alert("운영 데이터가 비워졌습니다. 이제 새로운 명단과 일정을 업로드하세요.");
                 } catch(e) { console.error(e); alert("운영 데이터 초기화 중 오류가 발생했습니다: " + e.message); }
             };
@@ -1837,7 +1813,6 @@
 
             const { groupKeys, groupedStats } = useMemo(() => {
                 const groups = {};
-                // 날짜(displayDate) 기준으로 그룹화하되, 그룹핑 순서는 스케줄 원본의 등장 순서를 따름
                 const keyOrder = [];
                 scheduleStats.forEach(stat => { 
                     const date = stat.displayDate || '기타'; 
@@ -1863,10 +1838,13 @@
 
             const handleManualComplete = async (user, session) => {
                 if(!confirm(`${user.name}님을 수동으로 [${session.type==='PAYMENT'?'지급완료':'탑승완료'}] 처리하시겠습니까?`)) return;
+                
+                // 🔥 수동 완료 시에도 락(Lock)에 추가하여 중복 방지 보장
+                processedScansRef.current.add(`${session.id}_${user.uid}`);
+
                 const newLog = { id: `LOG_${Date.now()}_MANUAL`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: '수동처리', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: 0, finalAmount: session.type === 'PAYMENT' ? session.price : 0, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
                 if(db) { await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); } else { setLogs([newLog, ...logs]); }
                 
-                // 🔥 [추가] 관리자가 수동으로 지급 처리할 때 구글 시트 연동
                 if (session.type === 'PAYMENT') {
                     fetch(GOOGLE_SHEET_URL, {
                         method: "POST", mode: "no-cors",
@@ -1884,13 +1862,15 @@
                 alert("처리되었습니다.");
             };
 
-            // 변경 뷰와 스캔 뷰에서 공통적으로 쓰이는 패널티 적용 및 데이터 업데이트 로직
             const executeUpdate = async (user, session, requiredChoice, penaltyAmount, reason, payoutOverride = null) => {
                 if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
                 
                 const oldVal = user.options[session.targetKey];
                 const logIdsToRemove = await cleanupOldLogs(user.uid, session.targetKey, oldVal, !!db);
                 const newPenalty = penaltyAmount;
+
+                // 🔥 강제 처리 시에도 중복 차단 락(Lock) 추가
+                processedScansRef.current.add(`${session.id}_${user.uid}`);
 
                 if(db) { 
                     const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
@@ -1947,7 +1927,6 @@
                     } 
                 }
                 
-                // 🔥 [추가] 관리자가 스캔/변경으로 지급 처리할 때 구글 시트 연동
                 if (session.type === 'PAYMENT') {
                     fetch(GOOGLE_SHEET_URL, {
                         method: "POST", mode: "no-cors",
@@ -2015,7 +1994,6 @@
                 else await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (관광->지급, 예약부도 위약금 적용으로 지급생략)`, 0); 
             };
 
-            // 사용자 업로드: 중복 컬럼(헤더)을 지원하기 위한 커스텀 파싱(Manual Parsing) 적용 및 호차 자동 보정
             const handleUserUpload = async (e) => { 
                 const file = e.target.files[0]; 
                 if (!file) return; 
@@ -2044,7 +2022,6 @@
                                 else if (['소속','부서','Org'].includes(h) && org === '-') org = val;
                                 else if (['버스','탑승버스','Bus'].includes(h) && bus === '미정') bus = val;
                                 else if (h && val) {
-                                    // 엑셀에 동일한 헤더(예: 1일차)가 여러개인 경우 키 충돌 방지
                                     let keyName = h;
                                     let counter = 1;
                                     while(options[keyName] !== undefined) {
@@ -2055,12 +2032,10 @@
                                 }
                             });
                             
-                            // [요청 반영] 버스가 숫자만 있거나 '호차'가 없는 경우 1호차, 2호차 등으로 변환
                             if (bus !== '미정' && bus !== '' && !bus.includes('호차')) {
                                 bus = bus + '호차';
                             }
                             
-                            // 🔥 [수정] 사번을 무조건 문자로 저장
                             if (uid) parsed.push({ uid: String(uid), name, org, bus, options, penaltyTotal: 0 });
                         }
                         
@@ -2111,8 +2086,8 @@
                             const order = orderVal !== undefined && orderVal !== '' ? parseInt(orderVal, 10) : idx;
 
                             return { 
-                                id: `SCHED_${String(idx).padStart(4, '0')}`, // 정렬 안정성을 위한 패딩
-                                order: order, // 엑셀에 입력된 순서 기록
+                                id: `SCHED_${String(idx).padStart(4, '0')}`,
+                                order: order, 
                                 date: dateStr, 
                                 displayDate: rawDate, 
                                 title: title, 
@@ -2149,7 +2124,7 @@
                 } else if (scannedText.includes('_')) {
                     scannedUid = scannedText.split('_')[0]; 
                 }
-                scannedUid = String(scannedUid).trim(); // 🔥 사번을 무조건 문자로 취급
+                scannedUid = String(scannedUid).trim(); 
 
                 let user = users.find(u => String(u.uid) === String(scannedUid)); 
                 if (!user) user = users.find(u => scannedText.includes(String(u.uid))); 
@@ -2175,10 +2150,15 @@
                     }
                 }
                 
-                // 🔥 [핵심수정] 이미 처리되었는지 확인할 때 상태(logs)를 직접 읽어와서 카운트 누적 방지!
-                const isDuplicate = logs.some(l => String(l.uid) === String(user.uid) && l.sessionId === session.id); 
+                // 🔥 [핵심 수정] 실시간 Set(Lock)과 기존 로그를 동시에 검사하여 연속 스캔 완벽 차단
+                const scanKey = `${session.id}_${user.uid}`;
+                const isDuplicate = logs.some(l => String(l.uid) === String(user.uid) && l.sessionId === session.id) || processedScansRef.current.has(scanKey); 
+                
                 if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
                 
+                // 스캔 통과 즉시 Lock에 등록 (1초 내의 중복 무시)
+                processedScansRef.current.add(scanKey);
+
                 let finalAmount = 0; let penaltyApplied = 0; 
                 if (session.type === 'PAYMENT') { 
                     const baseAmount = session.price; const deduction = user.penaltyTotal || 0; 
@@ -2202,7 +2182,6 @@
                     } 
                 } 
                 
-                // 🔥 [추가] 일반 스캔으로 지급 처리할 때 구글 시트 연동
                 if (session.type === 'PAYMENT') {
                     fetch(GOOGLE_SHEET_URL, {
                         method: "POST", mode: "no-cors",
@@ -2221,7 +2200,6 @@
                 setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
             }, [db, users, schedules, logs, targetSessionId, targetBus, currentAdmin]);
 
-            // 일정 변경 탭 내부에서 사용하는 유저 업데이트 로직
             const handleUserUpdate = async (overridePenalty = null, overrideReason = null) => { 
                 if (!selectedUser || !editForm.optKey) return; 
                 const oldVal = selectedUser.options[editForm.optKey]; 
@@ -2248,17 +2226,26 @@
                 setSearchQuery(''); 
             };
 
+            // 🔥 수정: 레이아웃 붕괴 방지를 위해 절대 높이/너비 부여 구조 적용
             return (
-                <div className={`h-full flex flex-row w-full relative ${appBgImage ? 'bg-cover bg-center' : 'bg-slate-50'}`} style={appBgImage ? {backgroundImage: `url(${appBgImage})`} : {}}>
+                <div className={`w-full h-full flex flex-col md:flex-row relative overflow-hidden ${appBgImage ? 'bg-cover bg-center' : 'bg-slate-50'}`} style={appBgImage ? {backgroundImage: `url(${appBgImage})`} : {}}>
                     {!currentAdmin ? (
                         <AuthView admins={admins} onLogin={setCurrentAdmin} onSetup={handleAddAdmin} isLoaded={isAdminsLoaded} />
                     ) : (
                         <>
                             {appBgImage && <div className="absolute inset-0 z-0 bg-slate-900/40 backdrop-blur-[2px]"></div>}
-                            <div className="z-10 h-full hidden md:block"><Sidebar activeTab={activeTab} setActiveTab={setActiveTab} currentAdmin={currentAdmin} /></div>
-                            <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full z-10">
-                                { window.innerWidth < 768 && <header className="bg-white/90 px-6 py-4 shadow-sm flex justify-between items-center z-20"><div className="flex items-center gap-2"><div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div><h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PRO</span></h1></div><div className="flex items-center gap-3"><div className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{currentAdmin.name}</div><button onClick={() => { sessionStorage.removeItem('incar_pro_admin'); localStorage.removeItem('incar_pro_admin'); window.location.reload(); }} className="text-slate-400 p-2"><Icon name="logOut" size={20}/></button></div></header>}
-                                <div className="flex-1 overflow-y-auto p-4 pb-32 md:p-8 w-full z-10 custom-scrollbar">
+                            
+                            {/* PC Sidebar: shrink-0 추가로 구역 압축 방지 */}
+                            <div className="z-10 h-full hidden md:block shrink-0">
+                                <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} currentAdmin={currentAdmin} />
+                            </div>
+                            
+                            {/* Main Content Area: min-w-0, min-h-0 추가로 PC 브라우저 flex 버그 차단 */}
+                            <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full z-10 min-w-0 min-h-0">
+                                { window.innerWidth < 768 && <header className="bg-white/90 px-6 py-4 shadow-sm flex justify-between items-center z-20 shrink-0"><div className="flex items-center gap-2"><div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div><h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PRO</span></h1></div><div className="flex items-center gap-3"><div className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{currentAdmin.name}</div><button onClick={() => { sessionStorage.removeItem('incar_pro_admin'); localStorage.removeItem('incar_pro_admin'); window.location.reload(); }} className="text-slate-400 p-2"><Icon name="logOut" size={20}/></button></div></header>}
+                                
+                                {/* 스크롤 영역을 안정적으로 제어 */}
+                                <div className="flex-1 overflow-y-auto p-4 pb-32 md:pb-8 md:p-8 w-full h-full z-10 custom-scrollbar min-h-0">
                                     <div className="max-w-5xl mx-auto w-full">
                                         {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} groupKeys={groupKeys} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
                                         {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} scanResult={scanResult} />}
@@ -2267,6 +2254,7 @@
                                         {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} exportAllData={exportAllData} handleFullReset={handleFullReset} handlePartialReset={handlePartialReset} schedules={schedules} setSchedules={setSchedules} logs={logs} appBgImage={appBgImage} setAppBgImage={setAppBgImage} handleAppBgUpload={handleAppBgUpload} db={db} SYSTEM_APP_ID={SYSTEM_APP_ID} admins={admins} handleAddAdmin={handleAddAdmin} handleDeleteAdmin={handleDeleteAdmin} handleUpdateAdminRole={handleUpdateAdminRole} currentAdmin={currentAdmin} />}
                                     </div>
                                 </div>
+                                
                                 { window.innerWidth < 768 && <MobileTab activeTab={activeTab} setActiveTab={setActiveTab} currentAdmin={currentAdmin} /> }
                                 
                                 {selectedSession && <SessionDetailModal session={selectedSession} users={users} logs={logs} onClose={() => setSelectedSession(null)} onManualComplete={handleManualComplete} />}
