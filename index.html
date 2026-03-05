@@ -803,8 +803,11 @@
                         setIsLookupScanning(false); html5QrCodeRef.current = null;
                         
                         let scannedUid = decodedText;
-                        if (decodedText.includes('?uid=')) {
-                            try { scannedUid = new URL(decodedText).searchParams.get('uid') || decodedText; } catch(e) {}
+                        if (decodedText.includes('?uid=') || decodedText.includes('?eid=')) {
+                            try { 
+                                const url = new URL(decodedText);
+                                scannedUid = url.searchParams.get('uid') || url.searchParams.get('eid') || decodedText; 
+                            } catch(e) {}
                         } else if (decodedText.includes('_')) {
                             scannedUid = decodedText.split('_')[0];
                         }
@@ -965,7 +968,7 @@
                                         <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-between items-center"><span className="text-xs font-bold text-slate-400 break-keep">누적 패널티</span><span className="font-black text-rose-500 text-lg break-keep">-{CURRENCY}{selectedUser.penaltyTotal || 0}</span></div>
                                     </div>
                                     <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center w-full md:w-auto cursor-pointer hover:bg-slate-50 hover:border-incar/30 transition-all group" onClick={() => setShowQrModal(true)} title="QR코드 확대 및 다운로드">
-                                        <div className="mb-2 w-28 h-28 flex items-center justify-center bg-white rounded-xl shadow-sm border border-slate-100 p-2 group-hover:scale-105 transition-transform"><QRCodeCanvas text={`${selectedUser.uid}_${selectedUser.name}`} size={100} /></div>
+                                        <div className="mb-2 w-28 h-28 flex items-center justify-center bg-white rounded-xl shadow-sm border border-slate-100 p-2 group-hover:scale-105 transition-transform"><QRCodeCanvas text={`https://incarmkt.github.io/travel/?eid=${selectedUser.uid}`} size={100} /></div>
                                         <span className="text-[10px] font-bold text-incar flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-full break-keep"><Icon name="search" size={10}/> QR 확대/저장</span>
                                     </div>
                                 </div>
@@ -1042,7 +1045,7 @@
                                     <p className="text-sm font-bold text-slate-400 mb-6 break-all">{selectedUser.org} | {selectedUser.uid}</p>
                                     
                                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6 shadow-inner">
-                                        <QRCodeCanvas text={`${selectedUser.uid}_${selectedUser.name}`} size={200} id="user-qr-canvas-large" />
+                                        <QRCodeCanvas text={`https://incarmkt.github.io/travel/?eid=${selectedUser.uid}`} size={200} id="user-qr-canvas-large" />
                                     </div>
                                     
                                     <p className="text-xs text-slate-500 mb-6 font-medium break-keep">명찰을 분실한 참가자에게 이 화면을 보여주거나,<br/>이미지로 다운로드하여 재발급할 수 있습니다.</p>
@@ -1870,8 +1873,11 @@
             
             const processScan = useCallback(async (scannedText, strictMode = false) => { 
                 let scannedUid = scannedText;
-                if (scannedText.includes('?uid=')) {
-                    try { scannedUid = new URL(scannedText).searchParams.get('uid') || scannedText; } catch(e){}
+                if (scannedText.includes('?uid=') || scannedText.includes('?eid=')) {
+                    try { 
+                        const url = new URL(scannedText);
+                        scannedUid = url.searchParams.get('uid') || url.searchParams.get('eid') || scannedText; 
+                    } catch(e){}
                 } else if (scannedText.includes('_')) {
                     scannedUid = scannedText.split('_')[0]; 
                 }
