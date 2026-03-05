@@ -1880,7 +1880,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: "'" + String(user.uid), // 🔥 구글 시트 0 탈락 방지 (텍스트 강제 변환)
+                            id: "=\"" + String(user.uid) + "\"", // 🔥 구글 시트 0 탈락 방지 (수식 형태로 텍스트 강제 변환)
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
@@ -1962,7 +1962,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: "'" + String(user.uid), // 🔥 구글 시트 0 탈락 방지 (텍스트 강제 변환)
+                            id: "=\"" + String(user.uid) + "\"", // 🔥 구글 시트 0 탈락 방지 (수식 형태로 텍스트 강제 변환)
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
@@ -2220,7 +2220,7 @@
                         method: "POST", mode: "no-cors",
                         body: JSON.stringify({ 
                             type: "meal", 
-                            id: "'" + String(user.uid), // 🔥 구글 시트 0 탈락 방지 (텍스트 강제 변환)
+                            id: "=\"" + String(user.uid) + "\"", // 🔥 구글 시트 0 탈락 방지 (수식 형태로 텍스트 강제 변환)
                             name: user.name, 
                             action: "APPROVE", 
                             tour: session.title, 
@@ -2267,13 +2267,16 @@
                         <>
                             {appBgImage && <div className="absolute inset-0 z-0 bg-slate-900/40 backdrop-blur-[2px]"></div>}
                             
+                            {/* PC Sidebar: shrink-0 추가로 구역 압축 방지 */}
                             <div className="z-10 h-full hidden md:block shrink-0">
                                 <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} currentAdmin={currentAdmin} />
                             </div>
                             
+                            {/* Main Content Area: min-w-0, min-h-0 추가로 PC 브라우저 flex 버그 차단 */}
                             <main className="flex-1 flex flex-col h-full overflow-hidden relative w-full z-10 min-w-0 min-h-0">
                                 { window.innerWidth < 768 && <header className="bg-white/90 px-6 py-4 shadow-sm flex justify-between items-center z-20 shrink-0"><div className="flex items-center gap-2"><div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div><h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PRO</span></h1></div><div className="flex items-center gap-3"><div className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{currentAdmin.name}</div><button onClick={() => { sessionStorage.removeItem('incar_pro_admin'); localStorage.removeItem('incar_pro_admin'); window.location.reload(); }} className="text-slate-400 p-2"><Icon name="logOut" size={20}/></button></div></header>}
                                 
+                                {/* 스크롤 영역을 안정적으로 제어 */}
                                 <div className="flex-1 overflow-y-auto p-4 pb-32 md:pb-8 md:p-8 w-full h-full z-10 custom-scrollbar min-h-0">
                                     <div className="max-w-5xl mx-auto w-full">
                                         {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} groupKeys={groupKeys} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
