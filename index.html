@@ -67,7 +67,33 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
-        const CURRENCY = '$';
+        const CURRENCY = '₩';
+
+        // 기본 대만 일정 데이터 세팅 (order 필드 추가)
+        const defaultSchedules = [
+            { id: 'S01', order: 1, date: '2026-03-11', displayDate: '1일차 13:30', title: '단수이 옛거리', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S02', order: 2, date: '2026-03-11', displayDate: '1일차 14:00', title: '홍마오청', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S03', order: 3, date: '2026-03-11', displayDate: '1일차 14:30', title: '진리대학', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S04', order: 4, date: '2026-03-11', displayDate: '1일차 18:00', title: '석식 (타카오 샤브샤브)', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S05', order: 5, date: '2026-03-11', displayDate: '1일차 19:30', title: '타이베이 101 전망대', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S06', order: 6, date: '2026-03-12', displayDate: '2일차 08:30', title: '티엔라이 온천 (1안)', type: 'BOARDING', targetKey: '2일차 선택', targetVal: '1안' },
+            { id: 'S07', order: 7, date: '2026-03-12', displayDate: '2일차 09:00', title: '고궁박물관 (2안)', type: 'BOARDING', targetKey: '2일차 선택', targetVal: '2안' },
+            { id: 'S08', order: 8, date: '2026-03-12', displayDate: '2일차 14:30', title: '서문정 (시먼딩)', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S09', order: 9, date: '2026-03-12', displayDate: '2일차 18:00', title: 'INCAR 만찬 행사', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S10', order: 10, date: '2026-03-13', displayDate: '3일차 11:00', title: '예류 해양국립공원', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S11', order: 11, date: '2026-03-13', displayDate: '3일차 14:30', title: '스펀 천등 날리기', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S12', order: 12, date: '2026-03-13', displayDate: '3일차 17:00', title: '지우펀 야경', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' },
+            { id: 'S13', order: 13, date: '2026-03-14', displayDate: '4일차 08:00', title: '호텔 체크아웃 및 공항 이동', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' }
+        ];
+
+        // 기본 테스트 참가자 세팅
+        const defaultUsers = [
+            { uid: '10001', name: '홍길동', org: '강남지사', bus: '1호차', options: { '2일차 선택': '1안' }, penaltyTotal: 0 },
+            { uid: '10002', name: '김철수', org: '본사', bus: '1호차', options: { '2일차 선택': '2안' }, penaltyTotal: 0 },
+            { uid: '10003', name: '이영희', org: '부산지사', bus: '2호차', options: { '2일차 선택': '1안' }, penaltyTotal: 0 },
+            { uid: '10004', name: '박민수', org: '대구지사', bus: '2호차', options: { '2일차 선택': '3안' }, penaltyTotal: 0 },
+            { uid: '10005', name: '정지훈', org: '광주지사', bus: '3호차', options: { '2일차 선택': '2안' }, penaltyTotal: 0 }
+        ];
 
         const getUserSessionInfo = (user, session) => {
             if (!user) return { isTarget: false, expectedBus: '미정' };
@@ -78,19 +104,36 @@
             for (const key of Object.keys(user.options)) {
                 if (key.includes('버스')) continue;
                 const val = user.options[key];
-                if (val && typeof val === 'string' && val.includes(session.title)) {
-                    isTarget = true; matchedKey = key; break;
+                if (val && typeof val === 'string') {
+                    // 코스명이 포함된 경우
+                    if (val.includes(session.title)) {
+                        isTarget = true; matchedKey = key; break;
+                    }
+                    // "전체" 라고 적혀있는 경우 해당 일자의 모든 일정을 타겟으로 인식
+                    if (val.includes('전체') && (session.targetKey === key || session.displayDate.includes(key))) {
+                        isTarget = true; matchedKey = key; break;
+                    }
                 }
             }
             if (!isTarget && session.targetKey && session.targetKey !== 'ALL') {
                 const userVal = user.options[session.targetKey];
-                if (session.targetVal === 'ALL' ? !!userVal : (userVal && userVal.includes(session.targetVal))) { isTarget = true; matchedKey = session.targetKey; }
+                // "전체" 라고 적혀있는 경우 타겟옵션 매칭에도 인식되도록 추가
+                if (session.targetVal === 'ALL' ? !!userVal : (userVal && (userVal.includes(session.targetVal) || userVal.includes('전체')))) { 
+                    isTarget = true; matchedKey = session.targetKey; 
+                }
             }
             if (!isTarget && session.targetKey === 'ALL') isTarget = true;
+            
+            // 버스 확인
             if (matchedKey && user.options[`${matchedKey} 버스`]) expectedBus = user.options[`${matchedKey} 버스`].trim();
             else if (user.bus && user.bus !== '미정') expectedBus = user.bus;
             else if (user.options['버스']) expectedBus = user.options['버스'];
             else if (user.options['탑승버스']) expectedBus = user.options['탑승버스'];
+
+            // 호차 포맷팅 보정 ('1' -> '1호차')
+            if (expectedBus !== '미정' && expectedBus !== '-' && !expectedBus.includes('호차') && !isNaN(parseInt(expectedBus))) {
+                expectedBus += '호차';
+            }
 
             return { isTarget, expectedBus };
         };
@@ -117,11 +160,12 @@
                 chevronsDown: <g><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></g>,
                 image: <g><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></g>,
                 info: <g><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></g>,
-                save: <g><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></g>,
+                save: <g><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1-2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></g>,
                 search: <g><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></g>,
                 lock: <g><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></g>,
                 logOut: <g><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></g>,
-                shield: <g><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></g>
+                shield: <g><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></g>,
+                user: <g><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></g>
             };
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="2"/>}</svg>;
         };
@@ -188,7 +232,7 @@
             const isTargetMismatch = status === 'error' && msg === '대상자 아님';
             const isBusMismatch = status === 'error' && msg === '탑승 불가 (차량 불일치)';
             
-            useEffect(() => { if(isSuccess) { const timer = setTimeout(onClose, 3000); return () => clearTimeout(timer); } }, [isSuccess]);
+            useEffect(() => { if(isSuccess) { const timer = setTimeout(onClose, 2000); return () => clearTimeout(timer); } }, [isSuccess]);
 
             return (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
@@ -205,40 +249,40 @@
                                 <div className="flex items-center gap-4 p-4 rounded-2xl bg-slate-50 border border-slate-100">
                                     <div className="w-12 h-12 rounded-full bg-incar text-white flex items-center justify-center font-bold text-lg">{user.name[0]}</div>
                                     <div>
-                                        <div className="font-bold text-lg text-slate-900">{user.name}</div>
-                                        <div className="text-xs text-slate-400 font-medium">{user.org} | {user.uid}</div>
+                                        <div className="font-bold text-lg text-slate-900 break-keep">{user.name}</div>
+                                        <div className="text-xs text-slate-400 font-medium break-all">{user.org} | {user.uid}</div>
                                         <div className="text-xs text-incar font-bold mt-1">배정차량: {session ? getUserSessionInfo(user, session).expectedBus : getUserSessionInfo(user, null).expectedBus}</div>
                                     </div>
                                 </div>
                                 {isSuccess && logs && logs.finalAmount !== undefined && (
                                     <div className="flex justify-between items-center p-4 bg-emerald-50 rounded-xl border border-emerald-100">
-                                        <span className="text-emerald-700 font-bold text-sm">최종 지급액</span>
+                                        <span className="text-emerald-700 font-bold text-sm break-keep">최종 지급액</span>
                                         <div className="text-right">
-                                            <span className="text-2xl font-bold text-emerald-600">{CURRENCY}{logs.finalAmount}</span>
-                                            {logs.penaltyApplied > 0 && <div className="text-[10px] text-rose-500 font-bold">(-패널티 {CURRENCY}{logs.penaltyApplied})</div>}
+                                            <span className="text-2xl font-bold text-emerald-600 break-keep">{CURRENCY}{logs.finalAmount}</span>
+                                            {logs.penaltyApplied > 0 && <div className="text-[10px] text-rose-500 font-bold break-keep">(-패널티 {CURRENCY}{logs.penaltyApplied})</div>}
                                         </div>
                                     </div>
                                 )}
                                 {isTargetMismatch && (
                                     <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-center">
-                                        <p className="text-sm font-bold text-rose-600 mb-2">현장에서 바로 변경하시겠습니까?</p>
+                                        <p className="text-sm font-bold text-rose-600 mb-2 break-keep">현장에서 바로 변경하시겠습니까?</p>
                                         {currentAdmin?.role === 'staff' ? (
-                                            <p className="text-xs text-slate-500">일정 변경 및 패널티 승인은 <strong className="text-rose-500">MANAGER 이상</strong> 권한이 필요합니다. 관리자에게 문의하세요.</p>
+                                            <p className="text-xs text-slate-500 break-keep">일정 변경 및 패널티 승인은 <strong className="text-rose-500">MANAGER 이상</strong> 권한이 필요합니다. 관리자에게 문의하세요.</p>
                                         ) : (
-                                            <button onClick={() => onForceUpdate(user, session, requiredChoice)} className="w-full py-3 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform text-sm">네, 일정 변경 후 승인</button>
+                                            <button onClick={() => onForceUpdate(user, session, requiredChoice)} className="w-full py-3 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform text-sm break-keep">네, 일정 변경 후 승인</button>
                                         )}
                                     </div>
                                 )}
                                 {isBusMismatch && (
                                     <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-center">
-                                        <p className="text-sm font-bold text-rose-600 mb-2">차량이 일치하지 않습니다</p>
-                                        <p className="text-xs text-slate-500 mb-1">해당 인원은 <strong>{getUserSessionInfo(user, session).expectedBus}</strong> 탑승 대상입니다.</p>
-                                        <p className="text-xs text-slate-400">다른 차량으로 안내하거나, 관리자에게 문의하세요.</p>
+                                        <p className="text-sm font-bold text-rose-600 mb-2 break-keep">차량이 일치하지 않습니다</p>
+                                        <p className="text-xs text-slate-500 mb-1 break-keep">해당 인원은 <strong>{getUserSessionInfo(user, session).expectedBus}</strong> 탑승 대상입니다.</p>
+                                        <p className="text-xs text-slate-400 break-keep">다른 차량으로 안내하거나, 관리자에게 문의하세요.</p>
                                     </div>
                                 )}
                             </div>
                         )}
-                        <button onClick={onClose} className="w-full py-5 bg-slate-900 text-white font-bold text-lg hover:bg-slate-800 transition-colors">닫기</button>
+                        <button onClick={onClose} className="w-full py-5 bg-slate-900 text-white font-bold text-lg hover:bg-slate-800 transition-colors break-keep">닫기 (Enter)</button>
                     </div>
                 </div>
             );
@@ -267,6 +311,16 @@
                 });
                 return { doneList: done, yetList: yet };
             }, [targetUsers, logs, session]);
+
+            // 완료된 사람들의 버스별 인원 집계 (UI 용)
+            const busSummary = useMemo(() => {
+                const counts = {};
+                doneList.forEach(u => {
+                    const b = u.log?.bus || '기타';
+                    counts[b] = (counts[b] || 0) + 1;
+                });
+                return counts;
+            }, [doneList]);
 
             const doneGroups = useMemo(() => {
                 const groups = {};
@@ -304,8 +358,8 @@
                         <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
                             <div>
                                 <span className={`inline-block px-2 py-1 rounded text-[10px] font-bold mb-1 ${session.type==='PAYMENT'?'bg-emerald-100 text-emerald-600': session.type==='NONE'?'bg-slate-200 text-slate-600':'bg-indigo-100 text-incar'}`}>{session.type==='PAYMENT'?'지급':session.type==='NONE'?'안내/자유':'탑승'}</span>
-                                <h3 className="font-bold text-lg text-slate-800 leading-tight">{session.title}</h3>
-                                <p className="text-xs text-slate-500 mt-1">{session.displayDate} | 전체 대상 {targetUsers.length}명</p>
+                                <h3 className="font-bold text-lg text-slate-800 leading-tight break-keep pr-2">{session.title}</h3>
+                                <p className="text-xs text-slate-500 mt-1 break-keep">{session.displayDate} | 전체 대상 {targetUsers.length}명</p>
                             </div>
                             <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600"><Icon name="x" size={24}/></button>
                         </div>
@@ -328,28 +382,54 @@
                         {session.type !== 'NONE' ? (
                             <>
                                 <div className="flex border-b border-slate-100">
-                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>완료 ({doneList.length})</button>
-                                    <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>미완료 ({yetList.length})</button>
+                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>탑승 완료 ({doneList.length})</button>
+                                    <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>미탑승 ({yetList.length})</button>
                                 </div>
+                                
+                                {/* 탑승 완료 화면일 때 상단에 버스별 요약 표시 */}
+                                {tab === 'done' && doneList.length > 0 && (
+                                    <div className="p-3 bg-slate-50 border-b border-slate-200 flex flex-wrap gap-2 items-center">
+                                        <span className="text-xs font-bold text-slate-500 mr-1 break-keep">차량별 탑승현황:</span>
+                                        {Object.entries(busSummary).sort().map(([bus, count]) => (
+                                            <span key={bus} className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-incar shadow-sm break-keep">
+                                                {bus}: {count}명
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+
                                 <div className="overflow-y-auto flex-1 p-4 space-y-4 custom-scrollbar bg-slate-50/30">
                                     {groupKeys.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">{searchTerm ? '검색 결과가 없습니다.' : '해당 인원이 없습니다.'}</div> : groupKeys.map(groupName => (
                                         <div key={groupName} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                                             <button onClick={() => toggleGroup(groupName)} className="w-full p-4 flex justify-between items-center bg-slate-50 hover:bg-slate-100 transition-colors">
-                                                <div className="flex items-center gap-2"><div className="w-8 h-8 rounded-lg bg-incar text-white flex items-center justify-center"><Icon name="bus" size={16} /></div><div className="text-left"><div className="font-bold text-slate-800 text-sm">{groupName}</div><div className="text-[10px] text-slate-500">{filteredGroups[groupName].length}명 {tab === 'done' ? '처리 완료' : '대기중'}</div></div></div>
+                                                <div className="flex items-center gap-2"><div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${tab==='done'?'bg-emerald-500':'bg-incar'}`}><Icon name="bus" size={16} /></div><div className="text-left"><div className="font-bold text-slate-800 text-sm break-keep">{groupName} {tab==='done'?'(실제 탑승)':'(탑승 예정)'}</div><div className="text-[10px] text-slate-500">{filteredGroups[groupName].length}명 {tab === 'done' ? '처리 완료' : '대기중'}</div></div></div>
                                                 <Icon name={expandedGroups[groupName] || searchTerm ? "up" : "down"} size={20} className="text-slate-400" />
                                             </button>
                                             {(expandedGroups[groupName] || searchTerm) && (
                                                 <div className="p-2 space-y-2 border-t border-slate-100 bg-white">
-                                                    {filteredGroups[groupName].map(u => (
-                                                        <div key={u.uid} className="flex justify-between items-center p-3 rounded-lg border border-slate-50 hover:bg-slate-50">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white ${tab==='done'?'bg-emerald-500':'bg-slate-300'}`}>{u.name[0]}</div>
-                                                                <div><div className="font-bold text-slate-800 text-sm">{u.name}</div><div className="text-[10px] text-slate-400 font-mono">{u.uid}</div></div>
+                                                    {filteredGroups[groupName].map(u => {
+                                                        const expectedBus = getUserSessionInfo(u, session).expectedBus;
+                                                        // 교차탑승 여부 확인 (완료탭에서 배정버스와 실제탄버스가 다를경우)
+                                                        const isCrossBoarded = tab === 'done' && u.log && expectedBus !== u.log.bus;
+                                                        
+                                                        return (
+                                                            <div key={u.uid} className={`flex justify-between items-center p-3 rounded-lg border ${isCrossBoarded ? 'border-amber-200 bg-amber-50' : 'border-slate-50 hover:bg-slate-50'}`}>
+                                                                <div className="flex items-center gap-3">
+                                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${tab==='done'?'bg-emerald-500':'bg-slate-300'}`}>{u.name[0]}</div>
+                                                                    <div>
+                                                                        <div className="font-bold text-slate-800 text-sm flex items-center gap-1 flex-wrap break-keep">
+                                                                            {u.name} 
+                                                                            {isCrossBoarded && <span className="text-[9px] bg-amber-500 text-white px-1.5 py-0.5 rounded ml-1 shrink-0">교차탑승</span>}
+                                                                        </div>
+                                                                        <div className="text-[10px] text-slate-400 font-mono break-all">{u.uid}</div>
+                                                                        {isCrossBoarded && <div className="text-[10px] text-amber-600 font-bold mt-0.5 break-keep">원래 배정: {expectedBus}</div>}
+                                                                    </div>
+                                                                </div>
+                                                                {tab === 'done' && u.log && <div className="text-right shrink-0 ml-2">{session.type === 'PAYMENT' && <div className="font-bold text-emerald-600 text-sm">{CURRENCY}{u.log.finalAmount}</div>}<div className="text-[10px] text-slate-400">{new Date(u.log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div></div>}
+                                                                {tab === 'yet' && <button onClick={() => onManualComplete(u, session)} className="px-3 py-1.5 bg-slate-800 text-white text-[10px] font-bold rounded-lg hover:bg-slate-700 shadow-sm shrink-0 ml-2">수동 완료</button>}
                                                             </div>
-                                                            {tab === 'done' && u.log && <div className="text-right">{session.type === 'PAYMENT' && <div className="font-bold text-emerald-600 text-sm">{CURRENCY}{u.log.finalAmount}</div>}<div className="text-[10px] text-slate-400">{new Date(u.log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div></div>}
-                                                            {tab === 'yet' && <button onClick={() => onManualComplete(u, session)} className="px-3 py-1.5 bg-slate-800 text-white text-[10px] font-bold rounded-lg hover:bg-slate-700 shadow-sm">수동 완료</button>}
-                                                        </div>
-                                                    ))}
+                                                        )
+                                                    })}
                                                 </div>
                                             )}
                                         </div>
@@ -371,7 +451,7 @@
                                                     <div key={u.uid} className="flex justify-between items-center p-3 rounded-lg border border-slate-50 hover:bg-slate-50">
                                                         <div className="flex items-center gap-3">
                                                             <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white bg-slate-300">{u.name[0]}</div>
-                                                            <div><div className="font-bold text-slate-800 text-sm">{u.name}</div><div className="text-[10px] text-slate-400 font-mono">{u.uid}</div></div>
+                                                            <div><div className="font-bold text-slate-800 text-sm">{u.name}</div><div className="text-[10px] text-slate-400 font-mono break-all">{u.uid}</div></div>
                                                         </div>
                                                     </div>
                                                 ))}
@@ -394,41 +474,31 @@
 
             return (
                 <div className="space-y-6 animate-slide-up">
-                    <div className="bg-white p-6 md:p-8 rounded-3xl shadow-card border border-slate-200 relative overflow-hidden">
-                        <div className="absolute -right-6 -top-6 text-slate-50 opacity-50 pointer-events-none">
-                            <Icon name="check" size={150} />
+                    
+                    {/* 상단 4개 요약 카드 (영문 -> 한글 변경, 모바일 반응형 최적화) */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-incar flex flex-col justify-center">
+                            <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">전체 참가자</div>
+                            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800">{users.length}명</div>
                         </div>
-                        <div className="relative z-10 flex flex-col md:flex-row md:justify-between md:items-end mb-4 gap-2">
-                            <div>
-                                <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">전체 미션 진행률</h2>
-                                <p className="text-xs md:text-sm text-slate-500 font-medium mt-1">탑승 및 지급 등 스캔이 필요한 전체 일정 기준</p>
-                            </div>
-                            <div className="text-left md:text-right">
-                                <span className={`text-4xl md:text-5xl font-black ${globalPercent === 100 ? 'text-emerald-500' : 'text-incar'}`}>{globalPercent}%</span>
-                                <span className="text-sm font-bold text-slate-400 ml-2">({totalDone} / {totalTarget}건)</span>
-                            </div>
+                        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-emerald-500 flex flex-col justify-center">
+                            <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">총 지급액</div>
+                            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 break-keep">{CURRENCY}{logs.reduce((sum, l) => sum + (l.finalAmount||0), 0).toLocaleString()}</div>
                         </div>
-                        <div className="w-full h-4 md:h-6 bg-slate-100 rounded-full overflow-hidden shadow-inner">
-                            <div className={`h-full rounded-full transition-all duration-1000 ${globalPercent === 100 ? 'bg-emerald-500' : 'bg-incar'}`} style={{width: `${globalPercent}%`}}></div>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-incar"><div className="text-slate-400 text-xs font-bold uppercase mb-2">Participants</div><div className="text-4xl font-bold text-slate-800">{users.length}</div></div>
-                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-emerald-500"><div className="text-slate-400 text-xs font-bold uppercase mb-2">Total Payout</div><div className="text-4xl font-bold text-slate-800">{CURRENCY}{logs.reduce((sum, l) => sum + (l.finalAmount||0), 0).toLocaleString()}</div></div>
-                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-indigo-400 hidden md:block">
-                            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Completion Rate</div>
-                            <div className="text-4xl font-bold text-slate-800">
+                        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-indigo-400 flex flex-col justify-center">
+                            <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">전체 달성률</div>
+                            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800">
                                 {scheduleStats.filter(s => s.type !== 'NONE').length > 0 ? Math.round(scheduleStats.filter(s => s.type !== 'NONE').reduce((acc, s) => acc + s.percent, 0) / scheduleStats.filter(s => s.type !== 'NONE').length) : 0}%
                             </div>
                         </div>
-                        <div className="bg-white p-6 rounded-3xl shadow-card border-l-8 border-rose-400 hidden md:block">
-                            <div className="text-slate-400 text-xs font-bold uppercase tracking-wider mb-2">Total Penalties</div>
-                            <div className="text-4xl font-bold text-slate-800">{changeLogs.length}건</div>
+                        <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-rose-400 flex flex-col justify-center">
+                            <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">패널티 건수</div>
+                            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800">{changeLogs.length}건</div>
                         </div>
                     </div>
+
                     <div>
-                        <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2"><Icon name="dashboard" className="text-incar"/> 일정별 진행률 (요약)</h3>
+                        <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2"><Icon name="dashboard" className="text-incar"/> 관광/일정별 진행 현황</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {scheduleStats.map(stat => {
                                 const sessionPenalties = logs.filter(l => l.sessionId === stat.id).reduce((sum, l) => sum + (l.penaltyApplied || 0), 0);
@@ -437,16 +507,16 @@
                                         <div className="absolute right-0 top-0 p-3 opacity-10"><Icon name={stat.type === 'PAYMENT' ? 'money' : stat.type === 'NONE' ? 'info' : 'bus'} size={60} /></div>
                                         <div className="relative z-10">
                                             <div className="flex justify-between items-start mb-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded ${stat.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':stat.type==='NONE'?'bg-slate-200 text-slate-600':'bg-indigo-50 text-incar'}`}>{stat.type==='PAYMENT'?'지급':stat.type==='NONE'?'안내':'탑승'}</span><span className="text-xs font-bold text-slate-400">{stat.displayDate}</span></div>
-                                            <h4 className="font-bold text-slate-800 mb-4 truncate pr-8">{stat.title}</h4>
+                                            <h4 className="font-bold text-slate-800 mb-4 pr-2 leading-tight break-keep min-h-[2.5rem]">{stat.title}</h4>
                                             {stat.type !== 'NONE' ? (
                                                 <>
                                                     <div className="flex justify-between items-end mb-1"><span className="text-3xl font-bold text-slate-800">{stat.doneCount}<span className="text-sm text-slate-400 font-medium ml-1">/ {stat.targetCount}</span></span><span className={`text-xl font-bold ${stat.percent === 100 ? 'text-emerald-500' : 'text-incar'}`}>{stat.percent}%</span></div>
                                                     <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2"><div className={`h-full rounded-full transition-all duration-1000 ${stat.percent===100?'bg-emerald-500':'bg-incar'}`} style={{width: `${stat.percent}%`}}></div></div>
                                                     {stat.type === 'PAYMENT' && (
                                                         <div className="pt-2 border-t border-slate-50 flex flex-col gap-1 text-xs">
-                                                            <div className="flex justify-between"><span className="text-slate-400">집행액</span><span className="font-bold text-slate-700">{CURRENCY}{stat.actualAmount.toLocaleString()}</span></div>
-                                                            {sessionPenalties > 0 && <div className="flex justify-between text-[10px] text-rose-500 font-bold"><span>(패널티 차감분)</span><span>-{CURRENCY}{sessionPenalties.toLocaleString()}</span></div>}
-                                                            <div className="flex justify-between mt-1 pt-1 border-t border-slate-100/50"><span className="text-slate-400">예상 (변경전 포함안함)</span><span>{CURRENCY}{stat.expectedAmount.toLocaleString()}</span></div>
+                                                            <div className="flex justify-between"><span className="text-slate-400 break-keep">집행액</span><span className="font-bold text-slate-700 break-keep">{CURRENCY}{stat.actualAmount.toLocaleString()}</span></div>
+                                                            {sessionPenalties > 0 && <div className="flex justify-between text-[10px] text-rose-500 font-bold break-keep"><span>(패널티 차감분)</span><span>-{CURRENCY}{sessionPenalties.toLocaleString()}</span></div>}
+                                                            <div className="flex justify-between mt-1 pt-1 border-t border-slate-100/50 break-keep"><span className="text-slate-400">예상 (변경전)</span><span>{CURRENCY}{stat.expectedAmount.toLocaleString()}</span></div>
                                                         </div>
                                                     )}
                                                 </>
@@ -455,7 +525,7 @@
                                                     <div className="flex justify-between items-end mb-2">
                                                         <span className="text-3xl font-bold text-slate-800">{stat.targetCount}<span className="text-sm text-slate-400 font-medium ml-1">명 대상</span></span>
                                                     </div>
-                                                    <div className="py-2 text-slate-400 text-sm font-medium border-t border-slate-100">스캔 및 진행도 체크 불필요</div>
+                                                    <div className="py-2 text-slate-400 text-sm font-medium border-t border-slate-100 break-keep">스캔 및 진행도 체크 불필요</div>
                                                 </div>
                                             )}
                                         </div>
@@ -467,26 +537,26 @@
                     
                     <div className="pc-only bg-white rounded-3xl border border-slate-200 shadow-card overflow-hidden mt-8">
                         <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-                            <h3 className="font-bold text-slate-800 flex items-center gap-2"><Icon name="table" className="text-incar"/> 상세 현황 분석표</h3>
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2 break-keep"><Icon name="table" className="text-incar"/> 상세 현황 분석표</h3>
                         </div>
                         {Object.entries(groupedStats).length === 0 ? <div className="p-10 text-center text-slate-400">데이터가 없습니다.</div> : (
                             <div className="p-6 space-y-8">
                                 {Object.entries(groupedStats).sort().map(([date, stats]) => (
                                     <div key={date}>
                                         <h4 className="text-xs font-bold text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-3">{date}</h4>
-                                        <div className="overflow-hidden rounded-xl border border-slate-200">
+                                        <div className="overflow-x-auto rounded-xl border border-slate-200">
                                             <table className="w-full text-left data-table">
-                                                <thead><tr><th className="w-1/3">일정명</th><th className="text-center">속성</th><th className="text-right">대상(Target)</th><th className="text-right">완료(Done)</th><th className="text-center border-l border-slate-200">상태</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
+                                                <thead><tr><th className="min-w-[120px]">관광/일정명</th><th className="text-center">속성</th><th className="text-right">대상(Target)</th><th className="text-right">탑승(Done)</th><th className="text-center border-l border-slate-200">상태</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
                                                 <tbody>
                                                     {stats.map(s => (
                                                         <tr key={s.id} onClick={() => onSessionClick(s)} className="cursor-pointer hover:bg-slate-50 transition-colors">
-                                                            <td className="font-bold text-slate-700">{s.title}</td>
-                                                            <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':s.type==='NONE'?'bg-slate-100 text-slate-500 border-slate-200':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':s.type==='NONE'?'안내/자유':'탑승'}</span></td>
+                                                            <td className="font-bold text-slate-700 whitespace-nowrap">{s.title}</td>
+                                                            <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':s.type==='NONE'?'bg-slate-100 text-slate-500 border-slate-200':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':s.type==='NONE'?'안내/자유':'탑승'}</span></td>
                                                             <td className="text-right text-slate-500">{s.type === 'NONE' ? '-' : s.targetCount}</td>
                                                             <td className="text-right font-bold text-slate-900">{s.type === 'NONE' ? '-' : s.doneCount}</td>
-                                                            <td className="text-center border-l border-slate-50">{s.type === 'NONE' ? <span className="text-slate-400 text-xs">스캔없음</span> : s.targetCount - s.doneCount === 0 ? <span className="text-emerald-500 font-bold text-xs">Complete</span> : <span className="text-rose-500 font-bold text-xs">{s.targetCount - s.doneCount}명 남음</span>}</td>
-                                                            <td className="text-right text-slate-400">{s.type==='PAYMENT'?`${CURRENCY}${s.expectedAmount.toLocaleString()}`:'-'}</td>
-                                                            <td className="text-right font-bold text-emerald-600">{s.type==='PAYMENT'?`${CURRENCY}${s.actualAmount.toLocaleString()}`:'-'}</td>
+                                                            <td className="text-center border-l border-slate-50">{s.type === 'NONE' ? <span className="text-slate-400 text-xs">스캔없음</span> : s.targetCount - s.doneCount === 0 ? <span className="text-emerald-500 font-bold text-xs whitespace-nowrap">Complete</span> : <span className="text-rose-500 font-bold text-xs whitespace-nowrap">{s.targetCount - s.doneCount}명 남음</span>}</td>
+                                                            <td className="text-right text-slate-400 whitespace-nowrap">{s.type==='PAYMENT'?`${CURRENCY}${s.expectedAmount.toLocaleString()}`:'-'}</td>
+                                                            <td className="text-right font-bold text-emerald-600 whitespace-nowrap">{s.type==='PAYMENT'?`${CURRENCY}${s.actualAmount.toLocaleString()}`:'-'}</td>
                                                             <td className="text-center border-l border-slate-50">{s.type !== 'PAYMENT' ? '-' : (s.diffAmount === 0 ? <span className="text-emerald-500 font-bold text-xs">OK</span> : s.diffAmount < 0 ? <span className="text-rose-500 font-bold text-xs">{s.diffAmount}</span> : <span className="text-blue-500 font-bold text-xs">+{s.diffAmount}</span>)}</td>
                                                         </tr>
                                                     ))}
@@ -504,9 +574,35 @@
 
         const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile, busList, setBusList }) => {
             const scannerRef = useRef(null); const isRunningRef = useRef(false); const [isStrictBusMode, setIsStrictBusMode] = useState(false);
+            const [manualCode, setManualCode] = useState('');
+            
             const filteredSchedules = useMemo(() => schedules.filter(s => s.type === mode), [schedules, mode]);
             useEffect(() => { if (filteredSchedules.length > 0) { const exists = filteredSchedules.find(s => s.id === targetSessionId); if (!exists) setTargetSessionId(filteredSchedules[0].id); } else { setTargetSessionId(''); } }, [mode, filteredSchedules]);
             
+            // 키보드(USB 바코드 스캐너) 입력 리스너
+            useEffect(() => {
+                let barcodeStr = '';
+                let timeout = null;
+                const handleKeyDown = (e) => {
+                    // 입력 필드 포커스 시 무시
+                    if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                    
+                    if (e.key === 'Enter') {
+                        if (barcodeStr.length > 0) {
+                            processScan(barcodeStr, isStrictBusMode);
+                            barcodeStr = '';
+                        }
+                    } else if (e.key.length === 1) { // 일반 문자 키만 누적
+                        barcodeStr += e.key;
+                        clearTimeout(timeout);
+                        timeout = setTimeout(() => { barcodeStr = ''; }, 100); // 100ms 타임아웃
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [isStrictBusMode, processScan]);
+
+
             const handleAddBus = () => {
                 let nextNum = 1;
                 if (busList.length > 0) {
@@ -551,35 +647,43 @@
 
             const stopScanner = () => { if (scannerRef.current && isRunningRef.current) { scannerRef.current.stop(); isRunningRef.current = false; setIsScanning(false); } else { setIsScanning(false); } };
 
+            const handleManualSubmit = (e) => {
+                e.preventDefault();
+                if(manualCode.trim()) {
+                    processScan(manualCode.trim(), isStrictBusMode);
+                    setManualCode('');
+                }
+            }
+
             return (
                 <div className="space-y-6 h-full flex flex-col animate-slide-up">
                     <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
-                        <div className="flex items-center gap-2 mb-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING' ? 'STEP 1' : '지급'}</span><h3 className="text-lg font-bold text-slate-800">{mode==='BOARDING' ? '탑승 일정 선택' : '지급 항목 선택'}</h3></div>
+                        <div className="flex items-center gap-2 mb-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING' ? 'STEP 1' : '지급'}</span><h3 className="text-lg font-bold text-slate-800 break-keep">{mode==='BOARDING' ? '탑승 관광/일정 선택' : '지급 항목 선택'}</h3></div>
                         <div className="mb-6">
                             {filteredSchedules.length > 0 ? (
-                                <select value={targetSessionId} onChange={(e) => setTargetSessionId(e.target.value)} className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-lg outline-none focus:ring-4 transition-all ${mode==='BOARDING'?'focus:ring-incar/20':'focus:ring-emerald-500/20'}`}>{filteredSchedules.map(s => <option key={s.id} value={s.id}>[{s.displayDate}] {s.title}</option>)}</select>
+                                <select value={targetSessionId} onChange={(e) => setTargetSessionId(e.target.value)} className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-lg outline-none focus:ring-4 transition-all break-keep ${mode==='BOARDING'?'focus:ring-incar/20':'focus:ring-emerald-500/20'}`}>{filteredSchedules.map(s => <option key={s.id} value={s.id}>[{s.displayDate}] {s.title}</option>)}</select>
                             ) : (
-                                <div className="p-4 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200">진행 가능한 일정이 없습니다.</div>
+                                <div className="p-4 text-center text-slate-400 bg-slate-50 rounded-xl border border-dashed border-slate-200 break-keep">진행 가능한 일정이 없습니다.</div>
                             )}
                         </div>
                         {mode === 'BOARDING' && filteredSchedules.length > 0 && (
                             <div className="animate-slide-up">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 w-full">
-                                    <div className="flex items-center gap-2 shrink-0"><span className="px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-slate-800 text-white">STEP 2</span><h3 className="text-base sm:text-lg font-bold text-slate-800">차량 선택</h3></div>
+                                    <div className="flex items-center gap-2 shrink-0"><span className="px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-slate-800 text-white">STEP 2</span><h3 className="text-base sm:text-lg font-bold text-slate-800 break-keep">현장 탑승 차량 선택</h3></div>
                                     <div className="flex gap-2 items-center shrink-0 w-full sm:w-auto">
                                         <div className="flex flex-1 sm:flex-none items-center justify-center sm:justify-start bg-slate-100 rounded-lg px-2 py-1.5 gap-2 cursor-pointer" onClick={() => setIsStrictBusMode(!isStrictBusMode)}>
-                                            <div className={`w-8 h-4 rounded-full relative transition-colors ${isStrictBusMode ? 'bg-incar' : 'bg-slate-300'}`}><div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${isStrictBusMode ? 'translate-x-4' : 'translate-x-0'}`}></div></div>
-                                            <span className={`text-[10px] font-bold ${isStrictBusMode ? 'text-incar' : 'text-slate-400'}`}>배차 검증 (지정호차)</span>
+                                            <div className={`w-8 h-4 rounded-full relative transition-colors shrink-0 ${isStrictBusMode ? 'bg-incar' : 'bg-slate-300'}`}><div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${isStrictBusMode ? 'translate-x-4' : 'translate-x-0'}`}></div></div>
+                                            <span className={`text-[10px] font-bold break-keep ${isStrictBusMode ? 'text-incar' : 'text-slate-400'}`}>배차 검증 (지정호차)</span>
                                         </div>
                                         <button onClick={()=>setManualBus(!manualBus)} className={`text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shrink-0 whitespace-nowrap ${manualBus ? 'bg-incar text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
                                             {manualBus ? '관리 완료' : '차량 관리'}
                                         </button>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-4 gap-2">
+                                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                                     {busList.map((bus, i) => (
                                         <div key={i} className="relative group">
-                                            <button onClick={() => manualBus ? handleRenameBus(i) : setTargetBus(bus)} className={`w-full py-3 rounded-xl text-sm font-bold transition-all relative ${targetBus === bus && !manualBus ? 'bg-incar text-white shadow-lg scale-105 z-10' : manualBus ? 'bg-white border-2 border-dashed border-indigo-200 text-indigo-400 hover:bg-indigo-50' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                                            <button onClick={() => manualBus ? handleRenameBus(i) : setTargetBus(bus)} className={`w-full py-3 rounded-xl text-sm font-bold transition-all relative break-keep ${targetBus === bus && !manualBus ? 'bg-incar text-white shadow-lg scale-105 z-10' : manualBus ? 'bg-white border-2 border-dashed border-indigo-200 text-indigo-400 hover:bg-indigo-50' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
                                                 {bus}
                                                 {manualBus && <span className="absolute bottom-0.5 right-1 text-[8px] opacity-50">수정</span>}
                                             </button>
@@ -591,12 +695,36 @@
                             </div>
                         )}
                     </div>
+                    
+                    {/* 수동 입력 및 바코드 스캐너 안내 영역 */}
+                    {filteredSchedules.length > 0 && (
+                        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+                            <form onSubmit={handleManualSubmit} className="flex gap-2">
+                                <div className="flex-1 relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                        <Icon name="user" size={16} />
+                                    </div>
+                                    <input 
+                                        type="text" 
+                                        value={manualCode}
+                                        onChange={(e) => setManualCode(e.target.value)}
+                                        placeholder="사번 직접 입력 (바코드 스캐너 가능)" 
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-incar/20 transition-all break-keep"
+                                    />
+                                </div>
+                                <button type="submit" className="bg-slate-800 text-white px-6 rounded-xl font-bold text-sm shadow-md hover:bg-slate-700 shrink-0 break-keep">입력</button>
+                            </form>
+                            <p className="text-[10px] text-slate-400 mt-2 text-center break-keep">
+                                * USB/블루투스 바코드 스캐너 사용 시 화면 어디서나 스캔하면 자동 인식됩니다.
+                            </p>
+                        </div>
+                    )}
+
                     <div className="flex-1 flex flex-col justify-end">
-                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> {mode==='BOARDING' ? '탑승 스캔 시작' : '지급 스캔 시작'}</button>
-                        {!isMobile && users.length > 0 && filteredSchedules.length > 0 && <button onClick={()=>processScan(users[0].uid, isStrictBusMode)} className="mt-4 text-xs text-slate-400 underline text-center">테스트: 첫번째 유저 강제 인식</button>}
+                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> {mode==='BOARDING' ? '카메라 스캔 시작' : '카메라 스캔 시작'}</button>
                     </div>
                     {isScanning && (
-                        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-fade-in"><button onClick={stopScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full z-[101]"><Icon name="x" size={32} /></button><div className="scanner-container"><div id="reader"></div></div><p className="text-white mt-10 font-bold text-xl animate-pulse text-center">QR코드를 스캔하세요</p></div>
+                        <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-fade-in"><button onClick={stopScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full z-[101]"><Icon name="x" size={32} /></button><div className="scanner-container"><div id="reader"></div></div><p className="text-white mt-10 font-bold text-xl animate-pulse text-center break-keep">참가자 명찰의 QR코드를 비춰주세요</p></div>
                     )}
                 </div>
             );
@@ -619,7 +747,7 @@
                         setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' });
                     }
                 }
-            }, [users]); // users 배열이 업데이트될 때마다 실행
+            }, [users]); 
 
             useEffect(() => { return () => { if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) { html5QrCodeRef.current.stop(); html5QrCodeRef.current.clear(); } }; }, []);
 
@@ -657,7 +785,10 @@
 
             const userSchedules = useMemo(() => {
                 if (!selectedUser || !schedules) return [];
-                return schedules.filter(s => getUserSessionInfo(selectedUser, s).isTarget).sort((a,b) => a.date > b.date ? 1 : -1);
+                return schedules.filter(s => getUserSessionInfo(selectedUser, s).isTarget).sort((a,b) => {
+                    if (a.date === b.date) return (a.order || 0) - (b.order || 0);
+                    return a.date > b.date ? 1 : -1;
+                });
             }, [selectedUser, schedules]);
 
             const uniqueValues = useMemo(() => {
@@ -719,12 +850,12 @@
             return (
                 <div className="space-y-6 animate-slide-up">
                     <div className="bg-white p-6 rounded-3xl shadow-card">
-                        <h3 className="font-bold text-lg mb-4 text-slate-800">참가자 일정 변경 및 패널티 관리</h3>
+                        <h3 className="font-bold text-lg mb-4 text-slate-800 break-keep">참가자 일정 변경 및 패널티 관리</h3>
                         <div className="flex flex-col gap-2 mb-6">
                             <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="사번 또는 이름 검색" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-incar" />
                             <div className="flex gap-2">
                                 <button onClick={startLookupScanner} className="bg-slate-100 text-slate-600 px-4 py-4 rounded-2xl hover:bg-slate-200 transition-colors border border-slate-200 flex-none" title="QR 스캔으로 찾기"><Icon name="qr" size={24} /></button>
-                                <button onClick={()=>{ const found = users.find(u => String(u.uid).includes(searchQuery) || u.name.includes(searchQuery)); if(found) setSelectedUser(found); else alert("사용자를 찾을 수 없습니다."); }} className="flex-1 bg-slate-800 text-white px-6 py-4 rounded-2xl font-bold">검색</button>
+                                <button onClick={()=>{ const found = users.find(u => String(u.uid).includes(searchQuery) || u.name.includes(searchQuery)); if(found) setSelectedUser(found); else alert("사용자를 찾을 수 없습니다."); }} className="flex-1 bg-slate-800 text-white px-6 py-4 rounded-2xl font-bold break-keep">검색</button>
                             </div>
                         </div>
 
@@ -732,7 +863,7 @@
                             <div className="fixed inset-0 z-[300] bg-black/95 flex flex-col items-center justify-center p-6 animate-fade-in" style={{ touchAction: 'none' }}>
                                 <button onClick={stopLookupScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full z-[101]"><Icon name="x" size={32} /></button>
                                 <div className="scanner-container"><div id="lookup-reader"></div></div>
-                                <p className="text-white mt-10 font-bold text-xl animate-pulse text-center">조회할 QR코드를 스캔하세요</p>
+                                <p className="text-white mt-10 font-bold text-xl animate-pulse text-center break-keep">조회할 QR코드를 스캔하세요</p>
                             </div>
                         )}
 
@@ -740,23 +871,23 @@
                             <div className="border-t border-slate-100 pt-6 space-y-4">
                                 <div className="flex flex-col md:flex-row gap-6 mb-6">
                                     <div className="flex-1 bg-slate-50 p-5 rounded-2xl border border-slate-100 flex flex-col justify-center">
-                                        <div className="flex justify-between items-start mb-2"><div><div className="font-black text-2xl text-slate-800">{selectedUser.name}</div><div className="text-sm font-bold text-slate-500">{selectedUser.org}</div></div><div className="text-right"><div className="text-[10px] font-bold text-slate-400 uppercase">사번(ID)</div><div className="font-mono font-bold text-incar">{selectedUser.uid}</div></div></div>
-                                        <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-between items-center"><span className="text-xs font-bold text-slate-400">누적 패널티</span><span className="font-black text-rose-500 text-lg">-{CURRENCY}{selectedUser.penaltyTotal || 0}</span></div>
+                                        <div className="flex justify-between items-start mb-2"><div><div className="font-black text-2xl text-slate-800 break-keep">{selectedUser.name}</div><div className="text-sm font-bold text-slate-500 break-all">{selectedUser.org}</div></div><div className="text-right"><div className="text-[10px] font-bold text-slate-400 uppercase">사번(ID)</div><div className="font-mono font-bold text-incar">{selectedUser.uid}</div></div></div>
+                                        <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-between items-center"><span className="text-xs font-bold text-slate-400 break-keep">누적 패널티</span><span className="font-black text-rose-500 text-lg break-keep">-{CURRENCY}{selectedUser.penaltyTotal || 0}</span></div>
                                     </div>
                                     <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center w-full md:w-auto cursor-pointer hover:bg-slate-50 hover:border-incar/30 transition-all group" onClick={() => setShowQrModal(true)} title="QR코드 확대 및 다운로드">
                                         <div className="mb-2 w-28 h-28 flex items-center justify-center bg-white rounded-xl shadow-sm border border-slate-100 p-2 group-hover:scale-105 transition-transform"><QRCodeCanvas text={`${selectedUser.uid}_${selectedUser.name}`} size={100} /></div>
-                                        <span className="text-[10px] font-bold text-incar flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-full"><Icon name="search" size={10}/> QR 확대/저장</span>
+                                        <span className="text-[10px] font-bold text-incar flex items-center gap-1 bg-indigo-50 px-2 py-1 rounded-full break-keep"><Icon name="search" size={10}/> QR 확대/저장</span>
                                     </div>
                                 </div>
 
                                 <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5 mb-4">
-                                    <h4 className="font-bold text-incar mb-3 flex items-center gap-2"><Icon name="dashboard" size={16}/> {selectedUser.name}님의 전체 여행 일정</h4>
-                                    {userSchedules.length === 0 ? <div className="text-center text-slate-400 text-xs py-4">배정된 일정이 없습니다.</div> : (
+                                    <h4 className="font-bold text-incar mb-3 flex items-center gap-2 break-keep"><Icon name="dashboard" size={16}/> {selectedUser.name}님의 전체 여행 일정</h4>
+                                    {userSchedules.length === 0 ? <div className="text-center text-slate-400 text-xs py-4 break-keep">배정된 일정이 없습니다.</div> : (
                                         <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                                             {userSchedules.map((s, idx) => (
                                                 <div key={idx} className="bg-white p-3 rounded-xl border border-indigo-100 shadow-sm flex justify-between items-center">
-                                                    <div><span className="text-[10px] font-bold text-slate-400 block">{s.displayDate}</span><span className="font-bold text-slate-800">{s.title}</span>{s.type === 'BOARDING' && <div className="text-[10px] text-incar mt-0.5 font-bold">배정호차: {getUserSessionInfo(selectedUser, s).expectedBus}</div>}</div>
-                                                    <div className="text-right"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':s.type==='NONE'?'bg-slate-100 text-slate-500':'bg-slate-100 text-slate-500'}`}>{s.type==='PAYMENT' ? `지급 ${CURRENCY}${s.price}` : s.type==='NONE' ? '단순안내/자유' : '탑승'}</span></div>
+                                                    <div><span className="text-[10px] font-bold text-slate-400 block break-keep">{s.displayDate}</span><span className="font-bold text-slate-800 break-keep">{s.title}</span>{s.type === 'BOARDING' && <div className="text-[10px] text-incar mt-0.5 font-bold break-keep">배정호차: {getUserSessionInfo(selectedUser, s).expectedBus}</div>}</div>
+                                                    <div className="text-right"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':s.type==='NONE'?'bg-slate-100 text-slate-500':'bg-slate-100 text-slate-500'}`}>{s.type==='PAYMENT' ? `지급 ${CURRENCY}${s.price}` : s.type==='NONE' ? '단순안내' : '탑승'}</span></div>
                                                 </div>
                                             ))}
                                         </div>
@@ -764,44 +895,44 @@
                                 </div>
 
                                 <div className="mt-6 pt-6 border-t border-slate-100">
-                                    <h4 className="font-bold text-sm text-slate-800 mb-3 flex items-center gap-2"><Icon name="history" size={16}/> 변경 및 패널티 이력</h4>
-                                    {userHistoryLogs.length === 0 ? <p className="text-xs text-slate-400">변경 이력이 없습니다.</p> : (
+                                    <h4 className="font-bold text-sm text-slate-800 mb-3 flex items-center gap-2 break-keep"><Icon name="history" size={16}/> 변경 및 패널티 이력</h4>
+                                    {userHistoryLogs.length === 0 ? <p className="text-xs text-slate-400 break-keep">변경 이력이 없습니다.</p> : (
                                         <div className="space-y-3">
-                                            <div className="hidden md:block overflow-x-auto"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-500 font-bold"><tr><th className="p-2">일시</th><th className="p-2">항목</th><th className="p-2">내용</th><th className="p-2 text-right">패널티</th><th className="p-2">사유</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleLogs.map((log, i) => (<tr key={i}><td className="p-2 text-slate-400">{log.timestamp.slice(5, 16)}</td><td className="p-2 font-bold">{log.targetOption}</td><td className="p-2"><span className="line-through text-slate-300">{log.oldVal}</span> <span className="mx-1 text-slate-300">→</span> <span className="text-incar font-bold">{log.newVal}</span></td><td className="p-2 text-right font-bold text-rose-500">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</td><td className="p-2 text-slate-500 truncate max-w-[100px]">{log.reason}</td></tr>))}</tbody></table></div>
-                                            <div className="md:hidden space-y-2">{visibleLogs.map((log, i) => (<div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2"><div className="flex justify-between items-center text-xs text-slate-400 font-medium border-b border-slate-200 pb-2 mb-1"><span>{log.timestamp.slice(5, 16)}</span><span className="bg-white px-2 py-0.5 rounded border border-slate-200">{log.targetOption}</span></div><div className="flex items-center justify-center gap-2 text-sm"><span className="line-through text-slate-400">{log.oldVal}</span><Icon name="chevronsDown" size={12} className="rotate-[-90deg] text-slate-300" /><span className="font-bold text-incar">{log.newVal}</span></div><div className="flex justify-between items-end mt-1 pt-2 border-t border-slate-200/50"><span className="text-xs text-slate-500 flex-1 truncate pr-2">{log.reason}</span><span className="text-sm font-bold text-rose-500">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</span></div></div>))}</div>
-                                            {userHistoryLogs.length > 1 && <button onClick={() => setShowAllHistory(!showAllHistory)} className="w-full py-2 text-xs font-bold text-slate-400 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center justify-center gap-1">{showAllHistory ? '접기' : `더보기 (${userHistoryLogs.length - 1}건 더 있음)`} <Icon name={showAllHistory ? "up" : "down"} size={12} /></button>}
+                                            <div className="hidden md:block overflow-x-auto"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-500 font-bold"><tr><th className="p-2">일시</th><th className="p-2">항목</th><th className="p-2">내용</th><th className="p-2 text-right">패널티</th><th className="p-2">사유</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleLogs.map((log, i) => (<tr key={i}><td className="p-2 text-slate-400 whitespace-nowrap">{log.timestamp.slice(5, 16)}</td><td className="p-2 font-bold whitespace-nowrap">{log.targetOption}</td><td className="p-2 break-keep"><span className="line-through text-slate-300">{log.oldVal}</span> <span className="mx-1 text-slate-300">→</span> <span className="text-incar font-bold">{log.newVal}</span></td><td className="p-2 text-right font-bold text-rose-500 whitespace-nowrap">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</td><td className="p-2 text-slate-500 truncate max-w-[100px]">{log.reason}</td></tr>))}</tbody></table></div>
+                                            <div className="md:hidden space-y-2">{visibleLogs.map((log, i) => (<div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2"><div className="flex justify-between items-center text-xs text-slate-400 font-medium border-b border-slate-200 pb-2 mb-1"><span>{log.timestamp.slice(5, 16)}</span><span className="bg-white px-2 py-0.5 rounded border border-slate-200 break-keep">{log.targetOption}</span></div><div className="flex items-center justify-center gap-2 text-sm break-keep text-center"><span className="line-through text-slate-400">{log.oldVal}</span><Icon name="chevronsDown" size={12} className="rotate-[-90deg] text-slate-300" /><span className="font-bold text-incar">{log.newVal}</span></div><div className="flex justify-between items-end mt-1 pt-2 border-t border-slate-200/50"><span className="text-xs text-slate-500 flex-1 break-keep pr-2">{log.reason}</span><span className="text-sm font-bold text-rose-500 break-keep">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</span></div></div>))}</div>
+                                            {userHistoryLogs.length > 1 && <button onClick={() => setShowAllHistory(!showAllHistory)} className="w-full py-2 text-xs font-bold text-slate-400 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center justify-center gap-1 break-keep">{showAllHistory ? '접기' : `더보기 (${userHistoryLogs.length - 1}건 더 있음)`} <Icon name={showAllHistory ? "up" : "down"} size={12} /></button>}
                                         </div>
                                     )}
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4 mt-4">
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1">변경 전 일정</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{key} (현재: {selectedUser.options[key]})</option>)}</select></div>
-                                    <div><div className="flex justify-between items-center mb-1"><label className="block text-xs font-bold text-slate-400">변경 후 일정</label><button onClick={()=>setManualInput(!manualInput)} className="text-[10px] text-incar underline font-bold">{manualInput ? '목록에서 선택' : '직접 입력'}</button></div>{manualInput ? <input type="text" value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white" placeholder="직접 입력하세요" /> : <select value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{uniqueValues.map(val => <option key={val} value={val}>{val}</option>)}<option value="직접입력">[목록에 없음]</option></select>}</div>
+                                    <div><label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 전 옵션</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{key} (현재: {selectedUser.options[key]})</option>)}</select></div>
+                                    <div><div className="flex justify-between items-center mb-1"><label className="block text-xs font-bold text-slate-400 break-keep">변경 후 옵션</label><button onClick={()=>setManualInput(!manualInput)} className="text-[10px] text-incar underline font-bold break-keep">{manualInput ? '목록에서 선택' : '직접 입력'}</button></div>{manualInput ? <input type="text" value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white break-keep" placeholder="직접 입력하세요" /> : <select value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{uniqueValues.map(val => <option key={val} value={val}>{val}</option>)}<option value="직접입력">[목록에 없음]</option></select>}</div>
                                 </div>
 
                                 {financialImpact && (
                                     <div className={`mt-2 p-4 rounded-xl border ${financialImpact.needsRefund ? 'bg-rose-50 border-rose-200' : financialImpact.needsExtraPay ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'}`}>
-                                        <h5 className={`font-bold text-sm mb-2 ${financialImpact.needsRefund ? 'text-rose-700' : financialImpact.needsExtraPay ? 'text-emerald-700' : 'text-amber-700'}`}>
+                                        <h5 className={`font-bold text-sm mb-2 break-keep ${financialImpact.needsRefund ? 'text-rose-700' : financialImpact.needsExtraPay ? 'text-emerald-700' : 'text-amber-700'}`}>
                                             <Icon name="info" size={16} className="inline mr-1 -mt-0.5" />
-                                            일정 변경에 따른 정산 검증 (Financial Impact)
+                                            일정 변경에 따른 정산 검증
                                         </h5>
-                                        <ul className="text-xs space-y-1 text-slate-600">
-                                            <li>• 기존 일정 예상지급액: {CURRENCY}{financialImpact.oldPrice}</li>
-                                            <li>• 변경 일정 예상지급액: {CURRENCY}{financialImpact.newPrice}</li>
-                                            <li className="font-bold border-t border-slate-200/50 mt-1 pt-1">• 현재까지 실제 지급 완료된 금액: <span className="text-incar">{CURRENCY}{financialImpact.paidAmount}</span></li>
+                                        <ul className="text-xs space-y-1 text-slate-600 break-keep">
+                                            <li>• 기존 예상지급액: {CURRENCY}{financialImpact.oldPrice}</li>
+                                            <li>• 변경 예상지급액: {CURRENCY}{financialImpact.newPrice}</li>
+                                            <li className="font-bold border-t border-slate-200/50 mt-1 pt-1">• 현재까지 실제 지급 완료: <span className="text-incar">{CURRENCY}{financialImpact.paidAmount}</span></li>
                                         </ul>
-                                        <div className="mt-3">
+                                        <div className="mt-3 break-keep">
                                             {financialImpact.needsRefund && <span className="inline-block bg-rose-500 text-white font-bold text-xs px-2 py-1 rounded">⚠️ 현장 반환 필요: {CURRENCY}{financialImpact.refundAmount} (미반환 시 패널티)</span>}
-                                            {financialImpact.needsExtraPay && <span className="inline-block bg-emerald-500 text-white font-bold text-xs px-2 py-1 rounded">✅ 추가 지급 발생: {CURRENCY}{financialImpact.extraPayAmount} (새로운 지급 일정에서 스캔 대기)</span>}
-                                            {!financialImpact.needsRefund && !financialImpact.needsExtraPay && financialImpact.diff > 0 && financialImpact.paidAmount === 0 && <span className="inline-block bg-amber-500 text-white font-bold text-xs px-2 py-1 rounded">💰 지급 전 다운그레이드: {CURRENCY}{financialImpact.diff} 차감 적용</span>}
-                                            {!financialImpact.needsRefund && !financialImpact.needsExtraPay && financialImpact.diff <= 0 && <span className="inline-block bg-blue-500 text-white font-bold text-xs px-2 py-1 rounded">✔️ 추가 비용 및 반환 문제 없음</span>}
+                                            {financialImpact.needsExtraPay && <span className="inline-block bg-emerald-500 text-white font-bold text-xs px-2 py-1 rounded">✅ 추가 지급 발생: {CURRENCY}{financialImpact.extraPayAmount} (스캔 대기)</span>}
+                                            {!financialImpact.needsRefund && !financialImpact.needsExtraPay && financialImpact.diff > 0 && financialImpact.paidAmount === 0 && <span className="inline-block bg-amber-500 text-white font-bold text-xs px-2 py-1 rounded">💰 지급 전 다운그레이드: {CURRENCY}{financialImpact.diff} 차감</span>}
+                                            {!financialImpact.needsRefund && !financialImpact.needsExtraPay && financialImpact.diff <= 0 && <span className="inline-block bg-blue-500 text-white font-bold text-xs px-2 py-1 rounded">✔️ 추가 비용 및 반환 없음</span>}
                                         </div>
                                     </div>
                                 )}
 
-                                <div><label className="block text-xs font-bold text-slate-400 mb-1">패널티 ({CURRENCY})</label><input type="number" value={editForm.penalty} onChange={e=>setEditForm({...editForm, penalty: e.target.value})} className="w-full p-3 border border-rose-200 bg-rose-50 rounded-xl font-bold text-rose-600" /><p className="text-[10px] text-slate-400 mt-1">* 검증 로직에 의해 자동 계산된 값입니다. 현장에서 반환을 받았다면 0으로 수정하세요.</p></div>
-                                <div><label className="block text-xs font-bold text-slate-400 mb-1">변경 사유</label><input type="text" value={editForm.reason} onChange={e=>setEditForm({...editForm, reason: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm" /></div>
-                                <button onClick={handleUserUpdate} className="w-full py-4 bg-incar text-white font-bold rounded-2xl shadow-lg mt-4 hover:bg-incar-dark">저장하기</button>
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1 break-keep">패널티 ({CURRENCY})</label><input type="number" value={editForm.penalty} onChange={e=>setEditForm({...editForm, penalty: e.target.value})} className="w-full p-3 border border-rose-200 bg-rose-50 rounded-xl font-bold text-rose-600 break-keep" /><p className="text-[10px] text-slate-400 mt-1 break-keep">* 검증 로직에 의해 자동 계산된 값입니다. 현장에서 반환을 받았다면 0으로 수정하세요.</p></div>
+                                <div><label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 사유</label><input type="text" value={editForm.reason} onChange={e=>setEditForm({...editForm, reason: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm break-keep" /></div>
+                                <button onClick={handleUserUpdate} className="w-full py-4 bg-incar text-white font-bold rounded-2xl shadow-lg mt-4 hover:bg-incar-dark break-keep">저장하기</button>
                             </div>
                         )}
 
@@ -811,17 +942,17 @@
                                     <div className="w-12 h-12 bg-incar/10 text-incar rounded-full flex items-center justify-center mb-4">
                                         <Icon name="qr" size={24} />
                                     </div>
-                                    <h3 className="font-black text-2xl text-slate-800 mb-1">{selectedUser.name}</h3>
-                                    <p className="text-sm font-bold text-slate-400 mb-6">{selectedUser.org} | {selectedUser.uid}</p>
+                                    <h3 className="font-black text-2xl text-slate-800 mb-1 break-keep">{selectedUser.name}</h3>
+                                    <p className="text-sm font-bold text-slate-400 mb-6 break-all">{selectedUser.org} | {selectedUser.uid}</p>
                                     
                                     <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6 shadow-inner">
                                         <QRCodeCanvas text={`${selectedUser.uid}_${selectedUser.name}`} size={200} id="user-qr-canvas-large" />
                                     </div>
                                     
-                                    <p className="text-xs text-slate-500 mb-6 font-medium">명찰을 분실한 참가자에게 이 화면을 보여주거나,<br/>이미지로 다운로드하여 재발급할 수 있습니다.</p>
+                                    <p className="text-xs text-slate-500 mb-6 font-medium break-keep">명찰을 분실한 참가자에게 이 화면을 보여주거나,<br/>이미지로 다운로드하여 재발급할 수 있습니다.</p>
                                     
                                     <div className="flex gap-3 w-full">
-                                        <button onClick={() => setShowQrModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">닫기</button>
+                                        <button onClick={() => setShowQrModal(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors break-keep">닫기</button>
                                         <button onClick={() => {
                                             const canvas = document.getElementById('user-qr-canvas-large');
                                             if(canvas) {
@@ -830,7 +961,7 @@
                                                 link.href = canvas.toDataURL();
                                                 link.click();
                                             }
-                                        }} className="flex-1 py-3 bg-incar text-white font-bold rounded-xl shadow-lg hover:bg-incar-dark transition-colors flex items-center justify-center gap-2">
+                                        }} className="flex-1 py-3 bg-incar text-white font-bold rounded-xl shadow-lg hover:bg-incar-dark transition-colors flex items-center justify-center gap-2 break-keep">
                                             <Icon name="download" size={16} /> 저장
                                         </button>
                                     </div>
@@ -864,12 +995,12 @@
                     
                     {isMaster && (
                         <div className="bg-slate-800 text-white p-6 rounded-3xl shadow-xl border border-slate-700">
-                            <h3 className="font-black text-2xl flex items-center gap-2"><Icon name="settings" /> Master Data Setup</h3>
-                            <p className="text-slate-400 text-xs mt-1">엑셀 CSV 파일을 업로드하여 초기 데이터를 세팅합니다. (Master 전용)</p>
+                            <h3 className="font-black text-2xl flex items-center gap-2 break-keep"><Icon name="settings" /> Master Data Setup</h3>
+                            <p className="text-slate-400 text-xs mt-1 break-keep">엑셀 CSV 파일을 업로드하여 초기 데이터를 세팅합니다. (Master 전용)</p>
                             <div className="space-y-3 mt-5">
-                                <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="users" className="text-indigo-400"/><div className="font-bold text-sm">1. 참가자 명단 (CSV)</div></div><label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors"><input type="file" accept=".csv" onChange={handleUserUpload} className="hidden" />업로드</label></div>
-                                <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="dashboard" className="text-indigo-400"/><div className="font-bold text-sm">2. 일정 마스터 정보 (CSV)</div></div><label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors"><input type="file" accept=".csv" onChange={handleScheduleUpload} className="hidden" />업로드</label></div>
-                                <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="image" className="text-indigo-400"/><div className="font-bold text-sm">3. 앱 배경화면 이미지</div></div><div className="flex gap-2">{appBgImage && <button onClick={() => setAppBgImage(null)} className="px-3 py-2 bg-rose-500/80 hover:bg-rose-500 rounded-lg text-xs font-bold transition-colors">초기화</button>}<label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors"><input type="file" accept="image/*" onChange={handleAppBgUpload} className="hidden" />업로드</label></div></div>
+                                <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="users" className="text-indigo-400"/><div className="font-bold text-sm break-keep">1. 참가자 명단 (CSV)</div></div><label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors break-keep"><input type="file" accept=".csv" onChange={handleUserUpload} className="hidden" />업로드</label></div>
+                                <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="dashboard" className="text-indigo-400"/><div className="font-bold text-sm break-keep">2. 일정 마스터 정보 (CSV)</div></div><label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors break-keep"><input type="file" accept=".csv" onChange={handleScheduleUpload} className="hidden" />업로드</label></div>
+                                <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="image" className="text-indigo-400"/><div className="font-bold text-sm break-keep">3. 앱 배경화면 이미지</div></div><div className="flex gap-2">{appBgImage && <button onClick={() => setAppBgImage(null)} className="px-3 py-2 bg-rose-500/80 hover:bg-rose-500 rounded-lg text-xs font-bold transition-colors break-keep">초기화</button>}<label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors break-keep"><input type="file" accept="image/*" onChange={handleAppBgUpload} className="hidden" />업로드</label></div></div>
                             </div>
                         </div>
                     )}
@@ -877,21 +1008,21 @@
                     <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
                         <div className="flex justify-between items-center mb-4">
                             <div>
-                                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Icon name="shield" /> 운영자(Admin) 권한 계정 관리</h3>
-                                <p className="text-xs text-slate-500 mt-1">{isMaster ? '현장에서 앱을 사용할 업무 담당자의 계정을 생성하고 권한을 관리하세요.' : '내 계정 정보'}</p>
+                                <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 break-keep"><Icon name="shield" /> 운영자(Admin) 권한 계정 관리</h3>
+                                <p className="text-xs text-slate-500 mt-1 break-keep">{isMaster ? '현장에서 앱을 사용할 업무 담당자의 계정을 생성하고 권한을 관리하세요.' : '내 계정 정보'}</p>
                             </div>
                         </div>
                         
                         {isMaster && (
                             <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 items-end">
-                                <div><label className="text-[10px] font-bold text-slate-400 mb-1 block">이름/직책</label><input type="text" id="newAdminName" placeholder="예: 1호차 담당" className="w-full p-3 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-incar" /></div>
-                                <div><label className="text-[10px] font-bold text-slate-400 mb-1 block">로그인 ID</label><input type="text" id="newAdminId" placeholder="사번 등" className="w-full p-3 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-incar" /></div>
-                                <div><label className="text-[10px] font-bold text-slate-400 mb-1 block">비밀번호</label><input type="password" id="newAdminPw" placeholder="PIN" className="w-full p-3 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-incar" /></div>
+                                <div><label className="text-[10px] font-bold text-slate-400 mb-1 block break-keep">이름/직책</label><input type="text" id="newAdminName" placeholder="예: 1호차 담당" className="w-full p-3 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-incar break-keep" /></div>
+                                <div><label className="text-[10px] font-bold text-slate-400 mb-1 block break-keep">로그인 ID</label><input type="text" id="newAdminId" placeholder="사번 등" className="w-full p-3 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-incar break-keep" /></div>
+                                <div><label className="text-[10px] font-bold text-slate-400 mb-1 block break-keep">비밀번호</label><input type="password" id="newAdminPw" placeholder="PIN" className="w-full p-3 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-incar break-keep" /></div>
                                 <div>
-                                    <label className="text-[10px] font-bold text-slate-400 mb-1 block">권한 등급</label>
-                                    <select value={newAdminRole} onChange={(e) => setNewAdminRole(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-incar bg-white">
-                                        <option value="manager">MANAGER (일정변경/설정 가능)</option>
-                                        <option value="staff">STAFF (스캔/조회만 가능)</option>
+                                    <label className="text-[10px] font-bold text-slate-400 mb-1 block break-keep">권한 등급</label>
+                                    <select value={newAdminRole} onChange={(e) => setNewAdminRole(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-incar bg-white break-keep">
+                                        <option value="manager">MANAGER (일정변경/설정)</option>
+                                        <option value="staff">STAFF (스캔/조회만)</option>
                                     </select>
                                 </div>
                                 <button onClick={() => {
@@ -904,27 +1035,27 @@
                                     document.getElementById('newAdminId').value = '';
                                     document.getElementById('newAdminPw').value = '';
                                     setNewAdminRole('manager');
-                                }} className="bg-slate-800 hover:bg-slate-900 transition-colors text-white font-bold rounded-xl shadow-md p-3 w-full">계정 생성</button>
+                                }} className="bg-slate-800 hover:bg-slate-900 transition-colors text-white font-bold rounded-xl shadow-md p-3 w-full break-keep">계정 생성</button>
                             </div>
                         )}
 
                         <div className="overflow-x-auto rounded-xl border border-slate-200">
                             <table className="w-full text-sm text-left">
                                 <thead className="bg-slate-50 text-slate-500 font-bold text-xs">
-                                    <tr><th className="p-3">이름/직책</th><th className="p-3">로그인 ID</th><th className="p-3 text-center">권한 등급</th><th className="p-3">비밀번호</th>{isMaster && <th className="p-3 text-center">관리</th>}</tr>
+                                    <tr><th className="p-3 whitespace-nowrap">이름/직책</th><th className="p-3 whitespace-nowrap">로그인 ID</th><th className="p-3 text-center whitespace-nowrap">권한 등급</th><th className="p-3 whitespace-nowrap">비밀번호</th>{isMaster && <th className="p-3 text-center">관리</th>}</tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
                                     {admins.filter(a => isMaster || a.id === currentAdmin.id).map((a) => (
                                         <tr key={a.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="p-3 font-bold text-slate-800">{a.name}</td>
-                                            <td className="p-3 text-slate-600 font-mono">{a.id}</td>
+                                            <td className="p-3 font-bold text-slate-800 whitespace-nowrap">{a.name}</td>
+                                            <td className="p-3 text-slate-600 font-mono whitespace-nowrap">{a.id}</td>
                                             <td className="p-3 text-center">
                                                 {/* 마스터 계정은 다른 관리자의 권한을 변경 가능 (자기 자신이나 마스터 권한은 변경 불가) */}
                                                 {isMaster && a.role !== 'master' ? (
                                                     <select 
                                                         value={a.role} 
                                                         onChange={(e) => handleUpdateAdminRole(a.id, e.target.value)}
-                                                        className={`text-[10px] px-2 py-1 rounded font-bold border outline-none cursor-pointer ${
+                                                        className={`text-[10px] px-2 py-1 rounded font-bold border outline-none cursor-pointer whitespace-nowrap ${
                                                             a.role === 'manager' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                                         }`}
                                                     >
@@ -932,12 +1063,12 @@
                                                         <option value="staff">STAFF</option>
                                                     </select>
                                                 ) : (
-                                                    <span className={`text-[10px] px-2 py-1 rounded font-bold inline-block ${a.role === 'master' ? 'bg-amber-100 text-amber-700' : a.role === 'manager' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                    <span className={`text-[10px] px-2 py-1 rounded font-bold inline-block whitespace-nowrap ${a.role === 'master' ? 'bg-amber-100 text-amber-700' : a.role === 'manager' ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                                         {a.role.toUpperCase()}
                                                     </span>
                                                 )}
                                             </td>
-                                            <td className="p-3 text-slate-400">{isMaster || a.id === currentAdmin.id ? '••••' : '비공개'}</td>
+                                            <td className="p-3 text-slate-400 whitespace-nowrap">{isMaster || a.id === currentAdmin.id ? '••••' : '비공개'}</td>
                                             {isMaster && (
                                                 <td className="p-3 text-center">
                                                     {a.role !== 'master' && <button onClick={() => handleDeleteAdmin(a.id)} className="p-1.5 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100"><Icon name="trash" size={14}/></button>}
@@ -954,32 +1085,32 @@
                         <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
                             <div className="flex justify-between items-center mb-4">
                                 <div>
-                                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">세션(일정) 상세 속성 관리</h3>
-                                    <p className="text-xs text-slate-500 mt-1">엑셀 업로드 후 일정의 성격(탑승/지급/자유)을 직접 수정합니다. (Master 전용)</p>
+                                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 break-keep">세션(관광/일정) 상세 속성 관리</h3>
+                                    <p className="text-xs text-slate-500 mt-1 break-keep">엑셀 업로드 후 일정의 성격(탑승/지급/자유)을 직접 수정합니다. (Master 전용)</p>
                                 </div>
-                                <div className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-lg">총 {schedules.length}개 세션</div>
+                                <div className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-lg shrink-0">총 {schedules.length}개 세션</div>
                             </div>
                             
                             {schedules.length === 0 ? (
-                                <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm">먼저 [일정 마스터 정보] 엑셀을 업로드해주세요.</div>
+                                <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm break-keep">먼저 [일정 마스터 정보] 엑셀을 업로드해주세요.</div>
                             ) : (
                                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                                     <table className="w-full text-sm text-left">
                                         <thead className="bg-slate-50 text-slate-500 font-bold text-xs">
-                                            <tr><th className="p-3">일자</th><th className="p-3">일정(세션)명</th><th className="p-3">금액({CURRENCY})</th><th className="p-3">타겟옵션=값</th><th className="p-3 text-center">동작 속성 (Type)</th></tr>
+                                            <tr><th className="p-3 whitespace-nowrap">일자</th><th className="p-3 whitespace-nowrap">일정(세션)명</th><th className="p-3 whitespace-nowrap">금액({CURRENCY})</th><th className="p-3 whitespace-nowrap">타겟옵션=값</th><th className="p-3 text-center whitespace-nowrap">동작 속성 (Type)</th></tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
                                             {schedules.map((s) => (
                                                 <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                                                     <td className="p-3 text-slate-500 font-medium whitespace-nowrap">{s.displayDate}</td>
-                                                    <td className="p-3 font-bold text-slate-800">{s.title}</td>
-                                                    <td className="p-3 text-slate-600">{s.price > 0 ? s.price.toLocaleString() : '-'}</td>
-                                                    <td className="p-3 text-xs text-slate-400"><span className="bg-slate-100 px-1.5 py-0.5 rounded">{s.targetKey}</span> = {s.targetVal}</td>
+                                                    <td className="p-3 font-bold text-slate-800 whitespace-nowrap">{s.title}</td>
+                                                    <td className="p-3 text-slate-600 whitespace-nowrap">{s.price > 0 ? s.price.toLocaleString() : '-'}</td>
+                                                    <td className="p-3 text-xs text-slate-400 whitespace-nowrap"><span className="bg-slate-100 px-1.5 py-0.5 rounded">{s.targetKey}</span> = {s.targetVal}</td>
                                                     <td className="p-3 text-center">
                                                         <select 
                                                             value={s.type} 
                                                             onChange={(e) => handleUpdateScheduleType(s.id, e.target.value)}
-                                                            className={`font-bold text-xs p-2 rounded-lg border outline-none cursor-pointer ${
+                                                            className={`font-bold text-xs p-2 rounded-lg border outline-none cursor-pointer whitespace-nowrap ${
                                                                 s.type === 'PAYMENT' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 focus:ring-emerald-500' : 
                                                                 s.type === 'NONE' ? 'bg-slate-100 text-slate-600 border-slate-300 focus:ring-slate-500' : 
                                                                 'bg-indigo-50 text-incar border-indigo-200 focus:ring-incar'
@@ -996,23 +1127,23 @@
                                     </table>
                                 </div>
                             )}
-                            <p className="text-[10px] text-slate-400 mt-3">* <strong>자유/안내 (No Scan)</strong>로 설정된 일정은 스캔 메뉴에서 제외되며 현황판에서 회색으로 표기됩니다.</p>
+                            <p className="text-[10px] text-slate-400 mt-3 break-keep">* <strong>자유/안내 (No Scan)</strong>로 설정된 일정은 스캔 메뉴에서 제외되며 현황판에서 회색으로 표기됩니다.</p>
                         </div>
                     )}
 
                     <div className="bg-slate-100 border border-slate-200 p-6 rounded-3xl flex flex-col md:flex-row justify-between items-center gap-4">
                         <div>
-                            <h4 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Icon name="download" /> 통합 데이터 내보내기</h4>
-                            <p className="text-xs text-slate-500">모든 탑승, 지급 및 변경 이력을 엑셀 파일로 다운로드합니다.</p>
+                            <h4 className="font-bold text-lg text-slate-800 flex items-center gap-2 break-keep"><Icon name="download" /> 통합 데이터 내보내기</h4>
+                            <p className="text-xs text-slate-500 break-keep">모든 탑승, 지급 및 변경 이력을 엑셀 파일로 다운로드합니다.</p>
                         </div>
-                        <button onClick={exportAllData} className="w-full md:w-auto px-6 py-3 bg-slate-800 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-slate-700 transition-colors">전체 엑셀 다운로드</button>
+                        <button onClick={exportAllData} className="w-full md:w-auto px-6 py-3 bg-slate-800 text-white rounded-xl font-bold text-sm shadow-lg hover:bg-slate-700 transition-colors break-keep">전체 엑셀 다운로드</button>
                     </div>
 
                     {isMaster && (
                         <div className="bg-white p-6 rounded-3xl text-center border border-rose-100">
-                            <h4 className="font-bold text-rose-600 mb-2 flex items-center justify-center gap-2"><Icon name="alert"/> 위험 구역 (Danger Zone)</h4>
-                            <p className="text-xs text-slate-500 mb-4">현재 저장된 데이터: {users.length}명 / {schedules.length}세션 / {logs.length}건 로그 / 운영자 {admins.length}명</p>
-                            <button onClick={handleFullReset} className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"><Icon name="trash" size={16} /> 모든 시스템 데이터 영구 삭제</button>
+                            <h4 className="font-bold text-rose-600 mb-2 flex items-center justify-center gap-2 break-keep"><Icon name="alert"/> 위험 구역 (Danger Zone)</h4>
+                            <p className="text-xs text-slate-500 mb-4 break-keep">현재 저장된 데이터: {users.length}명 / {schedules.length}세션 / {logs.length}건 로그 / 운영자 {admins.length}명</p>
+                            <button onClick={handleFullReset} className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors break-keep"><Icon name="trash" size={16} /> 모든 시스템 데이터 영구 삭제</button>
                         </div>
                     )}
                 </div>
@@ -1057,24 +1188,24 @@
                         <div className="w-16 h-16 bg-incar rounded-2xl flex items-center justify-center text-white mx-auto mb-6 shadow-lg shadow-incar/30">
                             <Icon name={isSetup ? "shield" : "lock"} size={32} />
                         </div>
-                        <h2 className="text-3xl font-black text-center text-slate-800 mb-2 tracking-tight">INCARPASS <span className="text-incar">PRO</span></h2>
-                        <p className="text-center text-slate-500 font-medium mb-8 text-sm">{isSetup ? '최초 1회 시스템 마스터 계정을 생성합니다.' : '현장 운영자(Admin) 로그인'}</p>
+                        <h2 className="text-3xl font-black text-center text-slate-800 mb-2 tracking-tight break-keep">INCARPASS <span className="text-incar">PRO</span></h2>
+                        <p className="text-center text-slate-500 font-medium mb-8 text-sm break-keep">{isSetup ? '최초 1회 시스템 마스터 계정을 생성합니다.' : '현장 운영자(Admin) 로그인'}</p>
                         
                         <form onSubmit={handleSubmit} className="space-y-4">
                             {isSetup && (
-                                <div className="animate-fade-in"><label className="block text-xs font-bold text-slate-500 mb-1">마스터 이름/직책</label><input type="text" value={name} onChange={e=>setName(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-incar focus:bg-white transition-colors" placeholder="예: 총괄본부장" /></div>
+                                <div className="animate-fade-in"><label className="block text-xs font-bold text-slate-500 mb-1 break-keep">마스터 이름/직책</label><input type="text" value={name} onChange={e=>setName(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-incar focus:bg-white transition-colors break-keep" placeholder="예: 총괄본부장" /></div>
                             )}
-                            <div><label className="block text-xs font-bold text-slate-500 mb-1">로그인 ID (사번)</label><input type="text" value={id} onChange={e=>setId(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-incar focus:bg-white transition-colors" placeholder="ID 입력" /></div>
-                            <div><label className="block text-xs font-bold text-slate-500 mb-1">비밀번호 (PIN)</label><input type="password" value={pw} onChange={e=>setPw(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-incar focus:bg-white transition-colors" placeholder="비밀번호 입력" /></div>
+                            <div><label className="block text-xs font-bold text-slate-500 mb-1 break-keep">로그인 ID (사번)</label><input type="text" value={id} onChange={e=>setId(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-incar focus:bg-white transition-colors break-keep" placeholder="ID 입력" /></div>
+                            <div><label className="block text-xs font-bold text-slate-500 mb-1 break-keep">비밀번호 (PIN)</label><input type="password" value={pw} onChange={e=>setPw(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold outline-none focus:border-incar focus:bg-white transition-colors break-keep" placeholder="비밀번호 입력" /></div>
                             
                             {!isSetup && (
                                 <div className="flex items-center gap-2 pt-2">
                                     <input type="checkbox" id="rememberMe" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} className="w-4 h-4 text-incar bg-slate-100 border-slate-300 rounded focus:ring-incar" />
-                                    <label htmlFor="rememberMe" className="text-sm font-bold text-slate-600 cursor-pointer">로그인 상태 유지 (자동 로그인)</label>
+                                    <label htmlFor="rememberMe" className="text-sm font-bold text-slate-600 cursor-pointer break-keep">로그인 상태 유지 (자동 로그인)</label>
                                 </div>
                             )}
                             
-                            <button type="submit" className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-lg mt-6 transition-colors active:scale-95 text-lg">
+                            <button type="submit" className="w-full py-4 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl shadow-lg mt-6 transition-colors active:scale-95 text-lg break-keep">
                                 {isSetup ? '시스템 마스터 계정 생성' : '보안 로그인'}
                             </button>
                         </form>
@@ -1128,12 +1259,28 @@
             useEffect(() => {
                 const initLocal = () => {
                     setAdmins(JSON.parse(localStorage.getItem('incar_pro_admins') || '[]'));
-                    setUsers(JSON.parse(localStorage.getItem('incar_pro_users') || '[]'));
+                    const loadedUsers = JSON.parse(localStorage.getItem('incar_pro_users') || '[]');
                     const loadedSched = JSON.parse(localStorage.getItem('incar_pro_schedules') || '[]');
-                    setSchedules(loadedSched);
+                    
+                    if(loadedUsers.length === 0 && loadedSched.length === 0) {
+                        setUsers(defaultUsers);
+                        setSchedules(defaultSchedules);
+                        localStorage.setItem('incar_pro_users', JSON.stringify(defaultUsers));
+                        localStorage.setItem('incar_pro_schedules', JSON.stringify(defaultSchedules));
+                    } else {
+                        setUsers(loadedUsers);
+                        // 순서(order) 보장 정렬 적용
+                        loadedSched.sort((a,b) => {
+                            if (a.date === b.date) return (a.order || 0) - (b.order || 0);
+                            return a.date > b.date ? 1 : -1;
+                        });
+                        setSchedules(loadedSched);
+                    }
+                    
                     setLogs(JSON.parse(localStorage.getItem('incar_pro_logs') || '[]'));
                     setChangeLogs(JSON.parse(localStorage.getItem('incar_pro_changelogs') || '[]'));
-                    const scannable = loadedSched.filter(s => s.type !== 'NONE');
+                    
+                    const scannable = (loadedSched.length > 0 ? loadedSched : defaultSchedules).filter(s => s.type !== 'NONE');
                     if (scannable.length > 0) setTargetSessionId(scannable[0].id);
                     setIsAdminsLoaded(true);
                 };
@@ -1153,7 +1300,10 @@
                         setDb(_db);
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('admins').onSnapshot(snap => { setAdmins(snap.docs.map(d => d.data())); setIsAdminsLoaded(true); });
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').onSnapshot(snap => { 
-                            const list = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b)=>a.date>b.date?1:-1); 
+                            const list = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => {
+                                if (a.date === b.date) return (a.order || 0) - (b.order || 0);
+                                return a.date > b.date ? 1 : -1;
+                            }); 
                             setSchedules(list); 
                             if(list.length > 0 && !targetSessionId) {
                                 const scanOnly = list.filter(s => s.type !== 'NONE');
@@ -1417,23 +1567,49 @@
             const handleUserUpload = async (e) => { 
                 const file = e.target.files[0]; 
                 if (!file) return; 
+                
                 Papa.parse(file, { 
-                    header: true, 
+                    header: false, 
                     skipEmptyLines: true, 
                     complete: async (results) => { 
-                        const parsed = results.data.map(row => { 
-                            const uid = row['사번'] || row['ID'] || row['uid'] || Object.values(row)[0]; 
-                            const name = row['성명'] || row['이름'] || row['Name'] || Object.values(row)[1]; 
-                            const org = row['소속'] || row['부서'] || row['Org'] || '-'; 
-                            const bus = row['버스'] || row['탑승버스'] || row['Bus'] || '미정'; 
-                            const options = {}; 
-                            Object.keys(row).forEach(key => { 
-                                if(!['사번','ID','uid','성명','이름','Name','소속','부서','Org','버스','탑승버스','Bus'].includes(key)) { 
-                                    if(row[key]) options[key] = row[key]; 
-                                } 
-                            }); 
-                            return { uid, name, org, bus, options, penaltyTotal: 0 }; 
-                        }).filter(u => u.uid); 
+                        const data = results.data;
+                        if(data.length < 2) return alert("데이터가 부족합니다.");
+                        
+                        const headers = data[0];
+                        const parsed = [];
+                        
+                        for(let i=1; i<data.length; i++) {
+                            const row = data[i];
+                            let uid = ''; let name = ''; let org = '-'; let bus = '미정';
+                            const options = {};
+                            
+                            headers.forEach((headerName, index) => {
+                                const h = headerName ? headerName.trim() : '';
+                                const val = row[index] ? row[index].trim() : '';
+                                
+                                if (['사번','ID','uid'].includes(h) && !uid) uid = val;
+                                else if (['성명','이름','Name'].includes(h) && !name) name = val;
+                                else if (['소속','부서','Org'].includes(h) && org === '-') org = val;
+                                else if (['버스','탑승버스','Bus'].includes(h) && bus === '미정') bus = val;
+                                else if (h && val) {
+                                    // 엑셀에 동일한 헤더(예: 1일차)가 여러개인 경우 키 충돌 방지
+                                    let keyName = h;
+                                    let counter = 1;
+                                    while(options[keyName] !== undefined) {
+                                        keyName = `${h}_${counter}`;
+                                        counter++;
+                                    }
+                                    options[keyName] = val;
+                                }
+                            });
+                            
+                            // [요청 반영] 버스가 숫자만 있거나 '호차'가 없는 경우 1호차, 2호차 등으로 변환
+                            if (bus !== '미정' && bus !== '' && !bus.includes('호차')) {
+                                bus = bus + '호차';
+                            }
+                            
+                            if (uid) parsed.push({ uid, name, org, bus, options, penaltyTotal: 0 });
+                        }
                         
                         if(confirm(`${parsed.length}명의 참가자 명단을 로드하시겠습니까?`)) { 
                             if (db) { 
@@ -1475,10 +1651,12 @@
                             if (price > 0) type = 'PAYMENT'; 
                             else if (row['타입'] && (row['타입'].includes('지급') || row['타입'].includes('Payment'))) type = 'PAYMENT'; 
                             else if (row['타입'] && (row['타입'].includes('자유') || row['타입'].includes('안내') || row['타입'].includes('None'))) type = 'NONE';
+                            else if (row['타입'] && row['타입'].includes('집합')) type = 'BOARDING';
                             else if (title.includes('자유') || title.includes('휴식') || title.includes('개인') || title.includes('안내')) type = 'NONE';
 
                             return { 
-                                id: `SCHED_${idx}`, 
+                                id: `SCHED_${String(idx).padStart(4, '0')}`, // 정렬 안정성을 위한 패딩
+                                order: idx, // 엑셀에 입력된 순서 기록
                                 date: dateStr, 
                                 displayDate: rawDate, 
                                 title: title, 
@@ -1489,7 +1667,7 @@
                             }; 
                         }); 
                         
-                        if(confirm(`${parsed.length}개의 스케줄을 로드하시겠습니까?\n(로딩 후 설정에서 '일정 속성'을 확인하세요)`)) { 
+                        if(confirm(`${parsed.length}개의 일정을 로드하시겠습니까?\n(로딩 후 설정에서 '일정 속성'을 확인하세요)`)) { 
                             if (db) { 
                                 const batch = db.batch(); 
                                 parsed.forEach(s => { const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(s.id); batch.set(ref, s); }); 
@@ -1504,93 +1682,6 @@
                         } 
                     } 
                 }); 
-            };
-
-            const processScan = async (scannedText, strictMode = false) => { 
-                // [스마트 QR 파싱 로직 추가] "1612001_김해빛나" 형식 또는 URL 파라미터에서 ID 추출
-                let scannedUid = scannedText;
-                if (scannedText.includes('?uid=') || scannedText.includes('?eid=')) {
-                    try { 
-                        const url = new URL(scannedText);
-                        scannedUid = url.searchParams.get('uid') || url.searchParams.get('eid') || scannedText; 
-                    } catch(e){}
-                } else if (scannedText.includes('_')) {
-                    scannedUid = scannedText.split('_')[0]; // "_" 앞부분 사번만 추출
-                }
-
-                let user = users.find(u => String(u.uid) === String(scannedUid)); 
-                if (!user) user = users.find(u => scannedText.includes(String(u.uid))); // 예비 파싱
-
-                if (!user) return setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `스캔된 값: ${scannedText}` }); 
-                
-                const session = schedules.find(s => s.id === targetSessionId); 
-                if (!session) return setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' }); 
-
-                const { isTarget, expectedBus } = getUserSessionInfo(user, session);
-
-                if (!isTarget) {
-                     return setScanResult({ status: 'error', msg: '대상자 아님', subMsg: '해당 일정에 신청되지 않은 참가자입니다.', user, session, requiredChoice: session.targetVal !== 'ALL' ? session.targetVal : session.title });
-                }
-
-                if (session.type === 'BOARDING' && ['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) {
-                     return setScanResult({ status: 'error', msg: '탑승 대상 아님', subMsg: `해당 일정은 [${expectedBus}] 대상자입니다.`, user, session });
-                }
-
-                if (strictMode && session.type === 'BOARDING') {
-                    if (expectedBus.trim() !== targetBus.trim()) {
-                         return setScanResult({ status: 'error', msg: '탑승 불가 (차량 불일치)', subMsg: `배정: ${expectedBus} / 현재: ${targetBus}`, user, session });
-                    }
-                }
-                
-                const isDuplicate = logs.some(l => l.uid === user.uid && l.sessionId === session.id); 
-                if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
-                
-                let finalAmount = 0; let penaltyApplied = 0; 
-                if (session.type === 'PAYMENT') { 
-                    const baseAmount = session.price; const deduction = user.penaltyTotal || 0; 
-                    finalAmount = Math.max(0, baseAmount - deduction); penaltyApplied = (baseAmount - finalAmount); 
-                } 
-                
-                const newLog = { 
-                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toLocaleString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: session.type === 'BOARDING' ? targetBus : '-', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`
-                }; 
-                
-                if (db) { 
-                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); 
-                    if (penaltyApplied > 0) { 
-                        const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
-                        await userRef.update({ penaltyTotal: user.penaltyTotal - penaltyApplied }); 
-                    } 
-                } else { 
-                    setLogs([newLog, ...logs]); 
-                    if (penaltyApplied > 0) { 
-                        const updatedUsers = users.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u); 
-                        setUsers([...updatedUsers]); 
-                    } 
-                } 
-                
-                const todayLogs = logs.filter(l => l.uid === user.uid && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급'); 
-                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
-            };
-
-            const handleUserUpdate = async () => { 
-                if (!selectedUser || !editForm.optKey) return; 
-                const oldVal = selectedUser.options[editForm.optKey]; 
-                const logIdsToRemove = await cleanupOldLogs(selectedUser.uid, editForm.optKey, oldVal, !!db); 
-                const newPenalty = parseInt(editForm.penalty || 0); 
-                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toLocaleString(), uid: selectedUser.uid, name: selectedUser.name, targetOption: editForm.optKey, oldVal: oldVal, newVal: editForm.optVal, penalty: newPenalty, reason: editForm.reason, processedBy: `${currentAdmin.name}(${currentAdmin.id})` }; 
-                if (db) { 
-                    const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(selectedUser.uid)); 
-                    await userRef.update({ options: { ...selectedUser.options, [editForm.optKey]: editForm.optVal }, penaltyTotal: (selectedUser.penaltyTotal || 0) + newPenalty }); 
-                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog); 
-                } else { 
-                    if(logIdsToRemove.length > 0) setLogs(prevLogs => prevLogs.filter(l => !logIdsToRemove.includes(l.id))); 
-                    const totalPenalty = (selectedUser.penaltyTotal || 0) + newPenalty;
-                    setUsers(users.map(u => String(u.uid) === String(selectedUser.uid) ? { ...u, options: { ...u.options, [editForm.optKey]: editForm.optVal }, penaltyTotal: totalPenalty } : u)); 
-                    setSelectedUser({...selectedUser, options: { ...selectedUser.options, [editForm.optKey]: editForm.optVal }, penaltyTotal: totalPenalty});
-                    setChangeLogs([changeLog, ...changeLogs]); 
-                } 
-                alert("변경 및 패널티 적용이 완료되었습니다."); setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' }); setSearchQuery(''); 
             };
 
             return (
@@ -1615,8 +1706,8 @@
                                 { window.innerWidth < 768 && <MobileTab activeTab={activeTab} setActiveTab={setActiveTab} currentAdmin={currentAdmin} /> }
                                 
                                 {selectedSession && <SessionDetailModal session={selectedSession} users={users} logs={logs} onClose={() => setSelectedSession(null)} onManualComplete={handleManualComplete} />}
-                                {refundRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-rose-50 p-6 text-center border-b border-rose-100"><div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">$</div><h3 className="text-xl font-black text-rose-600 mb-1">지급금 반환 필요</h3><p className="text-slate-600 font-bold text-sm">{refundRequest.user.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{refundRequest.amount}</span>을 지급받았습니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2">기존 일정: {refundRequest.oldVal} <br/>▼ <br/>변경 일정: {refundRequest.session.title}</div><button onClick={() => resolveRefundRequest(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>반환 받았습니다</span><span className="text-[10px] opacity-80 font-normal">(패널티 없음)</span></button><button onClick={() => resolveRefundRequest(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>반환받지 못했습니다</span><span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 처리)</span></button><button onClick={() => setRefundRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">취소</button></div></div></div>)}
-                                {forfeitRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-indigo-50 p-6 text-center border-b border-indigo-100"><div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div><h3 className="text-xl font-black text-indigo-900 mb-1">일정 변경 확인 (Case 2)</h3><p className="text-slate-600 font-bold text-sm">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div><button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span></button><button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1"><span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span></button><button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl">취소</button></div></div></div>)}
+                                {refundRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-rose-50 p-6 text-center border-b border-rose-100"><div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">$</div><h3 className="text-xl font-black text-rose-600 mb-1 break-keep">지급금 반환 필요</h3><p className="text-slate-600 font-bold text-sm break-keep">{refundRequest.user.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{refundRequest.amount}</span>을 지급받았습니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2 break-keep">기존 일정: {refundRequest.oldVal} <br/>▼ <br/>변경 일정: {refundRequest.session.title}</div><button onClick={() => resolveRefundRequest(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>반환 받았습니다</span><span className="text-[10px] opacity-80 font-normal">(패널티 없음)</span></button><button onClick={() => resolveRefundRequest(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>반환받지 못했습니다</span><span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 처리)</span></button><button onClick={() => setRefundRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button></div></div></div>)}
+                                {forfeitRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-indigo-50 p-6 text-center border-b border-indigo-100"><div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div><h3 className="text-xl font-black text-indigo-900 mb-1 break-keep">일정 변경 확인 (Case 2)</h3><p className="text-slate-600 font-bold text-sm break-keep">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div><button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span></button><button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span></button><button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button></div></div></div>)}
                             </main>
                             
                             <ResultModal result={scanResult} onClose={() => setScanResult(null)} onForceUpdate={handleForceUpdateAndProcess} currentAdmin={currentAdmin} />
