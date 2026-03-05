@@ -671,7 +671,7 @@
                     const element = document.getElementById("reader"); if (!element) return;
                     if (!scannerRef.current) scannerRef.current = new Html5Qrcode("reader");
                     
-                    // ✅ 기기 호환성을 높이면서 고화질 후방 카메라를 요청하는 가장 안전한 설정
+                    // ✅ 기기 호환성을 극대화한 고급 설정: 환경에 맞게 해상도와 카메라 방향을 부드럽게 조정
                     const config = { 
                         fps: 15, 
                         qrbox: function(viewfinderWidth, viewFinderHeight) {
@@ -680,9 +680,9 @@
                         },
                         aspectRatio: 1.0,
                         videoConstraints: {
-                            facingMode: "environment", // 후방 카메라
-                            // ideal 값을 사용하여 기기가 지원하는 가장 가까운 고해상도를 선택하도록 유도 (에러 방지)
-                            width: { ideal: 1280 }
+                            facingMode: { ideal: "environment" }, // 후방 카메라 우선
+                            width: { ideal: 1920, min: 1280 }, // 고화질 우선, 최소 HD
+                            advanced: [{ focusMode: "continuous" }] // 자동 초점 기능 활성화 시도
                         }
                     };
 
@@ -814,7 +814,7 @@
                     const html5QrCode = new Html5Qrcode(elementId);
                     html5QrCodeRef.current = html5QrCode;
                     
-                    // ✅ 기기 호환성을 높이면서 고화질 후방 카메라를 요청하는 가장 안전한 설정
+                    // ✅ 기기 호환성을 극대화한 고급 설정: 환경에 맞게 해상도와 카메라 방향을 부드럽게 조정
                     const config = { 
                         fps: 15, 
                         qrbox: function(viewfinderWidth, viewFinderHeight) {
@@ -823,9 +823,9 @@
                         }, 
                         aspectRatio: 1.0,
                         videoConstraints: {
-                            facingMode: "environment", // 후방 카메라
-                            // ideal 값을 사용하여 기기가 지원하는 가장 가까운 고해상도를 선택하도록 유도 (에러 방지)
-                            width: { ideal: 1280 }
+                            facingMode: { ideal: "environment" }, // 후방 카메라 우선
+                            width: { ideal: 1920, min: 1280 }, // 고화질 우선, 최소 HD
+                            advanced: [{ focusMode: "continuous" }] // 자동 초점 기능 활성화 시도
                         }
                     };
 
