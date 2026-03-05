@@ -181,7 +181,8 @@
                 lock: <g><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></g>,
                 logOut: <g><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></g>,
                 shield: <g><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></g>,
-                user: <g><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></g>
+                user: <g><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></g>,
+                alertTriangle: <g><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></g>
             };
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="2"/>}</svg>;
         };
@@ -1091,7 +1092,7 @@
             );
         };
 
-        const ManageView = ({ users, handleUserUpload, handleScheduleUpload, handleFullReset, exportAllData, schedules, setSchedules, logs, appBgImage, handleAppBgUpload, setAppBgImage, db, SYSTEM_APP_ID, admins, handleAddAdmin, handleDeleteAdmin, handleUpdateAdminRole, currentAdmin }) => {
+        const ManageView = ({ users, handleUserUpload, handleScheduleUpload, handleFullReset, handlePartialReset, exportAllData, schedules, setSchedules, logs, appBgImage, handleAppBgUpload, setAppBgImage, db, SYSTEM_APP_ID, admins, handleAddAdmin, handleDeleteAdmin, handleUpdateAdminRole, currentAdmin }) => {
             const [editingScheduleId, setEditingScheduleId] = useState(null);
             const [newAdminRole, setNewAdminRole] = useState('manager');
             
@@ -1258,10 +1259,18 @@
                     </div>
 
                     {isMaster && (
-                        <div className="bg-white p-6 rounded-3xl text-center border border-rose-100">
-                            <h4 className="font-bold text-rose-600 mb-2 flex items-center justify-center gap-2 break-keep"><Icon name="alert"/> 위험 구역 (Danger Zone)</h4>
-                            <p className="text-xs text-slate-500 mb-4 break-keep">현재 저장된 데이터: {users.length}명 / {schedules.length}세션 / {logs.length}건 로그 / 운영자 {admins.length}명</p>
-                            <button onClick={handleFullReset} className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors break-keep"><Icon name="trash" size={16} /> 모든 시스템 데이터 영구 삭제</button>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="bg-white p-6 rounded-3xl text-center border border-amber-100">
+                                <h4 className="font-bold text-amber-600 mb-2 flex items-center justify-center gap-2 break-keep"><Icon name="alertTriangle"/> 운영 데이터 초기화</h4>
+                                <p className="text-xs text-slate-500 mb-4 break-keep">참가자 명단, 일정, 탑승/지급 기록만 삭제합니다.<br/>(관리자 계정은 유지됩니다)</p>
+                                <button onClick={handlePartialReset} className="w-full py-3 bg-amber-50 hover:bg-amber-100 text-amber-600 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors break-keep">운영 데이터 비우기</button>
+                            </div>
+                            
+                            <div className="bg-white p-6 rounded-3xl text-center border border-rose-100">
+                                <h4 className="font-bold text-rose-600 mb-2 flex items-center justify-center gap-2 break-keep"><Icon name="alert"/> 공장 초기화 (Danger Zone)</h4>
+                                <p className="text-xs text-slate-500 mb-4 break-keep">관리자 계정을 포함한 모든 시스템 데이터를 영구 삭제합니다.<br/>(현재 운영자 {admins.length}명)</p>
+                                <button onClick={handleFullReset} className="w-full py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors break-keep"><Icon name="trash" size={16} /> 전체 시스템 데이터 영구 삭제</button>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -1467,14 +1476,17 @@
 
             const exportAllData = () => {
                 if(logs.length === 0 && changeLogs.length === 0) return alert("내보낼 데이터가 없습니다.");
-                const formatLogDate = (ts) => {
-                    if (!ts) return '-'; const date = new Date(ts); if (isNaN(date.getTime())) return ts;
-                    const pad = n => n < 10 ? '0'+n : n; return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-                };
+                
                 const combinedData = [];
-                logs.forEach(l => combinedData.push({ rawTime: l.timestamp, 일시: formatLogDate(l.timestamp), 사번: l.uid, 성명: l.name, 구분: l.action, 일정명: l.sessionTitle, 금액: l.finalAmount || 0, 패널티: l.penaltyApplied || 0, 탑승차량: l.bus, 비고: '', 처리자: l.processedBy || '시스템' }));
-                changeLogs.forEach(c => combinedData.push({ rawTime: c.timestamp, 일시: formatLogDate(c.timestamp), 사번: c.uid, 성명: c.name, 구분: '변경', 일정명: c.targetOption, 금액: 0, 패널티: c.penalty || 0, 탑승차량: '', 비고: `${c.oldVal} -> ${c.newVal} | ${c.reason}`, 처리자: c.processedBy || '시스템' }));
-                combinedData.sort((a, b) => new Date(b.rawTime) - new Date(a.rawTime));
+                logs.forEach(l => combinedData.push({ rawTime: l.timestamp, 일시: formatDateSafe(l.timestamp), 사번: l.uid, 성명: l.name, 구분: l.action, 일정명: l.sessionTitle, 금액: l.finalAmount || 0, 패널티: l.penaltyApplied || 0, 탑승차량: l.bus, 비고: '', 처리자: l.processedBy || '시스템' }));
+                changeLogs.forEach(c => combinedData.push({ rawTime: c.timestamp, 일시: formatDateSafe(c.timestamp), 사번: c.uid, 성명: c.name, 구분: '변경', 일정명: c.targetOption, 금액: 0, 패널티: c.penalty || 0, 탑승차량: '', 비고: `${c.oldVal} -> ${c.newVal} | ${c.reason}`, 처리자: c.processedBy || '시스템' }));
+                
+                combinedData.sort((a, b) => {
+                    const tA = new Date(a.rawTime).getTime();
+                    const tB = new Date(b.rawTime).getTime();
+                    return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
+                });
+                
                 const headers = ['일시', '사번', '성명', '구분', '일정명', '금액', '패널티', '탑승차량', '비고', '처리자'];
                 let rows = ''; combinedData.forEach(d => { rows += `<tr><td>${d.일시}</td><td style="mso-number-format:'@'">${d.사번}</td><td>${d.성명}</td><td>${d.구분}</td><td>${d.일정명}</td><td>${d.금액}</td><td>${d.패널티}</td><td>${d.탑승차량}</td><td>${d.비고}</td><td>${d.처리자}</td></tr>`; });
                 const tableHTML = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8"><style>table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #000; padding: 5px; text-align: center; white-space: nowrap; vertical-align: middle; } th { background-color: #f0f0f0; font-weight: bold; }</style></head><body><h3>[INCARPASS 통합 운영 로그]</h3><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></body></html>`;
@@ -1482,8 +1494,28 @@
                 const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `INCARPASS_Unified_Log_${new Date().toISOString().slice(0,10)}.xls`; link.click();
             };
 
+            const handlePartialReset = async () => {
+                if(!confirm("⚠️ 경고: 관리자 계정은 유지하고 참가자 명단, 전체 일정, 모든 탑승 및 변경 기록을 삭제합니다. 진행하시겠습니까?")) return;
+                try {
+                    if(db) {
+                        const collections = ['users', 'schedules', 'logs', 'changelogs'];
+                        for (const col of collections) {
+                            const snapshot = await db.collection('artifacts').doc(SYSTEM_APP_ID).collection(col).get();
+                            const batch = db.batch(); snapshot.docs.forEach(doc => batch.delete(doc.ref)); await batch.commit();
+                        }
+                    } else {
+                        localStorage.removeItem('incar_pro_users');
+                        localStorage.removeItem('incar_pro_schedules');
+                        localStorage.removeItem('incar_pro_logs');
+                        localStorage.removeItem('incar_pro_changelogs');
+                        setUsers([]); setSchedules([]); setLogs([]); setChangeLogs([]);
+                    }
+                    alert("운영 데이터가 비워졌습니다. 이제 새로운 명단과 일정을 업로드하세요.");
+                } catch(e) { console.error(e); alert("운영 데이터 초기화 중 오류가 발생했습니다: " + e.message); }
+            };
+
             const handleFullReset = async () => {
-                if(!confirm("⚠️ 경고: 로컬 및 서버의 모든 데이터(참가자, 일정, 로그)가 삭제됩니다. 정말 진행하시겠습니까?")) return;
+                if(!confirm("⛔ 공장 초기화: 로컬 및 서버의 모든 데이터(관리자 계정 포함)가 완전히 삭제됩니다. 진행하시겠습니까?")) return;
                 try {
                     if(db) {
                         const collections = ['users', 'schedules', 'logs', 'changelogs', 'admins'];
@@ -1492,7 +1524,7 @@
                             const batch = db.batch(); snapshot.docs.forEach(doc => batch.delete(doc.ref)); await batch.commit();
                         }
                     }
-                    localStorage.clear(); sessionStorage.clear(); alert("모든 데이터가 초기화되었습니다."); window.location.reload();
+                    localStorage.clear(); sessionStorage.clear(); alert("시스템이 공장 초기화 되었습니다."); window.location.reload();
                 } catch(e) { console.error(e); alert("초기화 중 오류가 발생했습니다: " + e.message); }
             };
 
@@ -1919,7 +1951,7 @@
                                         {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} />}
                                         {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} />}
                                         {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} schedules={schedules} changeLogs={changeLogs} logs={logs} />}
-                                        {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} exportAllData={exportAllData} handleFullReset={handleFullReset} schedules={schedules} setSchedules={setSchedules} logs={logs} appBgImage={appBgImage} setAppBgImage={setAppBgImage} handleAppBgUpload={handleAppBgUpload} db={db} SYSTEM_APP_ID={SYSTEM_APP_ID} admins={admins} handleAddAdmin={handleAddAdmin} handleDeleteAdmin={handleDeleteAdmin} handleUpdateAdminRole={handleUpdateAdminRole} currentAdmin={currentAdmin} />}
+                                        {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} exportAllData={exportAllData} handleFullReset={handleFullReset} handlePartialReset={handlePartialReset} schedules={schedules} setSchedules={setSchedules} logs={logs} appBgImage={appBgImage} setAppBgImage={setAppBgImage} handleAppBgUpload={handleAppBgUpload} db={db} SYSTEM_APP_ID={SYSTEM_APP_ID} admins={admins} handleAddAdmin={handleAddAdmin} handleDeleteAdmin={handleDeleteAdmin} handleUpdateAdminRole={handleUpdateAdminRole} currentAdmin={currentAdmin} />}
                                     </div>
                                 </div>
                                 { window.innerWidth < 768 && <MobileTab activeTab={activeTab} setActiveTab={setActiveTab} currentAdmin={currentAdmin} /> }
