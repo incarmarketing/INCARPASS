@@ -674,27 +674,36 @@
                     try { cams = await Html5Qrcode.getCameras(); setCameraList(cams); } catch(e){}
                 }
 
-                let camConfig = { facingMode: "environment" };
+                // 🚨 핵심 수정 1: 후방 카메라 우선 탐색
                 let targetId = camIdToUse;
-
-                // 특정 렌즈가 지정되었거나, 후면 카메라 중 하나를 명시적으로 선택
-                if (targetId) {
-                    camConfig = { deviceId: { exact: targetId } };
-                } else if (cams.length > 0) {
-                    const backCams = cams.filter(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('후면') || c.label.toLowerCase().includes('0'));
+                if (!targetId && cams.length > 0) {
+                    // 후면(back, environment, 후면, 0번째 인덱스가 아닌 다른 번호 등) 카메라를 최대한 찾습니다.
+                    const backCams = cams.filter(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('후면') || c.label.toLowerCase().includes('environment'));
                     if (backCams.length > 0) {
-                        targetId = backCams[0].id;
-                        camConfig = { deviceId: { exact: targetId } };
+                        targetId = backCams[backCams.length - 1].id; // 보통 다중 렌즈 중 마지막 렌즈가 광각이 아닌 기본 메인 렌즈일 확률이 높음
+                    } else if (cams.length > 1) {
+                         targetId = cams[1].id; // 이름에 표시가 안 되어 있어도 보통 2번째 렌즈가 후면 렌즈임
                     }
                 }
+                
                 if (targetId) setCurrentCamId(targetId);
+
+                // 🚨 핵심 수정 2: videoConstraints 구조 단순화 및 정확성 부여
+                let configForStart;
+                if (targetId) {
+                    configForStart = targetId; // 특정 카메라 ID가 있으면 그 ID를 직접 넘김 (가장 확실함)
+                } else {
+                    configForStart = { facingMode: "environment" }; // 못 찾았으면 환경(후면) 모드로 강제
+                }
 
                 const config = {
                     fps: 15,
                     qrbox: function(vw, vh) {
                         const min = Math.min(vw, vh);
                         return { width: Math.floor(min * 0.75), height: Math.floor(min * 0.75) };
-                    }
+                    },
+                    // 모바일 네이티브 바코드 엔진 켜기 (종이 인식률 대폭 향상)
+                    experimentalFeatures: { useBarCodeDetectorIfSupported: true }
                 };
 
                 const onScan = (decodedText) => {
@@ -702,25 +711,37 @@
                     processScan(decodedText, isStrictBusMode);
                 };
 
-                // 3단계 폴백(Fallback) 안전장치 적용
+                // 3단계 폴백(Fallback) - 해상도 충돌로 튕기는 것을 막기 위해 화질 강제는 옵션에서 분리했습니다.
                 try {
-                    // 1순위: 고화질 강제 요청
-                    await scannerRef.current.start(camConfig, { ...config, videoConstraints: { width: { ideal: 1920 } } }, onScan, undefined);
+                    await scannerRef.current.start(
+                        configForStart, 
+                        config, 
+                        onScan, 
+                        undefined
+                    );
                     isRunningRef.current = true;
-                } catch(e) {
-                    try {
-                        // 2순위: 기기 기본 화질로 요청
-                        await scannerRef.current.start(camConfig, config, onScan, undefined);
-                        isRunningRef.current = true;
-                    } catch(e2) {
+                    
+                    // 🔥 카메라 켜진 후 자동으로 화면 확대(줌) - 종이 인쇄물 스캔용 필살기
+                    setTimeout(() => {
                         try {
-                            // 3순위: 디바이스 ID 무시하고 브라우저가 주는 아무 후면 카메라나 요청
-                            await scannerRef.current.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScan, undefined);
-                            isRunningRef.current = true;
-                        } catch(e3) {
-                            setIsScanning(false); alert("카메라 접근에 최종 실패했습니다. 권한을 확인해주세요.");
-                        }
-                    }
+                            const track = scannerRef.current.getRunningTrack();
+                            if (track && track.getCapabilities) {
+                                const caps = track.getCapabilities();
+                                if (caps.zoom) {
+                                    track.applyConstraints({ advanced: [{ zoom: Math.min(caps.zoom.max, 2.0) }] });
+                                }
+                            }
+                        } catch(e) {}
+                    }, 500);
+
+                } catch(e) {
+                     // ID 지정해서 실패하면 기본 environment로 재시도
+                     try {
+                         await scannerRef.current.start({ facingMode: "environment" }, config, onScan, undefined);
+                         isRunningRef.current = true;
+                     } catch(e2) {
+                         setIsScanning(false); alert("카메라 접근에 최종 실패했습니다. 권한을 확인해주세요.");
+                     }
                 }
             };
 
@@ -897,26 +918,33 @@
                     try { cams = await Html5Qrcode.getCameras(); setCameraList(cams); } catch(e){}
                 }
 
-                let camConfig = { facingMode: "environment" };
+                // 🚨 핵심 수정 1: 후방 카메라 우선 탐색
                 let targetId = camIdToUse;
-
-                if (targetId) {
-                    camConfig = { deviceId: { exact: targetId } };
-                } else if (cams.length > 0) {
-                    const backCams = cams.filter(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('후면') || c.label.toLowerCase().includes('0'));
+                if (!targetId && cams.length > 0) {
+                    const backCams = cams.filter(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('후면') || c.label.toLowerCase().includes('environment'));
                     if (backCams.length > 0) {
-                        targetId = backCams[0].id;
-                        camConfig = { deviceId: { exact: targetId } };
+                        targetId = backCams[backCams.length - 1].id;
+                    } else if (cams.length > 1) {
+                         targetId = cams[1].id; 
                     }
                 }
                 if (targetId) setCurrentCamId(targetId);
+
+                // 🚨 핵심 수정 2: config 설정
+                let configForStart;
+                if (targetId) {
+                    configForStart = targetId; 
+                } else {
+                    configForStart = { facingMode: "environment" }; 
+                }
 
                 const config = {
                     fps: 15,
                     qrbox: function(vw, vh) {
                         const min = Math.min(vw, vh);
                         return { width: Math.floor(min * 0.75), height: Math.floor(min * 0.75) };
-                    }
+                    },
+                    experimentalFeatures: { useBarCodeDetectorIfSupported: true }
                 };
 
                 const onScanSuccess = (decodedText) => {
@@ -938,16 +966,23 @@
                 };
 
                 try {
-                    await html5QrCodeRef.current.start(camConfig, { ...config, videoConstraints: { width: { ideal: 1920 } } }, onScanSuccess, undefined);
+                    await html5QrCodeRef.current.start(configForStart, config, onScanSuccess, undefined);
+                    
+                    setTimeout(() => {
+                        try {
+                            const track = html5QrCodeRef.current.getRunningTrack();
+                            if (track && track.getCapabilities) {
+                                const caps = track.getCapabilities();
+                                if (caps.zoom) track.applyConstraints({ advanced: [{ zoom: Math.min(caps.zoom.max, 2.0) }] });
+                            }
+                        } catch(e) {}
+                    }, 500);
+
                 } catch(e) {
                     try {
-                        await html5QrCodeRef.current.start(camConfig, config, onScanSuccess, undefined);
+                        await html5QrCodeRef.current.start({ facingMode: "environment" }, config, onScanSuccess, undefined);
                     } catch(e2) {
-                        try {
-                            await html5QrCodeRef.current.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess, undefined);
-                        } catch(e3) {
-                            setIsLookupScanning(false); alert("카메라 접근 실패: " + e3);
-                        }
+                        setIsLookupScanning(false); alert("카메라 접근 실패: " + e2);
                     }
                 }
             };
