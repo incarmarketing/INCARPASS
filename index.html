@@ -417,7 +417,7 @@
                         {session.type !== 'NONE' ? (
                             <>
                                 <div className="flex border-b border-slate-100">
-                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'textemerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '지급 완료' : '탑승 완료'} ({doneList.length})</button>
+                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '지급 완료' : '탑승 완료'} ({doneList.length})</button>
                                     <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '미지급' : '미탑승'} ({yetList.length})</button>
                                 </div>
                                 
@@ -672,18 +672,18 @@
                     if (!scannerRef.current) scannerRef.current = new Html5Qrcode("reader");
                     
                     // ✅ 종이 인쇄된 조밀한 QR 인식을 위한 해상도 및 포커스 최적화
-                    const cameraConfig = { 
-                        facingMode: "environment",
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    };
+                    const cameraConfig = { facingMode: "environment" };
                     const config = { 
                         fps: 15, 
                         qrbox: function(viewfinderWidth, viewFinderHeight) {
                             const minEdgeSize = Math.min(viewfinderWidth, viewFinderHeight);
                             return { width: Math.floor(minEdgeSize * 0.75), height: Math.floor(minEdgeSize * 0.75) };
                         },
-                        aspectRatio: 1.0 
+                        aspectRatio: 1.0,
+                        videoConstraints: {
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 }
+                        }
                     };
 
                     scannerRef.current.start(cameraConfig, config, (decodedText) => {
@@ -815,18 +815,18 @@
                     html5QrCodeRef.current = html5QrCode;
                     
                     // ✅ 조회용 스캐너도 고해상도 + 넓은 인식 영역 적용
-                    const cameraConfig = { 
-                        facingMode: "environment",
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 }
-                    };
+                    const cameraConfig = { facingMode: "environment" };
                     const config = { 
                         fps: 15, 
                         qrbox: function(viewfinderWidth, viewFinderHeight) {
                             const minEdgeSize = Math.min(viewfinderWidth, viewFinderHeight);
                             return { width: Math.floor(minEdgeSize * 0.75), height: Math.floor(minEdgeSize * 0.75) };
                         }, 
-                        aspectRatio: 1.0 
+                        aspectRatio: 1.0,
+                        videoConstraints: {
+                            width: { ideal: 1920 },
+                            height: { ideal: 1080 }
+                        }
                     };
 
                     html5QrCode.start(cameraConfig, config, async (decodedText) => {
