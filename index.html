@@ -188,7 +188,8 @@
                 logOut: <g><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></g>,
                 shield: <g><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></g>,
                 user: <g><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></g>,
-                alertTriangle: <g><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></g>
+                alertTriangle: <g><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></g>,
+                refresh: <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16"/>
             };
             return <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>{icons[name] || <circle cx="12" cy="12" r="2"/>}</svg>;
         };
@@ -608,6 +609,8 @@
         const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile, busList, setBusList }) => {
             const scannerRef = useRef(null); const isRunningRef = useRef(false); const [isStrictBusMode, setIsStrictBusMode] = useState(false);
             const [manualCode, setManualCode] = useState('');
+            const [cameraList, setCameraList] = useState([]);
+            const [currentCamId, setCurrentCamId] = useState(null);
             
             const filteredSchedules = useMemo(() => schedules.filter(s => s.type === mode), [schedules, mode]);
             useEffect(() => { if (filteredSchedules.length > 0) { const exists = filteredSchedules.find(s => s.id === targetSessionId); if (!exists) setTargetSessionId(filteredSchedules[0].id); } else { setTargetSessionId(''); } }, [mode, filteredSchedules]);
@@ -617,18 +620,16 @@
                 let barcodeStr = '';
                 let timeout = null;
                 const handleKeyDown = (e) => {
-                    // 입력 필드 포커스 시 무시
                     if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-                    
                     if (e.key === 'Enter') {
                         if (barcodeStr.length > 0) {
                             processScan(barcodeStr, isStrictBusMode);
                             barcodeStr = '';
                         }
-                    } else if (e.key.length === 1) { // 일반 문자 키만 누적
+                    } else if (e.key.length === 1) { 
                         barcodeStr += e.key;
                         clearTimeout(timeout);
-                        timeout = setTimeout(() => { barcodeStr = ''; }, 100); // 100ms 타임아웃
+                        timeout = setTimeout(() => { barcodeStr = ''; }, 100); 
                     }
                 };
                 window.addEventListener('keydown', handleKeyDown);
@@ -664,48 +665,102 @@
                 }
             };
 
-            const startScanner = () => {
-                if (!targetSessionId) return alert("선택된 일정이 없습니다.");
-                if (isRunningRef.current) return; setIsScanning(true);
-                setTimeout(() => {
-                    const element = document.getElementById("reader"); if (!element) return;
-                    if (!scannerRef.current) scannerRef.current = new Html5Qrcode("reader");
-                    
-                    // ✅ 종이 명찰 스캔의 근본적 문제(초점/해상도) 해결을 위한 완벽한 세팅
-                    const cameraConfig = { 
-                        facingMode: "environment"
-                    };
-                    const config = { 
-                        fps: 15, 
-                        qrbox: 250, // 박스를 고정 크기(250)로 만들어 멀리서 찍도록 유도 (렌즈 초점거리 확보)
-                        aspectRatio: 1.0,
-                        experimentalFeatures: { useBarCodeDetectorIfSupported: true } // 🔥 최신 스마트폰 네이티브 바코드 엔진 사용 (초고속/초정밀)
-                    };
+            const executeScanner = async (camIdToUse = null) => {
+                if (!scannerRef.current) scannerRef.current = new Html5Qrcode("reader");
+                
+                // 카메라 목록 가져오기
+                let cams = cameraList;
+                if (cams.length === 0) {
+                    try { cams = await Html5Qrcode.getCameras(); setCameraList(cams); } catch(e){}
+                }
 
-                    scannerRef.current.start(cameraConfig, config, (decodedText) => {
-                        stopScanner();
-                        processScan(decodedText, isStrictBusMode); 
-                    }, undefined).then(() => { 
-                        isRunningRef.current = true; 
-                        
-                        // 🔥 카메라 켜진 후 자동으로 화면 확대(줌) - 종이 인쇄물 스캔용 필살기
-                        setTimeout(() => {
-                            try {
-                                const track = scannerRef.current.getRunningTrack();
-                                if (track && track.getCapabilities) {
-                                    const caps = track.getCapabilities();
-                                    if (caps.zoom) {
-                                        track.applyConstraints({ advanced: [{ zoom: Math.min(caps.zoom.max, 2.0) }] });
-                                    }
-                                }
-                            } catch(e) {}
-                        }, 500);
+                let camConfig = { facingMode: "environment" };
+                let targetId = camIdToUse;
 
-                    }).catch(err => { setIsScanning(false); alert("카메라 접근 실패: " + err); });
-                }, 100);
+                // 특정 렌즈가 지정되었거나, 후면 카메라 중 하나를 명시적으로 선택
+                if (targetId) {
+                    camConfig = { deviceId: { exact: targetId } };
+                } else if (cams.length > 0) {
+                    const backCams = cams.filter(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('후면') || c.label.toLowerCase().includes('0'));
+                    if (backCams.length > 0) {
+                        targetId = backCams[0].id;
+                        camConfig = { deviceId: { exact: targetId } };
+                    }
+                }
+                if (targetId) setCurrentCamId(targetId);
+
+                const config = {
+                    fps: 15,
+                    qrbox: function(vw, vh) {
+                        const min = Math.min(vw, vh);
+                        return { width: Math.floor(min * 0.75), height: Math.floor(min * 0.75) };
+                    }
+                };
+
+                const onScan = (decodedText) => {
+                    stopScanner();
+                    processScan(decodedText, isStrictBusMode);
+                };
+
+                // 3단계 폴백(Fallback) 안전장치 적용
+                try {
+                    // 1순위: 고화질 강제 요청
+                    await scannerRef.current.start(camConfig, { ...config, videoConstraints: { width: { ideal: 1920 } } }, onScan, undefined);
+                    isRunningRef.current = true;
+                } catch(e) {
+                    try {
+                        // 2순위: 기기 기본 화질로 요청
+                        await scannerRef.current.start(camConfig, config, onScan, undefined);
+                        isRunningRef.current = true;
+                    } catch(e2) {
+                        try {
+                            // 3순위: 디바이스 ID 무시하고 브라우저가 주는 아무 후면 카메라나 요청
+                            await scannerRef.current.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScan, undefined);
+                            isRunningRef.current = true;
+                        } catch(e3) {
+                            setIsScanning(false); alert("카메라 접근에 최종 실패했습니다. 권한을 확인해주세요.");
+                        }
+                    }
+                }
             };
 
-            const stopScanner = () => { if (scannerRef.current && isRunningRef.current) { scannerRef.current.stop(); isRunningRef.current = false; setIsScanning(false); } else { setIsScanning(false); } };
+            const startScanner = () => {
+                if (!targetSessionId) return alert("선택된 일정이 없습니다.");
+                if (isRunningRef.current) return; 
+                setIsScanning(true);
+                setTimeout(() => executeScanner(), 200);
+            };
+
+            const stopScanner = () => {
+                if (scannerRef.current && isRunningRef.current) {
+                    scannerRef.current.stop().then(() => {
+                        scannerRef.current.clear();
+                        isRunningRef.current = false;
+                        setIsScanning(false);
+                    }).catch(() => {
+                        isRunningRef.current = false;
+                        setIsScanning(false);
+                    });
+                } else {
+                    setIsScanning(false);
+                }
+            };
+
+            // 🔥 핵심: 다중 렌즈 휴대폰을 위한 렌즈 수동 전환 기능
+            const handleSwitchCamera = () => {
+                if (cameraList.length < 2) return alert("전환 가능한 다른 렌즈가 없습니다.");
+                const currentIdx = cameraList.findIndex(c => c.id === currentCamId);
+                const nextIdx = (currentIdx + 1) % cameraList.length;
+                const nextCamId = cameraList[nextIdx].id;
+                setCurrentCamId(nextCamId);
+
+                if (scannerRef.current && isRunningRef.current) {
+                    scannerRef.current.stop().then(() => {
+                        isRunningRef.current = false;
+                        setTimeout(() => executeScanner(nextCamId), 200);
+                    }).catch(() => {});
+                }
+            };
 
             const handleManualSubmit = (e) => {
                 e.preventDefault();
@@ -790,8 +845,17 @@
                         <div className="fixed inset-0 z-[100] bg-black/95 flex flex-col items-center justify-center p-6 animate-fade-in">
                             <button onClick={stopScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full z-[101]"><Icon name="x" size={32} /></button>
                             <div className="scanner-container"><div id="reader"></div></div>
-                            <p className="text-white mt-10 font-bold text-xl animate-pulse text-center break-keep">참가자 명찰의 QR코드를 비춰주세요</p>
-                            <p className="text-amber-400 mt-3 text-sm text-center break-keep font-bold">💡 초점이 맞지 않으면<br/>명찰에서 15cm 정도 떨어뜨려보세요.</p>
+                            <p className="text-white mt-8 font-bold text-xl animate-pulse text-center break-keep">참가자 명찰의 QR코드를 비춰주세요</p>
+                            
+                            {cameraList.length > 1 && (
+                                <button onClick={handleSwitchCamera} className="mt-6 px-6 py-3 bg-incar text-white font-bold rounded-full shadow-lg flex items-center gap-2 active:scale-95 transition-transform z-[101]">
+                                    <Icon name="refresh" size={18} /> 렌즈 변경 (초점이 안 맞을 때)
+                                </button>
+                            )}
+                            
+                            <p className="text-amber-400 mt-4 text-xs text-center break-keep font-medium leading-relaxed">
+                                💡 가까이 대지 마시고 15cm 정도 떨어뜨려주세요.<br/>렌즈가 여러 개인 폰은 '렌즈 변경' 버튼을 누르면 초점이 맞습니다.
+                            </p>
                         </div>
                     )}
                 </div>
@@ -805,6 +869,9 @@
             const [financialImpact, setFinancialImpact] = useState(null);
             const [showQrModal, setShowQrModal] = useState(false);
             const html5QrCodeRef = useRef(null);
+            
+            const [cameraList, setCameraList] = useState([]);
+            const [currentCamId, setCurrentCamId] = useState(null);
             
             // 일정 변경 팝업 모달을 위한 지역 상태
             const [localRefundReq, setLocalRefundReq] = useState(null);
@@ -822,58 +889,98 @@
 
             useEffect(() => { return () => { if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) { html5QrCodeRef.current.stop(); html5QrCodeRef.current.clear(); } }; }, []);
 
-            const startLookupScanner = () => {
-                setIsLookupScanning(true);
-                setTimeout(() => {
-                    const elementId = "lookup-reader";
-                    if (!document.getElementById(elementId)) return;
-                    if (html5QrCodeRef.current) { if(html5QrCodeRef.current.isScanning) return; html5QrCodeRef.current.clear(); }
-                    const html5QrCode = new Html5Qrcode(elementId);
-                    html5QrCodeRef.current = html5QrCode;
+            const executeLookupScanner = async (camIdToUse = null) => {
+                if (!html5QrCodeRef.current) html5QrCodeRef.current = new Html5Qrcode("lookup-reader");
+                
+                let cams = cameraList;
+                if (cams.length === 0) {
+                    try { cams = await Html5Qrcode.getCameras(); setCameraList(cams); } catch(e){}
+                }
+
+                let camConfig = { facingMode: "environment" };
+                let targetId = camIdToUse;
+
+                if (targetId) {
+                    camConfig = { deviceId: { exact: targetId } };
+                } else if (cams.length > 0) {
+                    const backCams = cams.filter(c => c.label.toLowerCase().includes('back') || c.label.toLowerCase().includes('후면') || c.label.toLowerCase().includes('0'));
+                    if (backCams.length > 0) {
+                        targetId = backCams[0].id;
+                        camConfig = { deviceId: { exact: targetId } };
+                    }
+                }
+                if (targetId) setCurrentCamId(targetId);
+
+                const config = {
+                    fps: 15,
+                    qrbox: function(vw, vh) {
+                        const min = Math.min(vw, vh);
+                        return { width: Math.floor(min * 0.75), height: Math.floor(min * 0.75) };
+                    }
+                };
+
+                const onScanSuccess = (decodedText) => {
+                    stopLookupScanner();
+                    let scannedUid = decodedText;
+                    if (decodedText.includes('eid=')) {
+                        scannedUid = decodedText.split('eid=')[1].split('&')[0];
+                    } else if (decodedText.includes('uid=')) {
+                        scannedUid = decodedText.split('uid=')[1].split('&')[0];
+                    } else if (decodedText.includes('_')) {
+                        scannedUid = decodedText.split('_')[0];
+                    }
+                    scannedUid = scannedUid.trim();
                     
-                    const cameraConfig = { 
-                        facingMode: "environment"
-                    };
-                    const config = { 
-                        fps: 15, 
-                        qrbox: 250, 
-                        aspectRatio: 1.0,
-                        experimentalFeatures: { useBarCodeDetectorIfSupported: true }
-                    };
+                    let found = users.find(u => String(u.uid) === String(scannedUid));
+                    if (!found) found = users.find(u => decodedText.includes(String(u.uid))); 
 
-                    html5QrCode.start(cameraConfig, config, async (decodedText) => {
-                        try { if (html5QrCode.isScanning) await html5QrCode.stop(); html5QrCode.clear(); } catch (err) { console.warn(err); }
-                        setIsLookupScanning(false); html5QrCodeRef.current = null;
-                        
-                        let scannedUid = decodedText;
-                        if (decodedText.includes('eid=')) {
-                            scannedUid = decodedText.split('eid=')[1].split('&')[0];
-                        } else if (decodedText.includes('uid=')) {
-                            scannedUid = decodedText.split('uid=')[1].split('&')[0];
-                        } else if (decodedText.includes('_')) {
-                            scannedUid = decodedText.split('_')[0];
+                    if (found) setSelectedUser(found); else alert(`미등록 사용자입니다. (스캔된 값: ${decodedText})`);
+                };
+
+                try {
+                    await html5QrCodeRef.current.start(camConfig, { ...config, videoConstraints: { width: { ideal: 1920 } } }, onScanSuccess, undefined);
+                } catch(e) {
+                    try {
+                        await html5QrCodeRef.current.start(camConfig, config, onScanSuccess, undefined);
+                    } catch(e2) {
+                        try {
+                            await html5QrCodeRef.current.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, onScanSuccess, undefined);
+                        } catch(e3) {
+                            setIsLookupScanning(false); alert("카메라 접근 실패: " + e3);
                         }
-                        scannedUid = scannedUid.trim();
-                        
-                        let found = users.find(u => String(u.uid) === String(scannedUid));
-                        if (!found) found = users.find(u => decodedText.includes(String(u.uid))); 
-
-                        if (found) setSelectedUser(found); else alert(`미등록 사용자입니다. (스캔된 값: ${decodedText})`);
-                    }, undefined).then(() => {
-                        setTimeout(() => {
-                            try {
-                                const track = html5QrCode.getRunningTrack();
-                                if (track && track.getCapabilities) {
-                                    const caps = track.getCapabilities();
-                                    if (caps.zoom) track.applyConstraints({ advanced: [{ zoom: Math.min(caps.zoom.max, 2.0) }] });
-                                }
-                            } catch(e) {}
-                        }, 500);
-                    }).catch(err => { setIsLookupScanning(false); alert("카메라 접근 실패: " + err); });
-                }, 300);
+                    }
+                }
             };
 
-            const stopLookupScanner = async () => { if (html5QrCodeRef.current) { try { if (html5QrCodeRef.current.isScanning) await html5QrCodeRef.current.stop(); html5QrCodeRef.current.clear(); } catch (err) {} html5QrCodeRef.current = null; } setIsLookupScanning(false); };
+            const startLookupScanner = () => {
+                setIsLookupScanning(true);
+                setTimeout(() => executeLookupScanner(), 200);
+            };
+
+            const stopLookupScanner = () => {
+                if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+                    html5QrCodeRef.current.stop().then(() => {
+                        html5QrCodeRef.current.clear();
+                        setIsLookupScanning(false);
+                    }).catch(() => setIsLookupScanning(false));
+                } else {
+                    setIsLookupScanning(false);
+                }
+            };
+
+            const handleSwitchCamera = () => {
+                if (cameraList.length < 2) return alert("전환 가능한 다른 렌즈가 없습니다.");
+                const currentIdx = cameraList.findIndex(c => c.id === currentCamId);
+                const nextIdx = (currentIdx + 1) % cameraList.length;
+                const nextCamId = cameraList[nextIdx].id;
+                setCurrentCamId(nextCamId);
+
+                if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+                    html5QrCodeRef.current.stop().then(() => {
+                        setTimeout(() => executeLookupScanner(nextCamId), 200);
+                    }).catch(() => {});
+                }
+            };
 
             const userSchedules = useMemo(() => {
                 if (!selectedUser || !schedules) return [];
@@ -1009,8 +1116,17 @@
                             <div className="fixed inset-0 z-[300] bg-black/95 flex flex-col items-center justify-center p-6 animate-fade-in" style={{ touchAction: 'none' }}>
                                 <button onClick={stopLookupScanner} className="absolute top-8 right-8 text-white p-3 bg-white/10 rounded-full z-[101]"><Icon name="x" size={32} /></button>
                                 <div className="scanner-container"><div id="lookup-reader"></div></div>
-                                <p className="text-white mt-10 font-bold text-xl animate-pulse text-center break-keep">조회할 QR코드를 스캔하세요</p>
-                                <p className="text-amber-400 mt-3 text-sm text-center break-keep font-bold">💡 초점이 맞지 않으면<br/>명찰에서 15cm 정도 떨어뜨려보세요.</p>
+                                <p className="text-white mt-8 font-bold text-xl animate-pulse text-center break-keep">조회할 QR코드를 스캔하세요</p>
+                                
+                                {cameraList.length > 1 && (
+                                    <button onClick={handleSwitchCamera} className="mt-6 px-6 py-3 bg-incar text-white font-bold rounded-full shadow-lg flex items-center gap-2 active:scale-95 transition-transform z-[101]">
+                                        <Icon name="refresh" size={18} /> 렌즈 변경 (초점이 안 맞을 때)
+                                    </button>
+                                )}
+                                
+                                <p className="text-amber-400 mt-4 text-xs text-center break-keep font-medium leading-relaxed">
+                                    💡 가까이 대지 마시고 15cm 정도 떨어뜨려주세요.<br/>렌즈가 여러 개인 폰은 '렌즈 변경' 버튼을 누르면 초점이 맞습니다.
+                                </p>
                             </div>
                         )}
 
