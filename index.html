@@ -417,7 +417,7 @@
                         {session.type !== 'NONE' ? (
                             <>
                                 <div className="flex border-b border-slate-100">
-                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '지급 완료' : '탑승 완료'} ({doneList.length})</button>
+                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'textemerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '지급 완료' : '탑승 완료'} ({doneList.length})</button>
                                     <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '미지급' : '미탑승'} ({yetList.length})</button>
                                 </div>
                                 
@@ -670,8 +670,23 @@
                 setTimeout(() => {
                     const element = document.getElementById("reader"); if (!element) return;
                     if (!scannerRef.current) scannerRef.current = new Html5Qrcode("reader");
-                    const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 };
-                    scannerRef.current.start({ facingMode: "environment" }, config, (decodedText) => {
+                    
+                    // ✅ 종이 인쇄된 조밀한 QR 인식을 위한 해상도 및 포커스 최적화
+                    const cameraConfig = { 
+                        facingMode: "environment",
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    };
+                    const config = { 
+                        fps: 15, 
+                        qrbox: function(viewfinderWidth, viewFinderHeight) {
+                            const minEdgeSize = Math.min(viewfinderWidth, viewFinderHeight);
+                            return { width: Math.floor(minEdgeSize * 0.75), height: Math.floor(minEdgeSize * 0.75) };
+                        },
+                        aspectRatio: 1.0 
+                    };
+
+                    scannerRef.current.start(cameraConfig, config, (decodedText) => {
                         stopScanner();
                         processScan(decodedText, isStrictBusMode); 
                     }, () => {}).then(() => { isRunningRef.current = true; }).catch(err => { setIsScanning(false); alert("카메라 권한을 확인해주세요."); });
@@ -798,7 +813,23 @@
                     if (html5QrCodeRef.current) { if(html5QrCodeRef.current.isScanning) return; html5QrCodeRef.current.clear(); }
                     const html5QrCode = new Html5Qrcode(elementId);
                     html5QrCodeRef.current = html5QrCode;
-                    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 }, async (decodedText) => {
+                    
+                    // ✅ 조회용 스캐너도 고해상도 + 넓은 인식 영역 적용
+                    const cameraConfig = { 
+                        facingMode: "environment",
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    };
+                    const config = { 
+                        fps: 15, 
+                        qrbox: function(viewfinderWidth, viewFinderHeight) {
+                            const minEdgeSize = Math.min(viewfinderWidth, viewFinderHeight);
+                            return { width: Math.floor(minEdgeSize * 0.75), height: Math.floor(minEdgeSize * 0.75) };
+                        }, 
+                        aspectRatio: 1.0 
+                    };
+
+                    html5QrCode.start(cameraConfig, config, async (decodedText) => {
                         try { if (html5QrCode.isScanning) await html5QrCode.stop(); html5QrCode.clear(); } catch (err) { console.warn(err); }
                         setIsLookupScanning(false); html5QrCodeRef.current = null;
                         
@@ -1101,10 +1132,10 @@
                                     <div className="p-6 space-y-4">
                                         <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {localForfeitReq.oldVal} (예약취소)<br/>▼ <br/>변경: {localForfeitReq.newVal} (예상 지급액 {CURRENCY}{localForfeitReq.price})</div>
                                         <button onClick={() => resolveLocalForfeit(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>위약금 적용 (부지급)</span><span className="text-[10px] opacity-80 font-normal">(지급액을 패널티로 상계)</span>
+                                            <span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(지급액을 패널티로 상계)</span>
                                         </button>
                                         <button onClick={() => resolveLocalForfeit(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>위약금 면제</span><span className="text-[10px] opacity-80 font-normal">(추후 정상 지급)</span>
+                                            <span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span>
                                         </button>
                                         <button onClick={() => setLocalForfeitReq(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button>
                                     </div>
