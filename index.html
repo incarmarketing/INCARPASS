@@ -69,6 +69,9 @@
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
         const CURRENCY = '$';
 
+        // 🔥 고객 시트 연동을 위한 URL
+        const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbx2tVkT00Z8uXQWl6EeTIUUhZ3_NJHx3JDqSCHC5oJWkUCm0OtcTmaV6g20cNKoh0no9w/exec";
+
         // 모바일 사파리 등에서 오류를 방지하기 위한 안전한 시간 포맷팅 함수
         const formatTimeSafe = (ts) => {
             if (!ts) return '';
@@ -253,14 +256,24 @@
             if (!result) return null;
             const { status, msg, subMsg, user, logs, relatedLogs, requiredChoice, session } = result;
             const isSuccess = status === 'success';
+            const isDuplicate = status === 'duplicate';
             const isTargetMismatch = status === 'error' && msg === '대상자 아님';
             const isBusMismatch = status === 'error' && msg === '탑승 불가 (차량 불일치)';
             
-            useEffect(() => { if(isSuccess) { const timer = setTimeout(onClose, 2000); return () => clearTimeout(timer); } }, [isSuccess]);
+            // 🔥 [수정] 팝업 자동 닫기 로직 (성공이든 중복이든 1.5초 후 자동 닫힘)
+            // 단, 사용자의 액션이 필요한 에러(대상자 아님)일 때는 자동으로 안 닫히게 함
+            useEffect(() => { 
+                if(isSuccess || isDuplicate || isBusMismatch) { 
+                    const timer = setTimeout(() => {
+                        onClose();
+                    }, 1500); // 1.5초 (1500ms) 대기 후 자동으로 팝업 닫음
+                    return () => clearTimeout(timer); 
+                } 
+            }, [isSuccess, isDuplicate, isBusMismatch, onClose]);
 
             return (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-slide-up">
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={onClose}>
+                    <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-slide-up" onClick={e => e.stopPropagation()}>
                         <div className={`p-8 text-center flex flex-col items-center justify-center ${isSuccess ? 'bg-emerald-50' : (status==='duplicate'?'bg-amber-50':'bg-rose-50')}`}>
                             <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-4 ${isSuccess ? 'bg-emerald-100 text-emerald-600' : (status==='duplicate'?'bg-amber-100 text-amber-600':'bg-rose-100 text-rose-600')}`}>
                                 <Icon name={isSuccess ? 'check' : (status==='duplicate'?'alert':'x')} size={40} />
@@ -621,6 +634,7 @@
                     const timer = setTimeout(() => { isProcessingRef.current = false; }, 500);
                     return () => clearTimeout(timer);
                 } else {
+                    // 결과 팝업이 떠있으면 처리 상태로 락(Lock)을 걸어 스캔 방지
                     isProcessingRef.current = true;
                 }
             }, [scanResult]);
@@ -718,7 +732,7 @@
                 const onScan = (decodedText) => {
                     if (isProcessingRef.current) return; // 🔥 모달이 떠있을 때는 스캔 무시 (카메라는 유지)
                     isProcessingRef.current = true;
-                    // stopScanner(); // 🔥 삭제: 카메라를 끄지 않고 유지합니다.
+                    // stopScanner(); // 🔥 삭제: 카메라를 끄지 않고 백그라운드에 유지합니다.
                     processScan(decodedText, isStrictBusMode);
                 };
 
@@ -1051,8 +1065,8 @@
                 const oldRelatedSchedules = schedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === oldVal);
                 const newRelatedSchedules = schedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === newVal);
 
-                const oldPrice = oldRelatedSchedules.filter(s => s.type === 'PAYMENT').reduce((sum, s) => sum + (s.price || 0), 0);
-                const newPrice = newRelatedSchedules.filter(s => s.type === 'PAYMENT').reduce((sum, s) => sum + (s.price || 0), 0);
+                const oldPrice = oldRelatedSchedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === oldVal && s.type === 'PAYMENT').reduce((sum, s) => sum + (s.price || 0), 0);
+                const newPrice = newRelatedSchedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === newVal && s.type === 'PAYMENT').reduce((sum, s) => sum + (s.price || 0), 0);
                 
                 const oldLogs = logs.filter(l => l.uid === selectedUser.uid && oldRelatedSchedules.some(s => s.id === l.sessionId));
                 const paidAmount = oldLogs.filter(l => l.action === '지급').reduce((sum, l) => sum + (l.finalAmount || 0), 0);
@@ -1835,6 +1849,22 @@
                 if(!confirm(`${user.name}님을 수동으로 [${session.type==='PAYMENT'?'지급완료':'탑승완료'}] 처리하시겠습니까?`)) return;
                 const newLog = { id: `LOG_${Date.now()}_MANUAL`, timestamp: new Date().toISOString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: '수동처리', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: 0, finalAmount: session.type === 'PAYMENT' ? session.price : 0, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
                 if(db) { await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); } else { setLogs([newLog, ...logs]); }
+                
+                // 🔥 [추가] 관리자가 수동으로 지급 처리할 때 구글 시트 연동
+                if (session.type === 'PAYMENT') {
+                    fetch(GOOGLE_SHEET_URL, {
+                        method: "POST", mode: "no-cors",
+                        body: JSON.stringify({ 
+                            type: "meal", 
+                            id: user.uid, 
+                            name: user.name, 
+                            action: "APPROVE", 
+                            tour: session.title, 
+                            time: formatTimeSafe(newLog.timestamp) 
+                        })
+                    }).catch(console.error);
+                }
+                
                 alert("처리되었습니다.");
             };
 
@@ -1899,6 +1929,21 @@
                         const updatedUsers2 = users.map(u => u.uid === user.uid ? { ...u, penaltyTotal: currentPenalty - penaltyApplied } : u); 
                         setUsers([...updatedUsers2]); 
                     } 
+                }
+                
+                // 🔥 [추가] 관리자가 스캔/변경으로 지급 처리할 때 구글 시트 연동
+                if (session.type === 'PAYMENT') {
+                    fetch(GOOGLE_SHEET_URL, {
+                        method: "POST", mode: "no-cors",
+                        body: JSON.stringify({ 
+                            type: "meal", 
+                            id: user.uid, 
+                            name: user.name, 
+                            action: "APPROVE", 
+                            tour: session.title, 
+                            time: formatTimeSafe(newLog.timestamp) 
+                        })
+                    }).catch(console.error);
                 }
 
                 setScanResult(null); 
@@ -2113,6 +2158,7 @@
                     }
                 }
                 
+                // 🔥 [핵심수정] 이미 처리되었는지 확인할 때 상태(logs)를 직접 읽어와서 카운트 누적 방지!
                 const isDuplicate = logs.some(l => l.uid === user.uid && l.sessionId === session.id); 
                 if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
                 
@@ -2139,6 +2185,21 @@
                     } 
                 } 
                 
+                // 🔥 [추가] 일반 스캔으로 지급 처리할 때 구글 시트 연동
+                if (session.type === 'PAYMENT') {
+                    fetch(GOOGLE_SHEET_URL, {
+                        method: "POST", mode: "no-cors",
+                        body: JSON.stringify({ 
+                            type: "meal", 
+                            id: user.uid, 
+                            name: user.name, 
+                            action: "APPROVE", 
+                            tour: session.title, 
+                            time: formatTimeSafe(newLog.timestamp) 
+                        })
+                    }).catch(console.error);
+                }
+
                 const todayLogs = logs.filter(l => l.uid === user.uid && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급'); 
                 setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
             }, [db, users, schedules, logs, targetSessionId, targetBus, currentAdmin]);
