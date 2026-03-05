@@ -67,7 +67,25 @@
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef, useCallback } = React;
-        const CURRENCY = '₩';
+        const CURRENCY = '$';
+
+        // 모바일 사파리 등에서 오류를 방지하기 위한 안전한 시간 포맷팅 함수
+        const formatTimeSafe = (ts) => {
+            if (!ts) return '';
+            const d = new Date(ts);
+            if (isNaN(d.getTime())) {
+                const parts = ts.split(' ');
+                return parts.length >= 2 ? parts.slice(-2).join(' ') : ts;
+            }
+            return d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+        };
+
+        const formatDateSafe = (ts) => {
+            if (!ts) return '';
+            const d = new Date(ts);
+            if (isNaN(d.getTime())) return ts;
+            return `${d.getMonth()+1}/${d.getDate()} ${formatTimeSafe(ts)}`;
+        };
 
         // 기본 대만 일정 데이터 세팅 (order 필드 추가)
         const defaultSchedules = [
@@ -101,27 +119,25 @@
             
             let isTarget = false; let expectedBus = '미정'; let matchedKey = null;
 
+            // 1. 타겟값이 텍스트 자체에 포함되어 있는지 검사 (CSV 중복 헤더 대응)
             for (const key of Object.keys(user.options)) {
                 if (key.includes('버스')) continue;
                 const val = user.options[key];
-                if (val && typeof val === 'string') {
-                    // 코스명이 포함된 경우
-                    if (val.includes(session.title)) {
-                        isTarget = true; matchedKey = key; break;
-                    }
-                    // "전체" 라고 적혀있는 경우 해당 일자의 모든 일정을 타겟으로 인식
-                    if (val.includes('전체') && (session.targetKey === key || session.displayDate.includes(key))) {
+                if (typeof val === 'string') {
+                    if (val.includes(session.title) || 
+                       (session.targetVal !== 'ALL' && val.includes(session.targetVal)) ||
+                       (session.targetKey !== 'ALL' && val.includes(session.targetKey))) {
                         isTarget = true; matchedKey = key; break;
                     }
                 }
             }
+            
+            // 2. 명시적인 타겟옵션(Key)과 매칭
             if (!isTarget && session.targetKey && session.targetKey !== 'ALL') {
                 const userVal = user.options[session.targetKey];
-                // "전체" 라고 적혀있는 경우 타겟옵션 매칭에도 인식되도록 추가
-                if (session.targetVal === 'ALL' ? !!userVal : (userVal && (userVal.includes(session.targetVal) || userVal.includes('전체')))) { 
-                    isTarget = true; matchedKey = session.targetKey; 
-                }
+                if (session.targetVal === 'ALL' ? !!userVal : (userVal && userVal.includes(session.targetVal))) { isTarget = true; matchedKey = session.targetKey; }
             }
+            
             if (!isTarget && session.targetKey === 'ALL') isTarget = true;
             
             // 버스 확인
@@ -425,7 +441,7 @@
                                                                         {isCrossBoarded && <div className="text-[10px] text-amber-600 font-bold mt-0.5 break-keep">원래 배정: {expectedBus}</div>}
                                                                     </div>
                                                                 </div>
-                                                                {tab === 'done' && u.log && <div className="text-right shrink-0 ml-2">{session.type === 'PAYMENT' && <div className="font-bold text-emerald-600 text-sm">{CURRENCY}{u.log.finalAmount}</div>}<div className="text-[10px] text-slate-400">{new Date(u.log.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div></div>}
+                                                                {tab === 'done' && u.log && <div className="text-right shrink-0 ml-2">{session.type === 'PAYMENT' && <div className="font-bold text-emerald-600 text-sm">{CURRENCY}{u.log.finalAmount}</div>}<div className="text-[10px] text-slate-400">{formatTimeSafe(u.log.timestamp)}</div></div>}
                                                                 {tab === 'yet' && <button onClick={() => onManualComplete(u, session)} className="px-3 py-1.5 bg-slate-800 text-white text-[10px] font-bold rounded-lg hover:bg-slate-700 shadow-sm shrink-0 ml-2">수동 완료</button>}
                                                             </div>
                                                         )
@@ -466,12 +482,7 @@
             );
         };
 
-        const DashboardView = ({ users, logs, scheduleStats, groupedStats, changeLogs, onSessionClick }) => {
-            const actionableStats = useMemo(() => scheduleStats.filter(s => s.type !== 'NONE'), [scheduleStats]);
-            const totalTarget = actionableStats.reduce((sum, s) => sum + s.targetCount, 0);
-            const totalDone = actionableStats.reduce((sum, s) => sum + s.doneCount, 0);
-            const globalPercent = totalTarget > 0 ? Math.round((totalDone / totalTarget) * 100) : 0;
-
+        const DashboardView = ({ users, logs, scheduleStats, groupedStats, groupKeys, changeLogs, onSessionClick }) => {
             return (
                 <div className="space-y-6 animate-slide-up">
                     
@@ -539,32 +550,35 @@
                         <div className="p-5 border-b border-slate-100 bg-slate-50/50">
                             <h3 className="font-bold text-slate-800 flex items-center gap-2 break-keep"><Icon name="table" className="text-incar"/> 상세 현황 분석표</h3>
                         </div>
-                        {Object.entries(groupedStats).length === 0 ? <div className="p-10 text-center text-slate-400">데이터가 없습니다.</div> : (
+                        {groupKeys.length === 0 ? <div className="p-10 text-center text-slate-400">데이터가 없습니다.</div> : (
                             <div className="p-6 space-y-8">
-                                {Object.entries(groupedStats).sort().map(([date, stats]) => (
-                                    <div key={date}>
-                                        <h4 className="text-xs font-bold text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-3">{date}</h4>
-                                        <div className="overflow-x-auto rounded-xl border border-slate-200">
-                                            <table className="w-full text-left data-table">
-                                                <thead><tr><th className="min-w-[120px]">관광/일정명</th><th className="text-center">속성</th><th className="text-right">대상(Target)</th><th className="text-right">탑승(Done)</th><th className="text-center border-l border-slate-200">상태</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
-                                                <tbody>
-                                                    {stats.map(s => (
-                                                        <tr key={s.id} onClick={() => onSessionClick(s)} className="cursor-pointer hover:bg-slate-50 transition-colors">
-                                                            <td className="font-bold text-slate-700 whitespace-nowrap">{s.title}</td>
-                                                            <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':s.type==='NONE'?'bg-slate-100 text-slate-500 border-slate-200':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':s.type==='NONE'?'안내/자유':'탑승'}</span></td>
-                                                            <td className="text-right text-slate-500">{s.type === 'NONE' ? '-' : s.targetCount}</td>
-                                                            <td className="text-right font-bold text-slate-900">{s.type === 'NONE' ? '-' : s.doneCount}</td>
-                                                            <td className="text-center border-l border-slate-50">{s.type === 'NONE' ? <span className="text-slate-400 text-xs">스캔없음</span> : s.targetCount - s.doneCount === 0 ? <span className="text-emerald-500 font-bold text-xs whitespace-nowrap">Complete</span> : <span className="text-rose-500 font-bold text-xs whitespace-nowrap">{s.targetCount - s.doneCount}명 남음</span>}</td>
-                                                            <td className="text-right text-slate-400 whitespace-nowrap">{s.type==='PAYMENT'?`${CURRENCY}${s.expectedAmount.toLocaleString()}`:'-'}</td>
-                                                            <td className="text-right font-bold text-emerald-600 whitespace-nowrap">{s.type==='PAYMENT'?`${CURRENCY}${s.actualAmount.toLocaleString()}`:'-'}</td>
-                                                            <td className="text-center border-l border-slate-50">{s.type !== 'PAYMENT' ? '-' : (s.diffAmount === 0 ? <span className="text-emerald-500 font-bold text-xs">OK</span> : s.diffAmount < 0 ? <span className="text-rose-500 font-bold text-xs">{s.diffAmount}</span> : <span className="text-blue-500 font-bold text-xs">+{s.diffAmount}</span>)}</td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
+                                {groupKeys.map((date) => {
+                                    const stats = groupedStats[date];
+                                    return (
+                                        <div key={date}>
+                                            <h4 className="text-xs font-bold text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-3">{date}</h4>
+                                            <div className="overflow-x-auto rounded-xl border border-slate-200">
+                                                <table className="w-full text-left data-table">
+                                                    <thead><tr><th className="min-w-[120px]">관광/일정명</th><th className="text-center">속성</th><th className="text-right">대상(Target)</th><th className="text-right">탑승(Done)</th><th className="text-center border-l border-slate-200">상태</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
+                                                    <tbody>
+                                                        {stats.map(s => (
+                                                            <tr key={s.id} onClick={() => onSessionClick(s)} className="cursor-pointer hover:bg-slate-50 transition-colors">
+                                                                <td className="font-bold text-slate-700 whitespace-nowrap">{s.title}</td>
+                                                                <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':s.type==='NONE'?'bg-slate-100 text-slate-500 border-slate-200':'bg-indigo-50 text-incar border-indigo-100'}`}>{s.type==='PAYMENT'?'지급':s.type==='NONE'?'안내/자유':'탑승'}</span></td>
+                                                                <td className="text-right text-slate-500">{s.type === 'NONE' ? '-' : s.targetCount}</td>
+                                                                <td className="text-right font-bold text-slate-900">{s.type === 'NONE' ? '-' : s.doneCount}</td>
+                                                                <td className="text-center border-l border-slate-50">{s.type === 'NONE' ? <span className="text-slate-400 text-xs">스캔없음</span> : s.targetCount - s.doneCount === 0 ? <span className="text-emerald-500 font-bold text-xs whitespace-nowrap">Complete</span> : <span className="text-rose-500 font-bold text-xs whitespace-nowrap">{s.targetCount - s.doneCount}명 남음</span>}</td>
+                                                                <td className="text-right text-slate-400 whitespace-nowrap">{s.type==='PAYMENT'?`${CURRENCY}${s.expectedAmount.toLocaleString()}`:'-'}</td>
+                                                                <td className="text-right font-bold text-emerald-600 whitespace-nowrap">{s.type==='PAYMENT'?`${CURRENCY}${s.actualAmount.toLocaleString()}`:'-'}</td>
+                                                                <td className="text-center border-l border-slate-50">{s.type !== 'PAYMENT' ? '-' : (s.diffAmount === 0 ? <span className="text-emerald-500 font-bold text-xs">OK</span> : s.diffAmount < 0 ? <span className="text-rose-500 font-bold text-xs">{s.diffAmount}</span> : <span className="text-blue-500 font-bold text-xs">+{s.diffAmount}</span>)}</td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -737,8 +751,11 @@
             const [financialImpact, setFinancialImpact] = useState(null);
             const [showQrModal, setShowQrModal] = useState(false);
             const html5QrCodeRef = useRef(null);
+            
+            // 일정 변경 팝업 모달을 위한 지역 상태
+            const [localRefundReq, setLocalRefundReq] = useState(null);
+            const [localForfeitReq, setLocalForfeitReq] = useState(null);
 
-            // 컴포넌트 마운트 시 useEffect로 users 데이터 변경 시 selectedUser 상태 정리
             useEffect(() => {
                 if (selectedUser) {
                     const isStillExist = users.find(u => u.uid === selectedUser.uid);
@@ -764,11 +781,8 @@
                         setIsLookupScanning(false); html5QrCodeRef.current = null;
                         
                         let scannedUid = decodedText;
-                        if (decodedText.includes('?uid=') || decodedText.includes('?eid=')) {
-                            try { 
-                                const url = new URL(decodedText);
-                                scannedUid = url.searchParams.get('uid') || url.searchParams.get('eid') || decodedText; 
-                            } catch(e) {}
+                        if (decodedText.includes('?uid=')) {
+                            try { scannedUid = new URL(decodedText).searchParams.get('uid') || decodedText; } catch(e) {}
                         } else if (decodedText.includes('_')) {
                             scannedUid = decodedText.split('_')[0];
                         }
@@ -843,9 +857,63 @@
             }, [editForm.optVal, editForm.optKey, selectedUser, schedules, logs]);
 
             const userHistoryLogs = useMemo(() => {
-                if(!selectedUser) return []; return changeLogs.filter(l => l.uid === selectedUser.uid).sort((a,b)=> new Date(b.timestamp) - new Date(a.timestamp));
+                if(!selectedUser) return []; 
+                return changeLogs.filter(l => l.uid === selectedUser.uid).sort((a,b) => {
+                    const tA = new Date(a.timestamp).getTime();
+                    const tB = new Date(b.timestamp).getTime();
+                    return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
+                });
             }, [changeLogs, selectedUser]);
             const visibleLogs = showAllHistory ? userHistoryLogs : userHistoryLogs.slice(0, 1);
+
+            // "저장하기" 클릭 시 정산(팝업) 확인 로직
+            const onSaveClick = () => {
+                if (!selectedUser || !editForm.optKey || !editForm.optVal) {
+                    return alert("변경할 항목을 선택하거나 입력하세요.");
+                }
+                
+                const oldVal = selectedUser.options[editForm.optKey];
+                const newVal = editForm.optVal;
+
+                // 1. 지급액 반환이 필요한 경우 (예: 자유일정 지급 후 -> 일반관광으로 변경 시)
+                if (financialImpact && financialImpact.needsRefund) {
+                    setLocalRefundReq({ amount: financialImpact.refundAmount, oldVal, newVal });
+                    return;
+                }
+
+                // 2. 일반관광에서 자유일정(지급)으로 변경 시 위약금(Forfeit) 체크
+                const oldBoardingSchedules = schedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === oldVal && s.type === 'BOARDING');
+                const newPaymentSchedules = schedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === newVal && s.type === 'PAYMENT');
+                
+                if (oldBoardingSchedules.length > 0 && newPaymentSchedules.length > 0) {
+                    const newPrice = newPaymentSchedules.reduce((sum, s) => sum + (s.price || 0), 0);
+                    if (newPrice > 0) {
+                        setLocalForfeitReq({ oldVal, newVal, price: newPrice });
+                        return;
+                    }
+                }
+
+                // 3. 그 외의 단순 변경이나 페널티 직접 입력건은 바로 저장
+                handleUserUpdate();
+            };
+
+            const resolveLocalRefund = (isReturned) => {
+                if (isReturned) {
+                    handleUserUpdate(0, `기존 지급액(${CURRENCY}${localRefundReq.amount}) 반환 완료`);
+                } else {
+                    handleUserUpdate(localRefundReq.amount, `미반환금 패널티 적용 (${localRefundReq.oldVal} -> ${localRefundReq.newVal})`);
+                }
+                setLocalRefundReq(null);
+            };
+
+            const resolveLocalForfeit = (shouldPay) => {
+                if (shouldPay) {
+                    handleUserUpdate(0, `예약 위약금 면제 (${localForfeitReq.oldVal} -> ${localForfeitReq.newVal})`);
+                } else {
+                    handleUserUpdate(localForfeitReq.price, `예약취소 위약금 부과 (${localForfeitReq.oldVal} -> ${localForfeitReq.newVal})`);
+                }
+                setLocalForfeitReq(null);
+            };
 
             return (
                 <div className="space-y-6 animate-slide-up">
@@ -887,7 +955,7 @@
                                             {userSchedules.map((s, idx) => (
                                                 <div key={idx} className="bg-white p-3 rounded-xl border border-indigo-100 shadow-sm flex justify-between items-center">
                                                     <div><span className="text-[10px] font-bold text-slate-400 block break-keep">{s.displayDate}</span><span className="font-bold text-slate-800 break-keep">{s.title}</span>{s.type === 'BOARDING' && <div className="text-[10px] text-incar mt-0.5 font-bold break-keep">배정호차: {getUserSessionInfo(selectedUser, s).expectedBus}</div>}</div>
-                                                    <div className="text-right"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':s.type==='NONE'?'bg-slate-100 text-slate-500':'bg-slate-100 text-slate-500'}`}>{s.type==='PAYMENT' ? `지급 ${CURRENCY}${s.price}` : s.type==='NONE' ? '단순안내' : '탑승'}</span></div>
+                                                    <div className="text-right shrink-0 ml-2"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':s.type==='NONE'?'bg-slate-100 text-slate-500':'bg-slate-100 text-slate-500'}`}>{s.type==='PAYMENT' ? `지급 ${CURRENCY}${s.price}` : s.type==='NONE' ? '단순안내' : '탑승'}</span></div>
                                                 </div>
                                             ))}
                                         </div>
@@ -898,8 +966,8 @@
                                     <h4 className="font-bold text-sm text-slate-800 mb-3 flex items-center gap-2 break-keep"><Icon name="history" size={16}/> 변경 및 패널티 이력</h4>
                                     {userHistoryLogs.length === 0 ? <p className="text-xs text-slate-400 break-keep">변경 이력이 없습니다.</p> : (
                                         <div className="space-y-3">
-                                            <div className="hidden md:block overflow-x-auto"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-500 font-bold"><tr><th className="p-2">일시</th><th className="p-2">항목</th><th className="p-2">내용</th><th className="p-2 text-right">패널티</th><th className="p-2">사유</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleLogs.map((log, i) => (<tr key={i}><td className="p-2 text-slate-400 whitespace-nowrap">{log.timestamp.slice(5, 16)}</td><td className="p-2 font-bold whitespace-nowrap">{log.targetOption}</td><td className="p-2 break-keep"><span className="line-through text-slate-300">{log.oldVal}</span> <span className="mx-1 text-slate-300">→</span> <span className="text-incar font-bold">{log.newVal}</span></td><td className="p-2 text-right font-bold text-rose-500 whitespace-nowrap">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</td><td className="p-2 text-slate-500 truncate max-w-[100px]">{log.reason}</td></tr>))}</tbody></table></div>
-                                            <div className="md:hidden space-y-2">{visibleLogs.map((log, i) => (<div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2"><div className="flex justify-between items-center text-xs text-slate-400 font-medium border-b border-slate-200 pb-2 mb-1"><span>{log.timestamp.slice(5, 16)}</span><span className="bg-white px-2 py-0.5 rounded border border-slate-200 break-keep">{log.targetOption}</span></div><div className="flex items-center justify-center gap-2 text-sm break-keep text-center"><span className="line-through text-slate-400">{log.oldVal}</span><Icon name="chevronsDown" size={12} className="rotate-[-90deg] text-slate-300" /><span className="font-bold text-incar">{log.newVal}</span></div><div className="flex justify-between items-end mt-1 pt-2 border-t border-slate-200/50"><span className="text-xs text-slate-500 flex-1 break-keep pr-2">{log.reason}</span><span className="text-sm font-bold text-rose-500 break-keep">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</span></div></div>))}</div>
+                                            <div className="hidden md:block overflow-x-auto"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-500 font-bold"><tr><th className="p-2">일시</th><th className="p-2">항목</th><th className="p-2">내용</th><th className="p-2 text-right">패널티</th><th className="p-2">사유</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleLogs.map((log, i) => (<tr key={i}><td className="p-2 text-slate-400 whitespace-nowrap">{formatDateSafe(log.timestamp)}</td><td className="p-2 font-bold whitespace-nowrap">{log.targetOption}</td><td className="p-2 break-keep"><span className="line-through text-slate-300">{log.oldVal}</span> <span className="mx-1 text-slate-300">→</span> <span className="text-incar font-bold">{log.newVal}</span></td><td className="p-2 text-right font-bold text-rose-500 whitespace-nowrap">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</td><td className="p-2 text-slate-500 truncate max-w-[100px]">{log.reason}</td></tr>))}</tbody></table></div>
+                                            <div className="md:hidden space-y-2">{visibleLogs.map((log, i) => (<div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2"><div className="flex justify-between items-center text-xs text-slate-400 font-medium border-b border-slate-200 pb-2 mb-1"><span>{formatDateSafe(log.timestamp)}</span><span className="bg-white px-2 py-0.5 rounded border border-slate-200 break-keep">{log.targetOption}</span></div><div className="flex items-center justify-center gap-2 text-sm break-keep text-center"><span className="line-through text-slate-400">{log.oldVal}</span><Icon name="chevronsDown" size={12} className="rotate-[-90deg] text-slate-300" /><span className="font-bold text-incar">{log.newVal}</span></div><div className="flex justify-between items-end mt-1 pt-2 border-t border-slate-200/50"><span className="text-xs text-slate-500 flex-1 break-keep pr-2">{log.reason}</span><span className="text-sm font-bold text-rose-500 break-keep">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</span></div></div>))}</div>
                                             {userHistoryLogs.length > 1 && <button onClick={() => setShowAllHistory(!showAllHistory)} className="w-full py-2 text-xs font-bold text-slate-400 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center justify-center gap-1 break-keep">{showAllHistory ? '접기' : `더보기 (${userHistoryLogs.length - 1}건 더 있음)`} <Icon name={showAllHistory ? "up" : "down"} size={12} /></button>}
                                         </div>
                                     )}
@@ -922,17 +990,23 @@
                                             <li className="font-bold border-t border-slate-200/50 mt-1 pt-1">• 현재까지 실제 지급 완료: <span className="text-incar">{CURRENCY}{financialImpact.paidAmount}</span></li>
                                         </ul>
                                         <div className="mt-3 break-keep">
-                                            {financialImpact.needsRefund && <span className="inline-block bg-rose-500 text-white font-bold text-xs px-2 py-1 rounded">⚠️ 현장 반환 필요: {CURRENCY}{financialImpact.refundAmount} (미반환 시 패널티)</span>}
-                                            {financialImpact.needsExtraPay && <span className="inline-block bg-emerald-500 text-white font-bold text-xs px-2 py-1 rounded">✅ 추가 지급 발생: {CURRENCY}{financialImpact.extraPayAmount} (스캔 대기)</span>}
-                                            {!financialImpact.needsRefund && !financialImpact.needsExtraPay && financialImpact.diff > 0 && financialImpact.paidAmount === 0 && <span className="inline-block bg-amber-500 text-white font-bold text-xs px-2 py-1 rounded">💰 지급 전 다운그레이드: {CURRENCY}{financialImpact.diff} 차감</span>}
-                                            {!financialImpact.needsRefund && !financialImpact.needsExtraPay && financialImpact.diff <= 0 && <span className="inline-block bg-blue-500 text-white font-bold text-xs px-2 py-1 rounded">✔️ 추가 비용 및 반환 없음</span>}
+                                            {financialImpact.needsRefund && <span className="inline-block bg-rose-500 text-white font-bold text-xs px-2 py-1 rounded">⚠️ 현장 반환 필요: {CURRENCY}{financialImpact.refundAmount} (미반환 시 패널티 적용됨)</span>}
+                                            {financialImpact.needsExtraPay && <span className="inline-block bg-emerald-500 text-white font-bold text-xs px-2 py-1 rounded">✅ 추가 지급 발생: {CURRENCY}{financialImpact.extraPayAmount} (해당 일정 스캔에서 처리됨)</span>}
+                                            {!financialImpact.needsRefund && !financialImpact.needsExtraPay && financialImpact.diff > 0 && financialImpact.paidAmount === 0 && <span className="inline-block bg-amber-500 text-white font-bold text-xs px-2 py-1 rounded">💰 지급 전 다운그레이드: {CURRENCY}{financialImpact.diff} 차감 적용됨</span>}
+                                            {!financialImpact.needsRefund && !financialImpact.needsExtraPay && financialImpact.diff <= 0 && <span className="inline-block bg-blue-500 text-white font-bold text-xs px-2 py-1 rounded">✔️ 추가 비용 및 반환 문제 없음</span>}
                                         </div>
                                     </div>
                                 )}
 
-                                <div><label className="block text-xs font-bold text-slate-400 mb-1 break-keep">패널티 ({CURRENCY})</label><input type="number" value={editForm.penalty} onChange={e=>setEditForm({...editForm, penalty: e.target.value})} className="w-full p-3 border border-rose-200 bg-rose-50 rounded-xl font-bold text-rose-600 break-keep" /><p className="text-[10px] text-slate-400 mt-1 break-keep">* 검증 로직에 의해 자동 계산된 값입니다. 현장에서 반환을 받았다면 0으로 수정하세요.</p></div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-1 break-keep">패널티 수동입력 ({CURRENCY})</label>
+                                    <input type="number" value={editForm.penalty} onChange={e=>setEditForm({...editForm, penalty: e.target.value})} className="w-full p-3 border border-rose-200 bg-rose-50 rounded-xl font-bold text-rose-600 break-keep" />
+                                    <p className="text-[10px] text-slate-400 mt-1 break-keep">
+                                        * 자동 계산된 값 외에 다른 금액을 지정할 경우 수정하세요. (반환 여부는 저장 시 한 번 더 묻습니다.)
+                                    </p>
+                                </div>
                                 <div><label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 사유</label><input type="text" value={editForm.reason} onChange={e=>setEditForm({...editForm, reason: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm break-keep" /></div>
-                                <button onClick={handleUserUpdate} className="w-full py-4 bg-incar text-white font-bold rounded-2xl shadow-lg mt-4 hover:bg-incar-dark break-keep">저장하기</button>
+                                <button onClick={onSaveClick} className="w-full py-4 bg-incar text-white font-bold rounded-2xl shadow-lg mt-4 hover:bg-incar-dark break-keep">저장하기</button>
                             </div>
                         )}
 
@@ -964,6 +1038,50 @@
                                         }} className="flex-1 py-3 bg-incar text-white font-bold rounded-xl shadow-lg hover:bg-incar-dark transition-colors flex items-center justify-center gap-2 break-keep">
                                             <Icon name="download" size={16} /> 저장
                                         </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {localRefundReq && (
+                            <div className="fixed inset-0 z-[400] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+                                <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
+                                    <div className="bg-rose-50 p-6 text-center border-b border-rose-100">
+                                        <div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">{CURRENCY}</div>
+                                        <h3 className="text-xl font-black text-rose-600 mb-1 break-keep">지급금 반환 확인</h3>
+                                        <p className="text-slate-600 font-bold text-sm break-keep">{selectedUser.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{localRefundReq.amount}</span>을 지급받았습니다.</p>
+                                    </div>
+                                    <div className="p-6 space-y-4">
+                                        <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {localRefundReq.oldVal} <br/>▼ <br/>변경: {localRefundReq.newVal}</div>
+                                        <button onClick={() => resolveLocalRefund(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
+                                            <span>반환 받았습니다</span><span className="text-[10px] opacity-80 font-normal">(패널티 0 처리)</span>
+                                        </button>
+                                        <button onClick={() => resolveLocalRefund(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
+                                            <span>반환받지 못했습니다</span><span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 부과)</span>
+                                        </button>
+                                        <button onClick={() => setLocalRefundReq(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {localForfeitReq && (
+                            <div className="fixed inset-0 z-[400] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in">
+                                <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
+                                    <div className="bg-indigo-50 p-6 text-center border-b border-indigo-100">
+                                        <div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div>
+                                        <h3 className="text-xl font-black text-indigo-900 mb-1 break-keep">일정 변경 확인 (위약금)</h3>
+                                        <p className="text-slate-600 font-bold text-sm break-keep">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p>
+                                    </div>
+                                    <div className="p-6 space-y-4">
+                                        <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {localForfeitReq.oldVal} (예약취소)<br/>▼ <br/>변경: {localForfeitReq.newVal} (예상 지급액 {CURRENCY}{localForfeitReq.price})</div>
+                                        <button onClick={() => resolveLocalForfeit(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
+                                            <span>위약금 적용 (부지급)</span><span className="text-[10px] opacity-80 font-normal">(지급액을 패널티로 상계)</span>
+                                        </button>
+                                        <button onClick={() => resolveLocalForfeit(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
+                                            <span>위약금 면제</span><span className="text-[10px] opacity-80 font-normal">(추후 정상 지급)</span>
+                                        </button>
+                                        <button onClick={() => setLocalForfeitReq(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button>
                                     </div>
                                 </div>
                             </div>
@@ -1001,6 +1119,7 @@
                                 <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="users" className="text-indigo-400"/><div className="font-bold text-sm break-keep">1. 참가자 명단 (CSV)</div></div><label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors break-keep"><input type="file" accept=".csv" onChange={handleUserUpload} className="hidden" />업로드</label></div>
                                 <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="dashboard" className="text-indigo-400"/><div className="font-bold text-sm break-keep">2. 일정 마스터 정보 (CSV)</div></div><label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors break-keep"><input type="file" accept=".csv" onChange={handleScheduleUpload} className="hidden" />업로드</label></div>
                                 <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="image" className="text-indigo-400"/><div className="font-bold text-sm break-keep">3. 앱 배경화면 이미지</div></div><div className="flex gap-2">{appBgImage && <button onClick={() => setAppBgImage(null)} className="px-3 py-2 bg-rose-500/80 hover:bg-rose-500 rounded-lg text-xs font-bold transition-colors break-keep">초기화</button>}<label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors break-keep"><input type="file" accept="image/*" onChange={handleAppBgUpload} className="hidden" />업로드</label></div></div>
+                                <p className="text-[10px] text-slate-400 mt-1 break-keep">* CSV 파일에 <strong>'순서'</strong> 열(Column)을 추가하여 숫자를 기재하거나 작성된 행(Row) 순서에 따라 현황판 정렬이 보장됩니다.</p>
                             </div>
                         </div>
                     )}
@@ -1050,7 +1169,6 @@
                                             <td className="p-3 font-bold text-slate-800 whitespace-nowrap">{a.name}</td>
                                             <td className="p-3 text-slate-600 font-mono whitespace-nowrap">{a.id}</td>
                                             <td className="p-3 text-center">
-                                                {/* 마스터 계정은 다른 관리자의 권한을 변경 가능 (자기 자신이나 마스터 권한은 변경 불가) */}
                                                 {isMaster && a.role !== 'master' ? (
                                                     <select 
                                                         value={a.role} 
@@ -1354,7 +1472,6 @@
                     const pad = n => n < 10 ? '0'+n : n; return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
                 };
                 const combinedData = [];
-                // [감사로그] 처리자 항목 추가 반영
                 logs.forEach(l => combinedData.push({ rawTime: l.timestamp, 일시: formatLogDate(l.timestamp), 사번: l.uid, 성명: l.name, 구분: l.action, 일정명: l.sessionTitle, 금액: l.finalAmount || 0, 패널티: l.penaltyApplied || 0, 탑승차량: l.bus, 비고: '', 처리자: l.processedBy || '시스템' }));
                 changeLogs.forEach(c => combinedData.push({ rawTime: c.timestamp, 일시: formatLogDate(c.timestamp), 사번: c.uid, 성명: c.name, 구분: '변경', 일정명: c.targetOption, 금액: 0, 패널티: c.penalty || 0, 탑승차량: '', 비고: `${c.oldVal} -> ${c.newVal} | ${c.reason}`, 처리자: c.processedBy || '시스템' }));
                 combinedData.sort((a, b) => new Date(b.rawTime) - new Date(a.rawTime));
@@ -1425,10 +1542,18 @@
                 });
             }, [schedules, users, logs]);
 
-            const groupedStats = useMemo(() => {
+            const { groupKeys, groupedStats } = useMemo(() => {
                 const groups = {};
-                scheduleStats.forEach(stat => { const date = stat.displayDate || '기타'; if(!groups[date]) groups[date] = []; groups[date].push(stat); });
-                return groups;
+                const keys = [];
+                scheduleStats.forEach(stat => { 
+                    const date = stat.displayDate || '기타'; 
+                    if(!groups[date]) {
+                        groups[date] = []; 
+                        keys.push(date);
+                    }
+                    groups[date].push(stat); 
+                });
+                return { groupKeys: keys, groupedStats: groups };
             }, [scheduleStats]);
 
             const cleanupOldLogs = async (uid, targetKey, oldVal, performUpdate = true) => {
@@ -1444,11 +1569,12 @@
 
             const handleManualComplete = async (user, session) => {
                 if(!confirm(`${user.name}님을 수동으로 [${session.type==='PAYMENT'?'지급완료':'탑승완료'}] 처리하시겠습니까?`)) return;
-                const newLog = { id: `LOG_${Date.now()}_MANUAL`, timestamp: new Date().toLocaleString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: '수동처리', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: 0, finalAmount: session.type === 'PAYMENT' ? session.price : 0, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
+                const newLog = { id: `LOG_${Date.now()}_MANUAL`, timestamp: new Date().toISOString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: '수동처리', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: 0, finalAmount: session.type === 'PAYMENT' ? session.price : 0, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
                 if(db) { await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); } else { setLogs([newLog, ...logs]); }
                 alert("처리되었습니다.");
             };
 
+            // 변경 뷰와 스캔 뷰에서 공통적으로 쓰이는 패널티 적용 및 데이터 업데이트 로직
             const executeUpdate = async (user, session, requiredChoice, penaltyAmount, reason, payoutOverride = null) => {
                 if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
                 
@@ -1471,7 +1597,7 @@
                     setUsers([...updatedUsers]); 
                 }
 
-                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toLocaleString(), uid: user.uid, name: user.name, targetOption: session.targetKey, oldVal: oldVal || '미선택', newVal: requiredChoice, penalty: newPenalty, reason: reason, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
+                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toISOString(), uid: user.uid, name: user.name, targetOption: session.targetKey, oldVal: oldVal || '미선택', newVal: requiredChoice, penalty: newPenalty, reason: reason, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
                 if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog); 
                 else setChangeLogs([changeLog, ...changeLogs]);
 
@@ -1490,7 +1616,7 @@
                     } 
                 }
 
-                const newLog = { id: `LOG_${Date.now()}_FORCE`, timestamp: new Date().toLocaleString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: targetBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
+                const newLog = { id: `LOG_${Date.now()}_FORCE`, timestamp: new Date().toISOString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: targetBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
                 
                 if(db) { 
                     await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); 
@@ -1564,6 +1690,7 @@
                 else await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (관광->지급, 예약부도 위약금 적용으로 지급생략)`, 0); 
             };
 
+            // 사용자 업로드: 중복 컬럼(헤더)을 지원하기 위한 커스텀 파싱(Manual Parsing) 적용 및 호차 자동 보정
             const handleUserUpload = async (e) => { 
                 const file = e.target.files[0]; 
                 if (!file) return; 
@@ -1653,10 +1780,13 @@
                             else if (row['타입'] && (row['타입'].includes('자유') || row['타입'].includes('안내') || row['타입'].includes('None'))) type = 'NONE';
                             else if (row['타입'] && row['타입'].includes('집합')) type = 'BOARDING';
                             else if (title.includes('자유') || title.includes('휴식') || title.includes('개인') || title.includes('안내')) type = 'NONE';
+                            
+                            const orderVal = row['순서'] || row['Order'] || row['order'];
+                            const order = orderVal !== undefined && orderVal !== '' ? parseInt(orderVal, 10) : idx;
 
                             return { 
                                 id: `SCHED_${String(idx).padStart(4, '0')}`, // 정렬 안정성을 위한 패딩
-                                order: idx, // 엑셀에 입력된 순서 기록
+                                order: order, // 엑셀에 입력된 순서 기록
                                 date: dateStr, 
                                 displayDate: rawDate, 
                                 title: title, 
@@ -1683,6 +1813,95 @@
                     } 
                 }); 
             };
+            
+            const processScan = useCallback(async (scannedText, strictMode = false) => { 
+                let scannedUid = scannedText;
+                if (scannedText.includes('?uid=')) {
+                    try { scannedUid = new URL(scannedText).searchParams.get('uid') || scannedText; } catch(e){}
+                } else if (scannedText.includes('_')) {
+                    scannedUid = scannedText.split('_')[0]; 
+                }
+
+                let user = users.find(u => String(u.uid) === String(scannedUid)); 
+                if (!user) user = users.find(u => scannedText.includes(String(u.uid))); 
+
+                if (!user) return setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `스캔된 값: ${scannedText}` }); 
+                
+                const session = schedules.find(s => s.id === targetSessionId); 
+                if (!session) return setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' }); 
+
+                const { isTarget, expectedBus } = getUserSessionInfo(user, session);
+
+                if (!isTarget) {
+                     return setScanResult({ status: 'error', msg: '대상자 아님', subMsg: '해당 일정에 신청되지 않은 참가자입니다.', user, session, requiredChoice: session.targetVal !== 'ALL' ? session.targetVal : session.title });
+                }
+
+                if (session.type === 'BOARDING' && ['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) {
+                     return setScanResult({ status: 'error', msg: '탑승 대상 아님', subMsg: `해당 일정은 [${expectedBus}] 대상자입니다.`, user, session });
+                }
+
+                if (strictMode && session.type === 'BOARDING') {
+                    if (expectedBus.trim() !== targetBus.trim()) {
+                         return setScanResult({ status: 'error', msg: '탑승 불가 (차량 불일치)', subMsg: `배정: ${expectedBus} / 현재: ${targetBus}`, user, session });
+                    }
+                }
+                
+                const isDuplicate = logs.some(l => l.uid === user.uid && l.sessionId === session.id); 
+                if (isDuplicate) return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
+                
+                let finalAmount = 0; let penaltyApplied = 0; 
+                if (session.type === 'PAYMENT') { 
+                    const baseAmount = session.price; const deduction = user.penaltyTotal || 0; 
+                    finalAmount = Math.max(0, baseAmount - deduction); penaltyApplied = (baseAmount - finalAmount); 
+                } 
+                
+                const newLog = { 
+                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toISOString(), uid: user.uid, name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: session.type === 'BOARDING' ? targetBus : '-', amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`
+                }; 
+                
+                if (db) { 
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); 
+                    if (penaltyApplied > 0) { 
+                        const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
+                        await userRef.update({ penaltyTotal: user.penaltyTotal - penaltyApplied }); 
+                    } 
+                } else { 
+                    setLogs(prev => [newLog, ...prev]); 
+                    if (penaltyApplied > 0) { 
+                        setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u)); 
+                    } 
+                } 
+                
+                const todayLogs = logs.filter(l => l.uid === user.uid && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급'); 
+                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':'탑승 확인', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
+            }, [db, users, schedules, logs, targetSessionId, targetBus, currentAdmin]);
+
+            // 일정 변경 탭 내부에서 사용하는 유저 업데이트 로직
+            const handleUserUpdate = async (overridePenalty = null, overrideReason = null) => { 
+                if (!selectedUser || !editForm.optKey) return; 
+                const oldVal = selectedUser.options[editForm.optKey]; 
+                const logIdsToRemove = await cleanupOldLogs(selectedUser.uid, editForm.optKey, oldVal, !!db); 
+                
+                const newPenalty = overridePenalty !== null ? overridePenalty : parseInt(editForm.penalty || 0); 
+                const finalReason = overrideReason !== null ? overrideReason : editForm.reason;
+
+                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toISOString(), uid: selectedUser.uid, name: selectedUser.name, targetOption: editForm.optKey, oldVal: oldVal, newVal: editForm.optVal, penalty: newPenalty, reason: finalReason, processedBy: `${currentAdmin.name}(${currentAdmin.id})` }; 
+                
+                if (db) { 
+                    const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(selectedUser.uid)); 
+                    await userRef.update({ options: { ...selectedUser.options, [editForm.optKey]: editForm.optVal }, penaltyTotal: (selectedUser.penaltyTotal || 0) + newPenalty }); 
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog); 
+                } else { 
+                    if(logIdsToRemove.length > 0) setLogs(prevLogs => prevLogs.filter(l => !logIdsToRemove.includes(l.id))); 
+                    const totalPenalty = (selectedUser.penaltyTotal || 0) + newPenalty;
+                    setUsers(users.map(u => String(u.uid) === String(selectedUser.uid) ? { ...u, options: { ...u.options, [editForm.optKey]: editForm.optVal }, penaltyTotal: totalPenalty } : u)); 
+                    setSelectedUser({...selectedUser, options: { ...selectedUser.options, [editForm.optKey]: editForm.optVal }, penaltyTotal: totalPenalty});
+                    setChangeLogs([changeLog, ...changeLogs]); 
+                } 
+                alert("변경 및 패널티 적용이 완료되었습니다."); 
+                setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' }); 
+                setSearchQuery(''); 
+            };
 
             return (
                 <div className={`h-full flex flex-row w-full relative ${appBgImage ? 'bg-cover bg-center' : 'bg-slate-50'}`} style={appBgImage ? {backgroundImage: `url(${appBgImage})`} : {}}>
@@ -1696,7 +1915,7 @@
                                 { window.innerWidth < 768 && <header className="bg-white/90 px-6 py-4 shadow-sm flex justify-between items-center z-20"><div className="flex items-center gap-2"><div className="w-8 h-8 bg-incar rounded-lg flex items-center justify-center text-white font-black">P</div><h1 className="font-black text-slate-800 tracking-tight">INCARPASS <span className="text-incar text-[10px] px-1.5 py-0.5 bg-indigo-50 rounded-md align-top">PRO</span></h1></div><div className="flex items-center gap-3"><div className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">{currentAdmin.name}</div><button onClick={() => { sessionStorage.removeItem('incar_pro_admin'); localStorage.removeItem('incar_pro_admin'); window.location.reload(); }} className="text-slate-400 p-2"><Icon name="logOut" size={20}/></button></div></header>}
                                 <div className="flex-1 overflow-y-auto p-4 pb-32 md:p-8 w-full z-10 custom-scrollbar">
                                     <div className="max-w-5xl mx-auto w-full">
-                                        {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
+                                        {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} groupKeys={groupKeys} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
                                         {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} />}
                                         {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} />}
                                         {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} schedules={schedules} changeLogs={changeLogs} logs={logs} />}
@@ -1706,7 +1925,7 @@
                                 { window.innerWidth < 768 && <MobileTab activeTab={activeTab} setActiveTab={setActiveTab} currentAdmin={currentAdmin} /> }
                                 
                                 {selectedSession && <SessionDetailModal session={selectedSession} users={users} logs={logs} onClose={() => setSelectedSession(null)} onManualComplete={handleManualComplete} />}
-                                {refundRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-rose-50 p-6 text-center border-b border-rose-100"><div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">$</div><h3 className="text-xl font-black text-rose-600 mb-1 break-keep">지급금 반환 필요</h3><p className="text-slate-600 font-bold text-sm break-keep">{refundRequest.user.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{refundRequest.amount}</span>을 지급받았습니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2 break-keep">기존 일정: {refundRequest.oldVal} <br/>▼ <br/>변경 일정: {refundRequest.session.title}</div><button onClick={() => resolveRefundRequest(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>반환 받았습니다</span><span className="text-[10px] opacity-80 font-normal">(패널티 없음)</span></button><button onClick={() => resolveRefundRequest(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>반환받지 못했습니다</span><span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 처리)</span></button><button onClick={() => setRefundRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button></div></div></div>)}
+                                {refundRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-rose-50 p-6 text-center border-b border-rose-100"><div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">{CURRENCY}</div><h3 className="text-xl font-black text-rose-600 mb-1 break-keep">지급금 반환 필요</h3><p className="text-slate-600 font-bold text-sm break-keep">{refundRequest.user.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{refundRequest.amount}</span>을 지급받았습니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2 break-keep">기존 일정: {refundRequest.oldVal} <br/>▼ <br/>변경 일정: {refundRequest.session.title}</div><button onClick={() => resolveRefundRequest(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>반환 받았습니다</span><span className="text-[10px] opacity-80 font-normal">(패널티 없음)</span></button><button onClick={() => resolveRefundRequest(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>반환받지 못했습니다</span><span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 처리)</span></button><button onClick={() => setRefundRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button></div></div></div>)}
                                 {forfeitRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-indigo-50 p-6 text-center border-b border-indigo-100"><div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div><h3 className="text-xl font-black text-indigo-900 mb-1 break-keep">일정 변경 확인 (Case 2)</h3><p className="text-slate-600 font-bold text-sm break-keep">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div><button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span></button><button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span></button><button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button></div></div></div>)}
                             </main>
                             
