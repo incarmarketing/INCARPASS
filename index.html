@@ -803,14 +803,14 @@
                         setIsLookupScanning(false); html5QrCodeRef.current = null;
                         
                         let scannedUid = decodedText;
-                        if (decodedText.includes('?uid=') || decodedText.includes('?eid=')) {
-                            try { 
-                                const url = new URL(decodedText);
-                                scannedUid = url.searchParams.get('uid') || url.searchParams.get('eid') || decodedText; 
-                            } catch(e) {}
+                        if (decodedText.includes('eid=')) {
+                            scannedUid = decodedText.split('eid=')[1].split('&')[0];
+                        } else if (decodedText.includes('uid=')) {
+                            scannedUid = decodedText.split('uid=')[1].split('&')[0];
                         } else if (decodedText.includes('_')) {
                             scannedUid = decodedText.split('_')[0];
                         }
+                        scannedUid = scannedUid.trim();
                         
                         let found = users.find(u => String(u.uid) === String(scannedUid));
                         if (!found) found = users.find(u => decodedText.includes(String(u.uid))); 
@@ -1873,14 +1873,14 @@
             
             const processScan = useCallback(async (scannedText, strictMode = false) => { 
                 let scannedUid = scannedText;
-                if (scannedText.includes('?uid=') || scannedText.includes('?eid=')) {
-                    try { 
-                        const url = new URL(scannedText);
-                        scannedUid = url.searchParams.get('uid') || url.searchParams.get('eid') || scannedText; 
-                    } catch(e){}
+                if (scannedText.includes('eid=')) {
+                    scannedUid = scannedText.split('eid=')[1].split('&')[0];
+                } else if (scannedText.includes('uid=')) {
+                    scannedUid = scannedText.split('uid=')[1].split('&')[0];
                 } else if (scannedText.includes('_')) {
                     scannedUid = scannedText.split('_')[0]; 
                 }
+                scannedUid = scannedUid.trim();
 
                 let user = users.find(u => String(u.uid) === String(scannedUid)); 
                 if (!user) user = users.find(u => scannedText.includes(String(u.uid))); 
