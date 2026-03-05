@@ -671,19 +671,15 @@
                     const element = document.getElementById("reader"); if (!element) return;
                     if (!scannerRef.current) scannerRef.current = new Html5Qrcode("reader");
                     
-                    // ✅ 기기 호환성을 극대화한 고급 설정: 환경에 맞게 해상도와 카메라 방향을 부드럽게 조정
+                    // ✅ 종이 인쇄된 명찰 스캔을 위한 가장 안정적인 기본 설정 (화질 강제 X, 초점 방해 X)
                     const config = { 
-                        fps: 15, 
+                        fps: 10, 
                         qrbox: function(viewfinderWidth, viewFinderHeight) {
                             const minEdgeSize = Math.min(viewfinderWidth, viewFinderHeight);
-                            return { width: Math.floor(minEdgeSize * 0.75), height: Math.floor(minEdgeSize * 0.75) };
+                            // 화면의 80% 크기로 박스를 키워, 약간 멀리서도 큼직하게 들어오도록 유도 (초점 잡기 유리함)
+                            return { width: Math.floor(minEdgeSize * 0.8), height: Math.floor(minEdgeSize * 0.8) };
                         },
-                        aspectRatio: 1.0,
-                        videoConstraints: {
-                            facingMode: { ideal: "environment" }, // 후방 카메라 우선
-                            width: { ideal: 1920, min: 1280 }, // 고화질 우선, 최소 HD
-                            advanced: [{ focusMode: "continuous" }] // 자동 초점 기능 활성화 시도
-                        }
+                        aspectRatio: 1.0
                     };
 
                     scannerRef.current.start({ facingMode: "environment" }, config, (decodedText) => {
@@ -814,19 +810,14 @@
                     const html5QrCode = new Html5Qrcode(elementId);
                     html5QrCodeRef.current = html5QrCode;
                     
-                    // ✅ 기기 호환성을 극대화한 고급 설정: 환경에 맞게 해상도와 카메라 방향을 부드럽게 조정
+                    // ✅ 종이 인쇄된 명찰 스캔을 위한 가장 안정적인 기본 설정 (화질 강제 X, 초점 방해 X)
                     const config = { 
-                        fps: 15, 
+                        fps: 10, 
                         qrbox: function(viewfinderWidth, viewFinderHeight) {
                             const minEdgeSize = Math.min(viewfinderWidth, viewFinderHeight);
-                            return { width: Math.floor(minEdgeSize * 0.75), height: Math.floor(minEdgeSize * 0.75) };
+                            return { width: Math.floor(minEdgeSize * 0.8), height: Math.floor(minEdgeSize * 0.8) };
                         }, 
-                        aspectRatio: 1.0,
-                        videoConstraints: {
-                            facingMode: { ideal: "environment" }, // 후방 카메라 우선
-                            width: { ideal: 1920, min: 1280 }, // 고화질 우선, 최소 HD
-                            advanced: [{ focusMode: "continuous" }] // 자동 초점 기능 활성화 시도
-                        }
+                        aspectRatio: 1.0
                     };
 
                     html5QrCode.start({ facingMode: "environment" }, config, async (decodedText) => {
