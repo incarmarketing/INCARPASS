@@ -638,7 +638,7 @@
                                                     <div className="flex justify-between items-end mb-2">
                                                         <span className="text-3xl font-bold text-slate-800">{stat.targetCount}<span className="text-sm text-slate-400 font-medium ml-1">명 대상</span></span>
                                                     </div>
-                                                    <div className="py-2 text-slate-400 text-sm font-medium border-t border-slate-100 break-keep">스캔 및 진행도 체크 불필요</div>
+                                                    <div className="py-2 text-slate-400 text-sm font-medium border-t border-slate-100 break-keep">스캔 및 진행도 체크 불필요 (클릭하여 대상 확인)</div>
                                                 </div>
                                             )}
                                         </div>
@@ -661,7 +661,7 @@
                                             <h4 className="text-xs font-bold text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-3">{date}</h4>
                                             <div className="overflow-x-auto rounded-xl border border-slate-200">
                                                 <table className="w-full text-left data-table">
-                                                    <thead><tr><th className="min-w-[120px]">관광/일정명</th><th className="text-center">속성 (성격/행위)</th><th className="text-right">대상(Target)</th><th className="text-right">완료(Done)</th><th className="text-center border-l border-slate-200">상태</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
+                                                    <thead><tr><th className="min-w-[120px]">관광/일정명</th><th className="text-center">구분</th><th className="text-right">대상(Target)</th><th className="text-right">완료(Done)</th><th className="text-center border-l border-slate-200">상태</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
                                                     <tbody>
                                                         {stats.map(s => {
                                                             const dInfo = getSessionDomainInfo(s);
@@ -670,7 +670,7 @@
                                                                 <td className="font-bold text-slate-700 whitespace-nowrap">{s.title}</td>
                                                                 <td className="text-center">
                                                                     <div className="flex items-center justify-center gap-1">
-                                                                        <span className="text-[10px] font-bold text-slate-500">{dInfo.nature}</span>
+                                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-50 border border-slate-200 text-slate-500 whitespace-nowrap">{dInfo.nature}</span>
                                                                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':s.type==='NONE'?'bg-slate-100 text-slate-500 border-slate-200':'bg-indigo-50 text-incar border-indigo-100'}`}>{dInfo.action}</span>
                                                                     </div>
                                                                 </td>
@@ -1322,9 +1322,9 @@
 
             const resolveLocalForfeit = (shouldPay) => {
                 if (shouldPay) {
-                    handleUserUpdate(0, `예약 페널티 면제 (${localForfeitReq.oldVal} -> ${localForfeitReq.newVal})`);
+                    handleUserUpdate(0, `예약 위약금 면제 (${localForfeitReq.oldVal} -> ${localForfeitReq.newVal})`);
                 } else {
-                    handleUserUpdate(localForfeitReq.price, `예약취소 페널티 부과 (${localForfeitReq.oldVal} -> ${localForfeitReq.newVal})`);
+                    handleUserUpdate(localForfeitReq.price, `예약취소 위약금 부과 (${localForfeitReq.oldVal} -> ${localForfeitReq.newVal})`);
                 }
                 setLocalForfeitReq(null);
             };
