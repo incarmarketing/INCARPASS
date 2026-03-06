@@ -638,7 +638,7 @@
                                                     <div className="flex justify-between items-end mb-2">
                                                         <span className="text-3xl font-bold text-slate-800">{stat.targetCount}<span className="text-sm text-slate-400 font-medium ml-1">명 대상</span></span>
                                                     </div>
-                                                    <div className="py-2 text-slate-400 text-sm font-medium border-t border-slate-100 break-keep">스캔 및 진행도 체크 불필요 (클릭하여 대상 확인)</div>
+                                                    <div className="py-2 text-slate-400 text-sm font-medium border-t border-slate-100 break-keep">스캔 및 진행도 체크 불필요</div>
                                                 </div>
                                             )}
                                         </div>
@@ -1322,9 +1322,9 @@
 
             const resolveLocalForfeit = (shouldPay) => {
                 if (shouldPay) {
-                    handleUserUpdate(0, `예약 위약금 면제 (${localForfeitReq.oldVal} -> ${localForfeitReq.newVal})`);
+                    handleUserUpdate(0, `예약 페널티 면제 (${localForfeitReq.oldVal} -> ${localForfeitReq.newVal})`);
                 } else {
-                    handleUserUpdate(localForfeitReq.price, `예약취소 위약금 부과 (${localForfeitReq.oldVal} -> ${localForfeitReq.newVal})`);
+                    handleUserUpdate(localForfeitReq.price, `예약취소 페널티 부과 (${localForfeitReq.oldVal} -> ${localForfeitReq.newVal})`);
                 }
                 setLocalForfeitReq(null);
             };
@@ -1496,13 +1496,13 @@
                                 <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
                                     <div className="bg-indigo-50 p-6 text-center border-b border-indigo-100">
                                         <div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div>
-                                        <h3 className="text-xl font-black text-indigo-900 mb-1 break-keep">일정 변경 확인 (위약금)</h3>
+                                        <h3 className="text-xl font-black text-indigo-900 mb-1 break-keep">일정 변경 확인 (페널티)</h3>
                                         <p className="text-slate-600 font-bold text-sm break-keep">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p>
                                     </div>
                                     <div className="p-6 space-y-4">
                                         <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div>
                                         <button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span>
+                                            <span>부지급 (페널티 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span>
                                         </button>
                                         <button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
                                             <span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span>
@@ -2185,8 +2185,8 @@
             const resolveForfeitRequest = async (shouldPay) => { 
                 if (!forfeitRequest) return; 
                 const { user, session, requiredChoice, oldVal } = forfeitRequest; 
-                if (shouldPay) await executeUpdate(user, session, requiredChoice, 0, '현장 변경 (관광->지급, 위약금 면제 및 정상지급)'); 
-                else await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (관광->지급, 예약부도 위약금 적용으로 지급생략)`, 0); 
+                if (shouldPay) await executeUpdate(user, session, requiredChoice, 0, '현장 변경 (관광->지급, 페널티 면제 및 정상지급)'); 
+                else await executeUpdate(user, session, requiredChoice, 0, `현장 변경 (관광->지급, 일정 변경 페널티 적용으로 지급생략)`, 0); 
             };
 
             const handleUserUpload = async (e) => { 
@@ -2451,7 +2451,7 @@
                                 
                                 {selectedSession && <SessionDetailModal session={selectedSession} users={users} logs={logs} onClose={() => setSelectedSession(null)} onManualComplete={handleManualComplete} />}
                                 {refundRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-rose-50 p-6 text-center border-b border-rose-100"><div className="w-16 h-16 bg-white text-rose-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">{CURRENCY}</div><h3 className="text-xl font-black text-rose-600 mb-1 break-keep">지급금 반환 필요</h3><p className="text-slate-600 font-bold text-sm break-keep">{refundRequest.user.name}님은<br/>이미 <span className="text-rose-600 underline">{CURRENCY}{refundRequest.amount}</span>을 지급받았습니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2 break-keep">기존 일정: {refundRequest.oldVal} <br/>▼ <br/>변경 일정: {refundRequest.session.title}</div><button onClick={() => resolveRefundRequest(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>반환 받았습니다</span><span className="text-[10px] opacity-80 font-normal">(패널티 없음)</span></button><button onClick={() => resolveRefundRequest(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>반환받지 못했습니다</span><span className="text-[10px] opacity-80 font-normal">(미반환금 패널티 처리)</span></button><button onClick={() => setRefundRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button></div></div></div>)}
-                                {forfeitRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-indigo-50 p-6 text-center border-b border-indigo-100"><div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div><h3 className="text-xl font-black text-indigo-900 mb-1 break-keep">일정 변경 확인 (Case 2)</h3><p className="text-slate-600 font-bold text-sm break-keep">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div><button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span></button><button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span></button><button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button></div></div></div>)}
+                                {forfeitRequest && (<div className="fixed inset-0 z-[300] flex items-center justify-center p-6 bg-slate-900/80 backdrop-blur-sm animate-fade-in"><div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up"><div className="bg-indigo-50 p-6 text-center border-b border-indigo-100"><div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div><h3 className="text-xl font-black text-indigo-900 mb-1 break-keep">일정 변경 확인 (Case 2)</h3><p className="text-slate-600 font-bold text-sm break-keep">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p></div><div className="p-6 space-y-4"><div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div><button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>부지급 (페널티 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span></button><button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep"><span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span></button><button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button></div></div></div>)}
                             </main>
                             
                             <ResultModal result={scanResult} onClose={() => setScanResult(null)} onForceUpdate={handleForceUpdateAndProcess} currentAdmin={currentAdmin} />
