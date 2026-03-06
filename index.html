@@ -870,19 +870,7 @@
                 try {
                     await scannerRef.current.start(configForStart, config, onScan, undefined);
                     isRunningRef.current = true;
-                    
-                    setTimeout(() => {
-                        try {
-                            const track = scannerRef.current.getRunningTrack();
-                            if (track && track.getCapabilities) {
-                                const caps = track.getCapabilities();
-                                if (caps.zoom) {
-                                    track.applyConstraints({ advanced: [{ zoom: Math.min(caps.zoom.max, 2.0) }] });
-                                }
-                            }
-                        } catch(e) {}
-                    }, 500);
-
+                    // 🔥 수정 포인트: 줌 배율 강제 확대 코드 제거됨
                 } catch(e) {
                      try {
                          await scannerRef.current.start({ facingMode: "environment" }, config, onScan, undefined);
@@ -1155,17 +1143,7 @@
                 try {
                     await html5QrCodeRef.current.start(configForStart, config, onScanSuccess, undefined);
                     isRunningRef.current = true;
-                    
-                    setTimeout(() => {
-                        try {
-                            const track = html5QrCodeRef.current.getRunningTrack();
-                            if (track && track.getCapabilities) {
-                                const caps = track.getCapabilities();
-                                if (caps.zoom) track.applyConstraints({ advanced: [{ zoom: Math.min(caps.zoom.max, 2.0) }] });
-                            }
-                        } catch(e) {}
-                    }, 500);
-
+                    // 🔥 수정 포인트: 줌 배율 강제 확대 코드 제거됨
                 } catch(e) {
                     try {
                         await html5QrCodeRef.current.start({ facingMode: "environment" }, config, onScanSuccess, undefined);
