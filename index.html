@@ -840,8 +840,14 @@
                 }
 
                 let targetId = camIdToUse;
-                if (!targetId && cams.length > 0) {
-                    targetId = cams[cams.length - 1].id; 
+                // ⚡ [수정] 렌즈 기억 기능: 저장된 렌즈가 있으면 최우선으로 불러옵니다.
+                if (!targetId) {
+                    const savedCamId = localStorage.getItem('incar_pro_cam_id');
+                    if (savedCamId && cams.some(c => c.id === savedCamId)) {
+                        targetId = savedCamId;
+                    } else if (cams.length > 0) {
+                        targetId = cams[cams.length - 1].id; 
+                    }
                 }
                 if (targetId) setCurrentCamId(targetId);
 
@@ -853,10 +859,10 @@
                 }
 
                 const config = {
-                    fps: 15,
+                    fps: 30, // ⚡ [수정] FPS 30으로 상향 (스캔 반응 속도 2배 향상)
                     qrbox: function(vw, vh) {
                         const min = Math.min(vw, vh);
-                        return { width: Math.floor(min * 0.75), height: Math.floor(min * 0.75) };
+                        return { width: Math.floor(min * 0.85), height: Math.floor(min * 0.85) }; // ⚡ [수정] 스캔 영역 85%로 확대 (인식률 향상)
                     },
                     experimentalFeatures: { useBarCodeDetectorIfSupported: true }
                 };
@@ -870,7 +876,7 @@
                 try {
                     await scannerRef.current.start(configForStart, config, onScan, undefined);
                     isRunningRef.current = true;
-                    // 🔥 수정 포인트: 줌 배율 강제 확대 코드 제거됨
+                    // 🔥 수정 포인트: 줌 배율 강제 확대 코드가 제거되어 있어 기본 넓은 화각을 유지합니다.
                 } catch(e) {
                      try {
                          await scannerRef.current.start({ facingMode: "environment" }, config, onScan, undefined);
@@ -909,6 +915,9 @@
                 const nextIdx = (currentIdx + 1) % cameraList.length;
                 const nextCamId = cameraList[nextIdx].id;
                 setCurrentCamId(nextCamId);
+                
+                // ⚡ [수정] 렌즈 기억 기능: 변경한 렌즈를 저장소에 저장
+                localStorage.setItem('incar_pro_cam_id', nextCamId);
 
                 if (scannerRef.current && isRunningRef.current) {
                     scannerRef.current.stop().then(() => {
@@ -1101,8 +1110,14 @@
                 }
 
                 let targetId = camIdToUse;
-                if (!targetId && cams.length > 0) {
-                    targetId = cams[cams.length - 1].id; 
+                // ⚡ [수정] 렌즈 기억 기능: 저장된 렌즈가 있으면 최우선으로 불러옵니다.
+                if (!targetId) {
+                    const savedCamId = localStorage.getItem('incar_pro_cam_id');
+                    if (savedCamId && cams.some(c => c.id === savedCamId)) {
+                        targetId = savedCamId;
+                    } else if (cams.length > 0) {
+                        targetId = cams[cams.length - 1].id; 
+                    }
                 }
                 if (targetId) setCurrentCamId(targetId);
 
@@ -1114,10 +1129,10 @@
                 }
 
                 const config = {
-                    fps: 15,
+                    fps: 30, // ⚡ [수정] FPS 30으로 상향
                     qrbox: function(vw, vh) {
                         const min = Math.min(vw, vh);
-                        return { width: Math.floor(min * 0.75), height: Math.floor(min * 0.75) };
+                        return { width: Math.floor(min * 0.85), height: Math.floor(min * 0.85) }; // ⚡ [수정] 스캔 영역 85%로 확대
                     },
                     experimentalFeatures: { useBarCodeDetectorIfSupported: true }
                 };
@@ -1180,6 +1195,9 @@
                 const nextIdx = (currentIdx + 1) % cameraList.length;
                 const nextCamId = cameraList[nextIdx].id;
                 setCurrentCamId(nextCamId);
+                
+                // ⚡ [수정] 렌즈 기억 기능: 변경한 렌즈를 저장소에 저장
+                localStorage.setItem('incar_pro_cam_id', nextCamId);
 
                 if (html5QrCodeRef.current && isRunningRef.current) {
                     html5QrCodeRef.current.stop().then(() => {
