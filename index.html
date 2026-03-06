@@ -74,7 +74,6 @@
 
         const GLOBAL_PROCESSED_SCANS = new Set();
 
-        // 🔥 수정 1: 성격(Nature)과 행위(Action)를 명확히 분리하는 헬퍼 함수
         const getSessionDomainInfo = (session) => {
             if (!session) return { isFlight: false, isOutbound: false, isInbound: false, nature: '관광', action: '탑승', icon: 'bus', label: '탑승' };
             
@@ -82,9 +81,8 @@
             
             let isOutbound = false;
             let isInbound = false;
-            let nature = '관광'; // 기본 성격은 관광
+            let nature = '관광'; 
             
-            // 향후 확장을 위한 키워드 기반 성격 도출
             if (isFlight) {
                 isOutbound = session.displayDate && session.displayDate.includes('1일차');
                 isInbound = !isOutbound;
@@ -220,7 +218,7 @@
                 dashboard: <path d="M3 3h7v7H3V3m11 0h7v7h-7V3m0 11h7v7h-7v-7M3 14h7v7H3v-7"/>,
                 qr: <path d="M3 7V3h4M3 17v4h4M17 3h4v4M21 17v-4h4m-4 4h-4M7 11h2v2H7v-2m4 0h2v2h-2v-2m4 0h2v2h-2v-2"/>,
                 users: <g><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></g>,
-                money: <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>,
+                money: <g><circle cx="12" cy="12" r="10" /><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" /><path d="M12 18V6" /></g>,
                 edit: <g><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></g>,
                 settings: <g><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></g>,
                 check: <polyline points="20 6 9 17 4 12"/>,
@@ -230,7 +228,7 @@
                 download: <g><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></g>,
                 table: <g><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 0 2 2h7m0-18v18"/></g>,
                 bus: <g><path d="M8 6v6"/><path d="M15 6v6"/><path d="M2 12h19.6"/><path d="M18 18h3s.5-1.7.8-2.8c.1-.4.2-.8.2-1.2 0-.4-.1-.8-.2-1.2l-1.4-5C20.1 6.8 19.1 6 18 6H4a2 2 0 0 0-2 2v10h3"/><circle cx="7" cy="18" r="2"/><path d="M9 18h5"/><circle cx="16" cy="18" r="2"/></g>,
-                plane: <path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21.5 4c0 0-2 .5-3.5 2L14.5 9.5 6.3 7.7a1 1 0 0 0-1.2.5l-1.5 1.5c-.3.3-.3.8 0 1.1L8.2 13l-3.5 3.5-2.2-.7a1 1 0 0 0-1 .3L.5 17a1 1 0 0 0 0 1.1L4.3 22l3.8 3.8a1 1 0 0 0 1.1 0l1-1a1 1 0 0 0 .3-1l-.7-2.2L13 18.2l2.2 4.7a1 1 0 0 0 1.1 0l1.5-1.5a1 1 0 0 0 .5-1.2z"/>,
+                plane: <path fill="currentColor" stroke="none" d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z"/>,
                 trash: <g><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></g>,
                 plus: <g><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></g>,
                 up: <g><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></g>,
@@ -463,7 +461,6 @@
                     <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85dvh]" onClick={e => e.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
                             <div>
-                                {/* 🔥 모달 내에도 1일차 뱃지 추가 및 성격/행위 분리 적용 */}
                                 <div className="flex flex-wrap gap-1.5 items-center mb-1">
                                     <span className="text-xs font-black text-slate-800 bg-slate-200 px-2 py-0.5 rounded mr-1">{session.displayDate}</span>
                                     <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-white text-slate-500 border border-slate-200">{domainInfo.nature}</span>
@@ -612,9 +609,10 @@
                                 const sessionPenalties = logs.filter(l => l.sessionId === stat.id).reduce((sum, l) => sum + (l.penaltyApplied || 0), 0);
                                 return (
                                     <div key={stat.id} onClick={() => onSessionClick(stat)} className="cursor-pointer bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow active:scale-[0.98] transition-transform">
-                                        <div className="absolute right-0 top-0 p-4 opacity-[0.04] pointer-events-none"><Icon name={domainInfo.icon} size={70} /></div>
+                                        <div className={`absolute right-0 top-0 p-4 pointer-events-none ${stat.type === 'PAYMENT' ? 'text-emerald-500 opacity-20' : stat.type === 'NONE' ? 'text-slate-400 opacity-15' : 'text-incar opacity-15'}`}>
+                                            <Icon name={domainInfo.icon} size={64} />
+                                        </div>
                                         <div className="relative z-10">
-                                            {/* 🔥 수정 2: 일차, 성격, 행위 순으로 뱃지 재배치 (가독성 향상) */}
                                             <div className="flex flex-wrap gap-1.5 items-center mb-3">
                                                 <span className="text-[10px] font-black text-slate-700 bg-slate-100 px-2 py-1 rounded-md">{stat.displayDate}</span>
                                                 <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-500">{domainInfo.nature}</span>
@@ -640,7 +638,7 @@
                                                     <div className="flex justify-between items-end mb-2">
                                                         <span className="text-3xl font-bold text-slate-800">{stat.targetCount}<span className="text-sm text-slate-400 font-medium ml-1">명 대상</span></span>
                                                     </div>
-                                                    <div className="py-2 text-slate-400 text-sm font-medium border-t border-slate-100 break-keep">스캔 및 진행도 체크 불필요</div>
+                                                    <div className="py-2 text-slate-400 text-sm font-medium border-t border-slate-100 break-keep">스캔 및 진행도 체크 불필요 (클릭하여 대상 확인)</div>
                                                 </div>
                                             )}
                                         </div>
