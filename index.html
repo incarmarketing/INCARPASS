@@ -74,20 +74,43 @@
 
         const GLOBAL_PROCESSED_SCANS = new Set();
 
+        // 🔥 수정 1: 성격(Nature)과 행위(Action)를 명확히 분리하는 헬퍼 함수
         const getSessionDomainInfo = (session) => {
-            if (!session) return { isFlight: false, label: '탑승', icon: 'bus', isOutbound: false, isInbound: false };
+            if (!session) return { isFlight: false, isOutbound: false, isInbound: false, nature: '관광', action: '탑승', icon: 'bus', label: '탑승' };
+            
             const isFlight = session.title && (session.title.includes('아시아나') || session.title.includes('대한항공') || session.title.includes('항공') || session.title.includes('공항'));
-            let label = '탑승';
+            
             let isOutbound = false;
             let isInbound = false;
-            if (session.type === 'PAYMENT') label = '지급';
-            else if (session.type === 'NONE') label = '안내';
-            else if (isFlight) {
+            let nature = '관광'; // 기본 성격은 관광
+            
+            // 향후 확장을 위한 키워드 기반 성격 도출
+            if (isFlight) {
                 isOutbound = session.displayDate && session.displayDate.includes('1일차');
                 isInbound = !isOutbound;
-                label = isOutbound ? '출국' : '탑승'; 
+                nature = isOutbound ? '출국' : '귀국';
+            } else if (session.title.includes('만찬')) {
+                nature = '만찬';
+            } else if (session.title.includes('석식')) {
+                nature = '석식';
+            } else if (session.title.includes('중식')) {
+                nature = '중식';
+            } else if (session.title.includes('조식')) {
+                nature = '조식';
             }
-            return { isFlight, label, icon: isFlight ? 'plane' : 'bus', isOutbound, isInbound };
+
+            let action = '탑승';
+            let icon = isFlight ? 'plane' : 'bus';
+            
+            if (session.type === 'PAYMENT') {
+                action = '지급';
+                icon = 'money';
+            } else if (session.type === 'NONE') {
+                action = '안내';
+                icon = 'info';
+            }
+            
+            return { isFlight, isOutbound, isInbound, nature, action, icon, label: action };
         };
 
         const formatTimeSafe = (ts) => {
@@ -326,7 +349,7 @@
                                         <span className="text-emerald-700 font-bold text-sm break-keep">최종 지급액</span>
                                         <div className="text-right">
                                             <span className="text-2xl font-bold text-emerald-600 break-keep">{CURRENCY}{logs.finalAmount}</span>
-                                            {logs.penaltyApplied > 0 && <div className="text-[10px] text-rose-500 font-bold break-keep">(-패널티 {CURRENCY}{logs.penaltyApplied})</div>}
+                                            {logs.penaltyApplied > 0 && <div className="text-[10px] text-rose-500 font-bold break-keep">(-차감금 {CURRENCY}{logs.penaltyApplied})</div>}
                                         </div>
                                     </div>
                                 )}
@@ -334,7 +357,7 @@
                                     <div className="p-4 bg-rose-50 border border-rose-100 rounded-xl text-center">
                                         <p className="text-sm font-bold text-rose-600 mb-2 break-keep">현장에서 바로 변경하시겠습니까?</p>
                                         {currentAdmin?.role === 'staff' ? (
-                                            <p className="text-xs text-slate-500 break-keep">일정 변경 및 패널티 승인은 <strong className="text-rose-500">MANAGER 이상</strong> 권한이 필요합니다. 관리자에게 문의하세요.</p>
+                                            <p className="text-xs text-slate-500 break-keep">일정 변경 및 승인은 <strong className="text-rose-500">MANAGER 이상</strong> 권한이 필요합니다. 관리자에게 문의하세요.</p>
                                         ) : (
                                             <button onClick={() => onForceUpdate(user, session, requiredChoice)} className="w-full py-3 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform text-sm break-keep">네, 일정 변경 후 승인</button>
                                         )}
@@ -413,7 +436,6 @@
                 return groups;
             }, [yetList, session, isPaymentSession]);
 
-            // 🔥 수정 2: 자유/안내(스캔불필요) 일정일 경우 모든 대상자를 하나의 그룹으로 표기
             const allUsersGroups = useMemo(() => {
                 return { '전체 대상자 목록': targetUsers };
             }, [targetUsers]);
@@ -421,7 +443,6 @@
             const [expandedGroups, setExpandedGroups] = useState({});
             const toggleGroup = (groupName) => setExpandedGroups(prev => ({ ...prev, [groupName]: !prev[groupName] }));
 
-            // 🔥 수정 2 연장선: NONE 타입일 때는 전체 목록을 currentGroups로 사용
             const currentGroups = session.type === 'NONE' ? allUsersGroups : (tab === 'done' ? doneGroups : yetGroups);
             
             const filteredGroups = useMemo(() => {
@@ -439,14 +460,19 @@
 
             return (
                 <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in" onClick={onClose}>
-                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                    <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85dvh]" onClick={e => e.stopPropagation()}>
                         <div className="p-6 border-b border-slate-100 flex justify-between items-start bg-slate-50">
                             <div>
-                                <span className={`inline-block px-2 py-1 rounded text-[10px] font-bold mb-1 ${isPaymentSession?'bg-emerald-100 text-emerald-600': session.type==='NONE'?'bg-slate-200 text-slate-600':'bg-indigo-100 text-incar'}`}>
-                                    {domainInfo.label}
-                                </span>
+                                {/* 🔥 모달 내에도 1일차 뱃지 추가 및 성격/행위 분리 적용 */}
+                                <div className="flex flex-wrap gap-1.5 items-center mb-1">
+                                    <span className="text-xs font-black text-slate-800 bg-slate-200 px-2 py-0.5 rounded mr-1">{session.displayDate}</span>
+                                    <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-white text-slate-500 border border-slate-200">{domainInfo.nature}</span>
+                                    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${isPaymentSession?'bg-emerald-50 text-emerald-600 border-emerald-200': session.type==='NONE'?'bg-slate-50 text-slate-400 border-slate-200':'bg-indigo-50 text-incar border-indigo-200'}`}>
+                                        {domainInfo.action}
+                                    </span>
+                                </div>
                                 <h3 className="font-bold text-lg text-slate-800 leading-tight break-keep pr-2">{session.title}</h3>
-                                <p className="text-xs text-slate-500 mt-1 break-keep">{session.displayDate} | 전체 대상 {targetUsers.length}명</p>
+                                <p className="text-xs text-slate-500 mt-1 break-keep">전체 대상 {targetUsers.length}명</p>
                             </div>
                             <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600"><Icon name="x" size={24}/></button>
                         </div>
@@ -469,8 +495,8 @@
                         {session.type !== 'NONE' ? (
                             <>
                                 <div className="flex border-b border-slate-100">
-                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '지급 완료' : `${domainInfo.label} 완료`} ({doneList.length})</button>
-                                    <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '미지급' : `미${domainInfo.label}`} ({yetList.length})</button>
+                                    <button onClick={()=>setTab('done')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='done'?'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '지급 완료' : `${domainInfo.action} 완료`} ({doneList.length})</button>
+                                    <button onClick={()=>setTab('yet')} className={`flex-1 py-4 text-sm font-bold transition-colors ${tab==='yet'?'text-rose-500 border-b-2 border-rose-500 bg-rose-50/50':'text-slate-400 hover:bg-slate-50'}`}>{isPaymentSession ? '미지급' : `미${domainInfo.action}`} ({yetList.length})</button>
                                 </div>
                                 
                                 {tab === 'done' && doneList.length > 0 && busSummary && !isPaymentSession && (
@@ -484,11 +510,11 @@
                                     </div>
                                 )}
 
-                                <div className="overflow-y-auto flex-1 p-4 space-y-4 custom-scrollbar bg-slate-50/30">
+                                <div className="overflow-y-auto flex-1 p-4 pb-12 space-y-4 custom-scrollbar bg-slate-50/30">
                                     {groupKeys.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">{searchTerm ? '검색 결과가 없습니다.' : '해당 인원이 없습니다.'}</div> : groupKeys.map(groupName => (
                                         <div key={groupName} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                                             <button onClick={() => toggleGroup(groupName)} className="w-full p-4 flex justify-between items-center bg-slate-50 hover:bg-slate-100 transition-colors">
-                                                <div className="flex items-center gap-2"><div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${tab==='done'?'bg-emerald-500':'bg-incar'}`}><Icon name={isPaymentSession ? 'money' : domainInfo.icon} size={16} /></div><div className="text-left"><div className="font-bold text-slate-800 text-sm break-keep">{groupName} {!isPaymentSession ? (tab==='done'?`(실제 ${domainInfo.label})`:`(배정 ${domainInfo.isOutbound ? '항공' : '차량'})`) : ''}</div><div className="text-[10px] text-slate-500">{filteredGroups[groupName].length}명 {tab === 'done' ? '처리 완료' : '대기중'}</div></div></div>
+                                                <div className="flex items-center gap-2"><div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${tab==='done'?'bg-emerald-500':'bg-incar'}`}><Icon name={isPaymentSession ? 'money' : domainInfo.icon} size={16} /></div><div className="text-left"><div className="font-bold text-slate-800 text-sm break-keep">{groupName} {!isPaymentSession ? (tab==='done'?`(실제 ${domainInfo.action})`:`(배정 ${domainInfo.isOutbound ? '항공' : '차량'})`) : ''}</div><div className="text-[10px] text-slate-500">{filteredGroups[groupName].length}명 {tab === 'done' ? '처리 완료' : '대기중'}</div></div></div>
                                                 <Icon name={expandedGroups[groupName] || searchTerm ? "up" : "down"} size={20} className="text-slate-400" />
                                             </button>
                                             {(expandedGroups[groupName] || searchTerm) && (
@@ -522,7 +548,7 @@
                                 </div>
                             </>
                         ) : (
-                            <div className="overflow-y-auto flex-1 p-4 space-y-4 custom-scrollbar bg-slate-50/30">
+                            <div className="overflow-y-auto flex-1 p-4 pb-12 space-y-4 custom-scrollbar bg-slate-50/30">
                                 <div className="px-2 pb-2 text-sm font-bold text-slate-500 border-b border-slate-200">해당 일정 대상자 전체 목록 <span className="text-[10px] font-normal ml-2 bg-slate-200 px-2 py-0.5 rounded text-slate-600">스캔 불필요</span></div>
                                 {groupKeys.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">{searchTerm ? '검색 결과가 없습니다.' : '해당 인원이 없습니다.'}</div> : groupKeys.map(groupName => (
                                     <div key={groupName} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
@@ -552,7 +578,6 @@
         };
 
         const DashboardView = ({ users, logs, scheduleStats, groupedStats, groupKeys, changeLogs, onSessionClick }) => {
-            // 🔥 수정 3: 일정 변경 이력 모달 제어 상태
             const [showChangeLog, setShowChangeLog] = useState(false);
 
             return (
@@ -573,7 +598,6 @@
                                 {scheduleStats.filter(s => s.type !== 'NONE').length > 0 ? Math.round(scheduleStats.filter(s => s.type !== 'NONE').reduce((acc, s) => acc + s.percent, 0) / scheduleStats.filter(s => s.type !== 'NONE').length) : 0}%
                             </div>
                         </div>
-                        {/* 🔥 수정 3: 패널티 -> 일정 변경 건수로 수정하고 클릭 시 모달 오픈 로직 연결 */}
                         <div onClick={() => setShowChangeLog(true)} className="cursor-pointer bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-rose-400 flex flex-col justify-center hover:shadow-md transition-shadow active:scale-[0.98]">
                             <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep flex items-center justify-between">일정 변경 건수 <Icon name="search" size={12}/></div>
                             <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800">{changeLogs.length}건</div>
@@ -588,10 +612,17 @@
                                 const sessionPenalties = logs.filter(l => l.sessionId === stat.id).reduce((sum, l) => sum + (l.penaltyApplied || 0), 0);
                                 return (
                                     <div key={stat.id} onClick={() => onSessionClick(stat)} className="cursor-pointer bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow active:scale-[0.98] transition-transform">
-                                        <div className="absolute right-0 top-0 p-3 opacity-10"><Icon name={stat.type === 'PAYMENT' ? 'money' : stat.type === 'NONE' ? 'info' : domainInfo.icon} size={60} /></div>
+                                        <div className="absolute right-0 top-0 p-4 opacity-[0.04] pointer-events-none"><Icon name={domainInfo.icon} size={70} /></div>
                                         <div className="relative z-10">
-                                            <div className="flex justify-between items-start mb-2"><span className={`text-[10px] font-bold px-2 py-0.5 rounded ${stat.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':stat.type==='NONE'?'bg-slate-200 text-slate-600':'bg-indigo-50 text-incar'}`}>{domainInfo.label}</span><span className="text-xs font-bold text-slate-400">{stat.displayDate}</span></div>
+                                            {/* 🔥 수정 2: 일차, 성격, 행위 순으로 뱃지 재배치 (가독성 향상) */}
+                                            <div className="flex flex-wrap gap-1.5 items-center mb-3">
+                                                <span className="text-[10px] font-black text-slate-700 bg-slate-100 px-2 py-1 rounded-md">{stat.displayDate}</span>
+                                                <span className="text-[10px] font-bold px-2 py-1 rounded-md bg-white border border-slate-200 text-slate-500">{domainInfo.nature}</span>
+                                                <span className={`text-[10px] font-bold px-2 py-1 rounded-md border ${stat.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-200':stat.type==='NONE'?'bg-slate-50 text-slate-400 border-slate-200':'bg-indigo-50 text-incar border-indigo-200'}`}>{domainInfo.action}</span>
+                                            </div>
+                                            
                                             <h4 className="font-bold text-slate-800 mb-4 pr-2 leading-tight break-keep min-h-[2.5rem]">{stat.title}</h4>
+                                            
                                             {stat.type !== 'NONE' ? (
                                                 <>
                                                     <div className="flex justify-between items-end mb-1"><span className="text-3xl font-bold text-slate-800">{stat.doneCount}<span className="text-sm text-slate-400 font-medium ml-1">/ {stat.targetCount}</span></span><span className={`text-xl font-bold ${stat.percent === 100 ? 'text-emerald-500' : 'text-incar'}`}>{stat.percent}%</span></div>
@@ -599,7 +630,7 @@
                                                     {stat.type === 'PAYMENT' && (
                                                         <div className="pt-2 border-t border-slate-50 flex flex-col gap-1 text-xs">
                                                             <div className="flex justify-between"><span className="text-slate-400 break-keep">집행액</span><span className="font-bold text-slate-700 break-keep">{CURRENCY}{stat.actualAmount.toLocaleString()}</span></div>
-                                                            {sessionPenalties > 0 && <div className="flex justify-between text-[10px] text-rose-500 font-bold break-keep"><span>(패널티 차감분)</span><span>-{CURRENCY}{sessionPenalties.toLocaleString()}</span></div>}
+                                                            {sessionPenalties > 0 && <div className="flex justify-between text-[10px] text-rose-500 font-bold break-keep"><span>(차감분 반영)</span><span>-{CURRENCY}{sessionPenalties.toLocaleString()}</span></div>}
                                                             <div className="flex justify-between mt-1 pt-1 border-t border-slate-100/50 break-keep"><span className="text-slate-400">예상 (변경전)</span><span>{CURRENCY}{stat.expectedAmount.toLocaleString()}</span></div>
                                                         </div>
                                                     )}
@@ -620,7 +651,6 @@
                     </div>
                     
                     <div className="pc-only bg-white rounded-3xl border border-slate-200 shadow-card overflow-hidden mt-8">
-                        {/* 🔥 수정 4: 상세 현황 분석표 아이콘 제거 */}
                         <div className="p-5 border-b border-slate-100 bg-slate-50/50">
                             <h3 className="font-bold text-slate-800 flex items-center gap-2 break-keep">상세 현황 분석표</h3>
                         </div>
@@ -633,14 +663,19 @@
                                             <h4 className="text-xs font-bold text-incar bg-indigo-50 px-3 py-1.5 rounded-lg inline-block mb-3">{date}</h4>
                                             <div className="overflow-x-auto rounded-xl border border-slate-200">
                                                 <table className="w-full text-left data-table">
-                                                    <thead><tr><th className="min-w-[120px]">관광/일정명</th><th className="text-center">속성</th><th className="text-right">대상(Target)</th><th className="text-right">완료(Done)</th><th className="text-center border-l border-slate-200">상태</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
+                                                    <thead><tr><th className="min-w-[120px]">관광/일정명</th><th className="text-center">속성 (성격/행위)</th><th className="text-right">대상(Target)</th><th className="text-right">완료(Done)</th><th className="text-center border-l border-slate-200">상태</th><th className="text-right">예상 금액</th><th className="text-right">실제 집행</th><th className="text-center border-l border-slate-200">차액 (Diff)</th></tr></thead>
                                                     <tbody>
                                                         {stats.map(s => {
                                                             const dInfo = getSessionDomainInfo(s);
                                                             return (
                                                             <tr key={s.id} onClick={() => onSessionClick(s)} className="cursor-pointer hover:bg-slate-50 transition-colors">
                                                                 <td className="font-bold text-slate-700 whitespace-nowrap">{s.title}</td>
-                                                                <td className="text-center"><span className={`px-2 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':s.type==='NONE'?'bg-slate-100 text-slate-500 border-slate-200':'bg-indigo-50 text-incar border-indigo-100'}`}>{dInfo.label}</span></td>
+                                                                <td className="text-center">
+                                                                    <div className="flex items-center justify-center gap-1">
+                                                                        <span className="text-[10px] font-bold text-slate-500">{dInfo.nature}</span>
+                                                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-50 text-emerald-600 border-emerald-100':s.type==='NONE'?'bg-slate-100 text-slate-500 border-slate-200':'bg-indigo-50 text-incar border-indigo-100'}`}>{dInfo.action}</span>
+                                                                    </div>
+                                                                </td>
                                                                 <td className="text-right text-slate-500">{s.type === 'NONE' ? '-' : s.targetCount}</td>
                                                                 <td className="text-right font-bold text-slate-900">{s.type === 'NONE' ? '-' : s.doneCount}</td>
                                                                 <td className="text-center border-l border-slate-50">{s.type === 'NONE' ? <span className="text-slate-400 text-xs">스캔없음</span> : s.targetCount - s.doneCount === 0 ? <span className="text-emerald-500 font-bold text-xs whitespace-nowrap">Complete</span> : <span className="text-rose-500 font-bold text-xs whitespace-nowrap">{s.targetCount - s.doneCount}명 남음</span>}</td>
@@ -659,10 +694,9 @@
                         )}
                     </div>
 
-                    {/* 🔥 수정 3: 일정 변경 전체 내역 모달창 */}
                     {showChangeLog && (
                         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-fade-in" onClick={() => setShowChangeLog(false)}>
-                            <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]" onClick={e => e.stopPropagation()}>
+                            <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[85dvh]" onClick={e => e.stopPropagation()}>
                                 <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                                     <div>
                                         <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2"><Icon name="history" size={20} className="text-rose-500"/> 전체 일정 변경 내역</h3>
@@ -670,7 +704,7 @@
                                     </div>
                                     <button onClick={() => setShowChangeLog(false)} className="p-2 text-slate-400 hover:text-slate-600"><Icon name="x" size={24}/></button>
                                 </div>
-                                <div className="p-4 overflow-y-auto custom-scrollbar flex-1 bg-slate-50/50">
+                                <div className="p-4 pb-12 overflow-y-auto custom-scrollbar flex-1 bg-slate-50/50">
                                     {changeLogs.length === 0 ? (
                                         <div className="text-center text-slate-400 py-10 text-sm">변경 이력이 없습니다.</div>
                                     ) : (
@@ -689,7 +723,7 @@
                                                     </div>
                                                     <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 break-keep leading-relaxed">
                                                         <span className="font-bold mr-1">사유:</span> {log.reason}
-                                                        {log.penalty > 0 && <span className="ml-2 text-rose-500 font-bold block sm:inline mt-1 sm:mt-0">(차액/패널티 {CURRENCY}{log.penalty} 적용됨)</span>}
+                                                        {log.penalty > 0 && <span className="ml-2 text-rose-500 font-bold block sm:inline mt-1 sm:mt-0">(차액반환/패널티 {CURRENCY}{log.penalty} 적용됨)</span>}
                                                     </div>
                                                 </div>
                                             ))}
@@ -917,7 +951,7 @@
                                 <select value={targetSessionId} onChange={(e) => setTargetSessionId(e.target.value)} className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-lg outline-none focus:ring-4 transition-all break-keep ${mode==='BOARDING'?'focus:ring-incar/20':'focus:ring-emerald-500/20'}`}>
                                     {filteredSchedules.map(s => {
                                         const dInfo = getSessionDomainInfo(s);
-                                        return <option key={s.id} value={s.id}>[{s.displayDate}] {s.title} ({dInfo.label})</option>
+                                        return <option key={s.id} value={s.id}>[{s.displayDate}] {s.title} ({dInfo.nature} - {dInfo.action})</option>
                                     })}
                                 </select>
                             ) : (
@@ -976,7 +1010,7 @@
                     </div>
                     
                     <div className="mt-2 mb-2">
-                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> {domainInfo.label} 스캔 시작</button>
+                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> {domainInfo.action} 스캔 시작</button>
                     </div>
 
                     {filteredSchedules.length > 0 && (
@@ -1300,7 +1334,7 @@
             return (
                 <div className="space-y-6 animate-slide-up">
                     <div className="bg-white p-6 rounded-3xl shadow-card">
-                        <h3 className="font-bold text-lg mb-4 text-slate-800 break-keep">참가자 일정 변경 및 패널티 관리</h3>
+                        <h3 className="font-bold text-lg mb-4 text-slate-800 break-keep">참가자 일정 변경 및 관리</h3>
                         <div className="flex flex-col gap-2 mb-6">
                             <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="사번 또는 이름 검색" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-incar" />
                             <div className="flex gap-2">
@@ -1332,7 +1366,7 @@
                                 <div className="flex flex-col md:flex-row gap-6 mb-6">
                                     <div className="flex-1 bg-slate-50 p-5 rounded-2xl border border-slate-100 flex flex-col justify-center">
                                         <div className="flex justify-between items-start mb-2"><div><div className="font-black text-2xl text-slate-800 break-keep">{selectedUser.name}</div><div className="text-sm font-bold text-slate-500 break-all">{selectedUser.org}</div></div><div className="text-right"><div className="text-[10px] font-bold text-slate-400 uppercase">사번(ID)</div><div className="font-mono font-bold text-incar">{selectedUser.uid}</div></div></div>
-                                        <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-between items-center"><span className="text-xs font-bold text-slate-400 break-keep">누적 패널티</span><span className="font-black text-rose-500 text-lg break-keep">-{CURRENCY}{selectedUser.penaltyTotal || 0}</span></div>
+                                        <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-between items-center"><span className="text-xs font-bold text-slate-400 break-keep">누적 차감액(패널티)</span><span className="font-black text-rose-500 text-lg break-keep">-{CURRENCY}{selectedUser.penaltyTotal || 0}</span></div>
                                     </div>
                                     <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center w-full md:w-auto cursor-pointer hover:bg-slate-50 hover:border-incar/30 transition-all group" onClick={() => setShowQrModal(true)} title="QR코드 확대 및 다운로드">
                                         <div className="mb-2 w-28 h-28 flex items-center justify-center bg-white rounded-xl shadow-sm border border-slate-100 p-2 group-hover:scale-105 transition-transform"><QRCodeCanvas text={`https://incarmkt.github.io/travel/?eid=${selectedUser.uid}`} size={100} /></div>
@@ -1357,10 +1391,10 @@
                                 </div>
 
                                 <div className="mt-6 pt-6 border-t border-slate-100">
-                                    <h4 className="font-bold text-sm text-slate-800 mb-3 flex items-center gap-2 break-keep"><Icon name="history" size={16}/> 변경 및 패널티 이력</h4>
+                                    <h4 className="font-bold text-sm text-slate-800 mb-3 flex items-center gap-2 break-keep"><Icon name="history" size={16}/> 변경 및 정산 이력</h4>
                                     {userHistoryLogs.length === 0 ? <p className="text-xs text-slate-400 break-keep">변경 이력이 없습니다.</p> : (
                                         <div className="space-y-3">
-                                            <div className="hidden md:block overflow-x-auto"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-500 font-bold"><tr><th className="p-2">일시</th><th className="p-2">항목</th><th className="p-2">내용</th><th className="p-2 text-right">패널티</th><th className="p-2">사유</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleLogs.map((log, i) => (<tr key={i}><td className="p-2 text-slate-400 whitespace-nowrap">{formatDateSafe(log.timestamp)}</td><td className="p-2 font-bold whitespace-nowrap">{cleanOptionKey(log.targetOption)}</td><td className="p-2 break-keep"><span className="line-through text-slate-300">{log.oldVal}</span> <span className="mx-1 text-slate-300">→</span> <span className="text-incar font-bold">{log.newVal}</span></td><td className="p-2 text-right font-bold text-rose-500 whitespace-nowrap">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</td><td className="p-2 text-slate-500 truncate max-w-[100px]">{log.reason}</td></tr>))}</tbody></table></div>
+                                            <div className="hidden md:block overflow-x-auto"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-500 font-bold"><tr><th className="p-2">일시</th><th className="p-2">항목</th><th className="p-2">내용</th><th className="p-2 text-right">차액/패널티</th><th className="p-2">사유</th></tr></thead><tbody className="divide-y divide-slate-100">{visibleLogs.map((log, i) => (<tr key={i}><td className="p-2 text-slate-400 whitespace-nowrap">{formatDateSafe(log.timestamp)}</td><td className="p-2 font-bold whitespace-nowrap">{cleanOptionKey(log.targetOption)}</td><td className="p-2 break-keep"><span className="line-through text-slate-300">{log.oldVal}</span> <span className="mx-1 text-slate-300">→</span> <span className="text-incar font-bold">{log.newVal}</span></td><td className="p-2 text-right font-bold text-rose-500 whitespace-nowrap">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</td><td className="p-2 text-slate-500 truncate max-w-[100px]">{log.reason}</td></tr>))}</tbody></table></div>
                                             <div className="md:hidden space-y-2">{visibleLogs.map((log, i) => (<div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col gap-2"><div className="flex justify-between items-center text-xs text-slate-400 font-medium border-b border-slate-200 pb-2 mb-1"><span>{formatDateSafe(log.timestamp)}</span><span className="bg-white px-2 py-0.5 rounded border border-slate-200 break-keep">{cleanOptionKey(log.targetOption)}</span></div><div className="flex items-center justify-center gap-2 text-sm break-keep text-center"><span className="line-through text-slate-400">{log.oldVal}</span><Icon name="chevronsDown" size={12} className="rotate-[-90deg] text-slate-300" /><span className="font-bold text-incar">{log.newVal}</span></div><div className="flex justify-between items-end mt-1 pt-2 border-t border-slate-200/50"><span className="text-xs text-slate-500 flex-1 break-keep pr-2">{log.reason}</span><span className="text-sm font-bold text-rose-500 break-keep">{log.penalty > 0 ? `-${CURRENCY}${log.penalty}` : '-'}</span></div></div>))}</div>
                                             {userHistoryLogs.length > 1 && <button onClick={() => setShowAllHistory(!showAllHistory)} className="w-full py-2 text-xs font-bold text-slate-400 bg-slate-50 hover:bg-slate-100 rounded-lg flex items-center justify-center gap-1 break-keep">{showAllHistory ? '접기' : `더보기 (${userHistoryLogs.length - 1}건 더 있음)`} <Icon name={showAllHistory ? "up" : "down"} size={12} /></button>}
                                         </div>
@@ -1393,7 +1427,7 @@
                                 )}
 
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-400 mb-1 break-keep">패널티 수동입력 ({CURRENCY})</label>
+                                    <label className="block text-xs font-bold text-slate-400 mb-1 break-keep">차액/패널티 수동입력 ({CURRENCY})</label>
                                     <input type="number" value={editForm.penalty} onChange={e=>setEditForm({...editForm, penalty: e.target.value})} className="w-full p-3 border border-rose-200 bg-rose-50 rounded-xl font-bold text-rose-600 break-keep" />
                                     <p className="text-[10px] text-slate-400 mt-1 break-keep">
                                         * 자동 계산된 값 외에 다른 금액을 지정할 경우 수정하세요. (반환 여부는 저장 시 한 번 더 묻습니다.)
@@ -2002,7 +2036,7 @@
 
             const handleManualComplete = async (user, session) => {
                 const domainInfo = getSessionDomainInfo(session);
-                if(!confirm(`${user.name}님을 수동으로 [${domainInfo.label}완료] 처리하시겠습니까?`)) return;
+                if(!confirm(`${user.name}님을 수동으로 [${domainInfo.action} 완료] 처리하시겠습니까?`)) return;
                 
                 processedScansRef.current.add(`${session.id}_${user.uid}`);
 
@@ -2361,7 +2395,7 @@
                 }
 
                 const todayLogs = logs.filter(l => String(l.uid) === String(user.uid) && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급'); 
-                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':getSessionDomainInfo(session).label+' 완료', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
+                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':getSessionDomainInfo(session).action+' 완료', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
             }, [db, users, schedules, logs, targetSessionId, targetBus, currentAdmin]);
 
             const handleUserUpdate = async (overridePenalty = null, overrideReason = null) => { 
