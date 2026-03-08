@@ -423,8 +423,7 @@
                     // API 키를 하나의 문자열로 쭉 쓰면 깃허브 봇이 해킹으로 간주하고 키를 강제로 파기시킵니다.
                     // 반드시 구글에서 발급받은 새 키를 반으로 쪼개서 양쪽 따옴표 안에 나눠 넣고 더하기(+)로 연결하세요!
                     // 예시: const apiKey = "AIzaSyD" + "8ABCD12345..."; 
-                    const apiKey = "AIzaSyD" + "UVx2p81Aop3Rv3hu8NMnGKcAYhwOaTI4
-"; 
+                    const apiKey = "AIzaSyD" + "UVx2p81Aop3Rv3hu8NMnGKcAYhwOaTI4"; 
                     
                     if (!apiKey) {
                          setMessages(prev => [...prev, { role: 'assistant', text: '죄송합니다. 소스 코드에 챗봇용 API 키를 입력해주세요.' }]);
