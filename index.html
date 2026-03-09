@@ -1284,17 +1284,16 @@
                 if (!selectedSession) return [];
                 const allTargets = users.filter(u => getUserSessionInfo(u, selectedSession).isTarget);
                 
-                // 배차 검증이 꺼져있으면 모든 대상자를 보여줌
-                if (mode === 'PAYMENT' || !isStrictBusMode) return allTargets;
+                if (mode === 'PAYMENT') return allTargets;
                 
-                // 배차 검증이 켜져있으면 해당 차량(targetBus) 탑승 대상자만 필터링
+                // 탑승 모드일 때는 '배차 검증' 토글과 무관하게 선택된 차량(targetBus) 명단만 표시
                 return allTargets.filter(u => {
                     const expectedBus = getUserSessionInfo(u, selectedSession).expectedBus;
                     const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id);
                     if (log) return log.bus === targetBus;
                     return expectedBus === targetBus || expectedBus === targetBus.replace('호차','');
                 });
-            }, [users, selectedSession, mode, targetBus, logs, isStrictBusMode]);
+            }, [users, selectedSession, mode, targetBus, logs]);
 
             const filteredTargetUsers = useMemo(() => {
                 if (!listSearch.trim()) return targetUsersList;
@@ -2459,6 +2458,21 @@
                         });
                         
                         if (data.length > 0) {
+                            // 추가된 로직: 엑셀 데이터에서 고유 버스/호차 번호 추출 및 정렬
+                            const extractedBuses = Array.from(new Set(data.map(u => u.bus).filter(b => b && b !== '미정' && b !== '-'))).sort((a, b) => {
+                                const numA = parseInt(a) || 0;
+                                const numB = parseInt(b) || 0;
+                                return numA - numB;
+                            });
+                            
+                            // 추출된 호차가 있다면 탑승 관리 화면의 버스 리스트를 즉시 자동 업데이트
+                            if (extractedBuses.length > 0) {
+                                setBusList(extractedBuses);
+                                if (!extractedBuses.includes(targetBus)) {
+                                    setTargetBus(extractedBuses[0]); // 현재 선택된 버스가 새 목록에 없으면 첫 번째 버스로 자동 선택
+                                }
+                            }
+
                             if (db) {
                                 const batch = db.batch();
                                 data.forEach(user => {
