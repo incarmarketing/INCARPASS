@@ -1528,7 +1528,7 @@
             );
         };
 
-        const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules, changeLogs, logs }) => {
+        const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules, changeLogs, logs, busList }) => {
             const [manualInput, setManualInput] = useState(false);
             const [showAllHistory, setShowAllHistory] = useState(false);
             const [isLookupScanning, setIsLookupScanning] = useState(false);
@@ -1718,6 +1718,43 @@
                 }
             }, [editForm.optKey, selectedUser]);
 
+            const isBusRequired = useMemo(() => {
+                if (!editForm.optKey || !editForm.optVal || !schedules) return false;
+                if (editForm.optVal.includes('자유') || editForm.optVal.includes('미정') || editForm.optVal === '-') return false;
+                
+                const relatedSchedules = schedules.filter(s => s.targetKey === editForm.optKey && (s.targetVal === editForm.optVal || s.targetVal === 'ALL' || s.targetVal.includes(editForm.optVal)));
+                return relatedSchedules.some(s => s.type === 'BOARDING' && s.nature !== '출국' && s.nature !== '귀국');
+            }, [editForm.optKey, editForm.optVal, schedules]);
+
+            const busStats = useMemo(() => {
+                if (!editForm.optKey || !busList) return [];
+                const dayMatch = editForm.optKey.match(/(\d+일차)/);
+                const busKey1 = dayMatch ? `${dayMatch[1]}버스` : '버스';
+                const busKey2 = dayMatch ? `${dayMatch[1]} 버스` : '버스';
+
+                return busList.map(bus => {
+                    const usersInBus = users.filter(u => {
+                        const uBus = u.options[busKey1] || u.options[busKey2] || u.bus;
+                        return String(uBus).trim() === bus;
+                    });
+                    
+                    const destCounts = {};
+                    usersInBus.forEach(u => {
+                        const dest = u.options[editForm.optKey];
+                        if(dest) destCounts[dest] = (destCounts[dest] || 0) + 1;
+                    });
+                    
+                    const sortedDests = Object.entries(destCounts).sort((a,b) => b[1] - a[1]);
+                    const mainDest = sortedDests.length > 0 ? sortedDests[0][0] : '배정없음';
+                    
+                    return {
+                        bus,
+                        totalCount: usersInBus.length,
+                        mainDest
+                    };
+                });
+            }, [busList, users, editForm.optKey]);
+
             useEffect(() => {
                 if (!selectedUser || !editForm.optKey || !editForm.optVal || !schedules) {
                     setFinancialImpact(null);
@@ -1774,6 +1811,10 @@
             const onSaveClick = () => {
                 if (!selectedUser || !editForm.optKey || !editForm.optVal) {
                     return alert("변경할 항목을 선택하거나 입력하세요.");
+                }
+
+                if (isBusRequired && (!editForm.newBus || editForm.newBus.trim() === '')) {
+                    return alert(`[${editForm.optVal}] 일정은 버스 배정이 필수입니다. 탑승할 호차를 선택해주세요.`);
                 }
                 
                 const oldVal = selectedUser.options[editForm.optKey];
@@ -1888,12 +1929,60 @@
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4 mt-4">
-                                    <div><label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 전 옵션</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{cleanOptionKey(key)} (현재: {selectedUser.options[key]})</option>)}</select></div>
-                                    <div><div className="flex justify-between items-center mb-1"><label className="block text-xs font-bold text-slate-400 break-keep">변경 후 옵션</label><button onClick={()=>setManualInput(!manualInput)} className="text-[10px] text-incar underline font-bold break-keep">{manualInput ? '목록에서 선택' : '직접 입력'}</button></div>{manualInput ? <input type="text" value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white break-keep" placeholder="직접 입력하세요" /> : <select value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{uniqueValues.map(val => <option key={val} value={val}>{val}</option>)}<option value="직접입력">[목록에 없음]</option></select>}</div>
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 후 호차 (선택사항)</label>
-                                    <input type="text" value={editForm.newBus} onChange={e=>setEditForm({...editForm, newBus: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white break-keep" placeholder="예: 2호차" />
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 전 옵션</label>
+                                        <select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white">
+                                            <option value="">선택하세요</option>
+                                            {Object.keys(selectedUser.options).filter(key => !key.includes('버스')).map(key => <option key={key} value={key}>{cleanOptionKey(key)} (현재: {selectedUser.options[key]})</option>)}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <label className="block text-xs font-bold text-slate-400 break-keep">변경 후 옵션</label>
+                                            <button onClick={()=>setManualInput(!manualInput)} className="text-[10px] text-incar underline font-bold break-keep">{manualInput ? '목록에서 선택' : '직접 입력'}</button>
+                                        </div>
+                                        {manualInput ? 
+                                            <input type="text" value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white break-keep" placeholder="직접 입력하세요" /> : 
+                                            <select value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white">
+                                                <option value="">선택하세요</option>
+                                                {uniqueValues.map(val => <option key={val} value={val}>{val}</option>)}
+                                                <option value="직접입력">[목록에 없음]</option>
+                                            </select>
+                                        }
+                                    </div>
+                                    
+                                    <div className="col-span-2 border-t border-slate-100 pt-4 mt-2">
+                                        <label className="block text-xs font-bold text-slate-800 mb-2 break-keep">
+                                            탑승 호차 배정 {isBusRequired ? <span className="text-rose-500">(필수 선택)</span> : <span className="text-slate-400">(선택 사항)</span>}
+                                        </label>
+                                        {busStats.length > 0 && (
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-2">
+                                                {busStats.map(stat => {
+                                                    const isSelected = editForm.newBus === stat.bus;
+                                                    const isRecommended = stat.mainDest.includes(editForm.optVal) || (editForm.optVal && editForm.optVal.includes(stat.mainDest));
+                                                    return (
+                                                        <button 
+                                                            type="button"
+                                                            key={stat.bus}
+                                                            onClick={() => setEditForm({...editForm, newBus: stat.bus})}
+                                                            className={`p-3 rounded-xl border text-left transition-all relative overflow-hidden ${isSelected ? 'bg-incar text-white border-incar shadow-md' : isRecommended ? 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                                                        >
+                                                            {isRecommended && !isSelected && <div className="absolute top-0 right-0 bg-indigo-500 text-white text-[8px] px-1.5 py-0.5 rounded-bl-lg font-bold">추천</div>}
+                                                            <div className="font-bold text-sm mb-0.5">{stat.bus}</div>
+                                                            <div className={`text-[10px] break-keep leading-tight ${isSelected ? 'text-white/80' : 'text-slate-500'}`}>
+                                                                주 목적지: <span className="font-bold">{stat.mainDest}</span><br/>
+                                                                현재 배정: {stat.totalCount}명
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                        <div className="flex items-center gap-2 mt-2">
+                                            <span className="text-xs font-bold text-slate-400 whitespace-nowrap">직접 입력:</span>
+                                            <input type="text" value={editForm.newBus} onChange={e=>setEditForm({...editForm, newBus: e.target.value})} className="flex-1 p-2 border border-slate-200 rounded-lg text-sm font-bold bg-slate-50 focus:bg-white focus:border-incar outline-none transition-colors" placeholder="예: 4호차" />
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {financialImpact && (
@@ -3057,7 +3146,7 @@
                                         {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} groupKeys={groupKeys} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
                                         {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} scanResult={scanResult} logs={logs} handleFastAction={handleFastAction} />}
                                         {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} scanResult={scanResult} logs={logs} handleFastAction={handleFastAction} />}
-                                        {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} schedules={schedules} changeLogs={changeLogs} logs={logs} />}
+                                        {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} schedules={schedules} changeLogs={changeLogs} logs={logs} busList={busList} />}
                                         {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} exportAllData={exportAllData} handleFullReset={handleFullReset} handlePartialReset={handlePartialReset} schedules={schedules} setSchedules={setSchedules} logs={logs} appBgImage={appBgImage} setAppBgImage={setAppBgImage} handleAppBgUpload={handleAppBgUpload} db={db} SYSTEM_APP_ID={SYSTEM_APP_ID} admins={admins} handleAddAdmin={handleAddAdmin} handleDeleteAdmin={handleDeleteAdmin} handleUpdateAdminRole={handleUpdateAdminRole} currentAdmin={currentAdmin} />}
                                     </div>
                                 </div>
