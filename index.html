@@ -716,7 +716,7 @@
                     const { isTarget, expectedBus } = getUserSessionInfo(u, session);
                     if (!isTarget) return false;
                     return true;
-                });
+                }).sort((a, b) => a.name.localeCompare(b.name));
             }, [session, users]);
 
             const { doneList, yetList } = useMemo(() => {
@@ -734,6 +734,10 @@
                         yet.push(u); 
                     }
                 });
+
+                done.sort((a, b) => a.name.localeCompare(b.name));
+                yet.sort((a, b) => a.name.localeCompare(b.name));
+
                 return { doneList: done, yetList: yet };
             }, [targetUsers, logs, session, users]);
 
@@ -1294,15 +1298,18 @@
                 if (!selectedSession) return [];
                 const allTargets = users.filter(u => getUserSessionInfo(u, selectedSession).isTarget);
                 
-                if (mode === 'PAYMENT') return allTargets;
-                
-                // 탑승 모드일 때는 선택된 차량(targetBus) 명단만 표시 (깔끔한 관리를 위해)
-                return allTargets.filter(u => {
-                    const expectedBus = getUserSessionInfo(u, selectedSession).expectedBus;
-                    const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id);
-                    if (log) return log.bus === targetBus;
-                    return expectedBus === targetBus || expectedBus === targetBus.replace('호차','');
-                });
+                let filtered = [];
+                if (mode === 'PAYMENT') filtered = allTargets;
+                else {
+                    // 탑승 모드일 때는 선택된 차량(targetBus) 명단만 표시 (깔끔한 관리를 위해)
+                    filtered = allTargets.filter(u => {
+                        const expectedBus = getUserSessionInfo(u, selectedSession).expectedBus;
+                        const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id);
+                        if (log) return log.bus === targetBus;
+                        return expectedBus === targetBus || expectedBus === targetBus.replace('호차','');
+                    });
+                }
+                return filtered.sort((a, b) => a.name.localeCompare(b.name));
             }, [users, selectedSession, mode, targetBus, logs]);
 
             const filteredTargetUsers = useMemo(() => {
@@ -1933,7 +1940,24 @@
                                         <label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 전 옵션</label>
                                         <select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white">
                                             <option value="">선택하세요</option>
-                                            {Object.keys(selectedUser.options).filter(key => !key.includes('버스')).map(key => <option key={key} value={key}>{cleanOptionKey(key)} (현재: {selectedUser.options[key]})</option>)}
+                                            {Object.keys(selectedUser.options)
+                                                .filter(key => !key.includes('버스'))
+                                                .sort((a, b) => {
+                                                    const getOrder = (k) => {
+                                                        if (k.includes('1일차')) return 1;
+                                                        if (k.includes('2일차')) return 2;
+                                                        if (k.includes('만찬')) return 3;
+                                                        if (k.includes('3일차')) return 4;
+                                                        if (k.includes('항공') || k.includes('귀국')) return 5;
+                                                        return 6;
+                                                    };
+                                                    const orderA = getOrder(a);
+                                                    const orderB = getOrder(b);
+                                                    if (orderA !== orderB) return orderA - orderB;
+                                                    return a.localeCompare(b);
+                                                })
+                                                .map(key => <option key={key} value={key}>{cleanOptionKey(key)} (현재: {selectedUser.options[key]})</option>)
+                                            }
                                         </select>
                                     </div>
                                     <div>
