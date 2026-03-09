@@ -946,7 +946,7 @@
                     </div>
 
                     <div>
-                        <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2"><Icon name="dashboard" className="text-incar"/> 관광/일정별 진행 현황</h3>
+                        <h3 className="font-bold text-lg text-slate-800 mb-4 flex items-center gap-2"><Icon name="dashboard" className="text-incar"/> 진행 현황</h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {scheduleStats.map(stat => {
                                 const domainInfo = getSessionDomainInfo(stat);
@@ -1392,7 +1392,7 @@
                                     <div className="flex justify-between items-center mb-3">
                                         <h4 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                                             <Icon name={mode==='BOARDING'?'users':'money'} size={18} className={mode==='BOARDING'?'text-incar':'text-emerald-500'} />
-                                            {mode === 'BOARDING' ? <><span className="text-incar bg-indigo-50 px-2 py-0.5 rounded ml-1 mr-1">[{targetBus}]</span> 탑승 명단</> : '전체 지급 대상자 관리'}
+                                            {mode === 'BOARDING' ? <><span className="text-incar bg-indigo-50 px-2 py-0.5 rounded ml-1 mr-1">[{targetBus}]</span> 탑승 명단</> : '전체 명단'}
                                         </h4>
                                         <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-1 rounded font-bold">
                                             {filteredTargetUsers.length}명
@@ -1404,7 +1404,7 @@
                                         </div>
                                         <input 
                                             type="text" 
-                                            placeholder="이름으로 빠르게 검색" 
+                                            placeholder="이름 또는 사번으로 검색" 
                                             value={listSearch}
                                             onChange={(e) => setListSearch(e.target.value)}
                                             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-incar"
@@ -1503,7 +1503,7 @@
                                                 type="text" 
                                                 value={manualCode}
                                                 onChange={(e) => setManualCode(e.target.value)}
-                                                placeholder="외부 바코드 스캐너 연결 시 커서를 여기에 두세요" 
+                                                placeholder="이름 또는 사번을 입력하세요." 
                                                 className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-incar/20 transition-all break-keep"
                                             />
                                         </div>
@@ -1527,7 +1527,7 @@
                             )}
                             
                             <p className="text-amber-400 mt-4 text-xs text-center break-keep font-medium leading-relaxed">
-                                💡 가까이 대지 마시고 15cm 정도 떨어뜨려주세요.<br/>렌즈가 여러 개인 폰은 '렌즈 변경' 버튼을 누르면 초점이 맞습니다.
+                                💡 가까이 대지 마시고 15cm 정도 떨어뜨려주세요.<br/>초점이 맞지 않는 경우, '렌즈 변경' 버튼을 누르면 초점이 맞습니다.
                             </p>
                         </div>
                     )}
@@ -3206,3 +3206,4 @@
     </script>
 </body>
 </html>
+
