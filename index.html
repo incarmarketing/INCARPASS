@@ -1437,7 +1437,7 @@
                                                         <div>
                                                             {isBoarded ? (
                                                                 <button onClick={() => handleFastAction(u, selectedSession, targetBus, true)} className="px-3 py-1.5 bg-white text-slate-500 border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-[10px] font-bold rounded-lg transition-colors shadow-sm whitespace-nowrap">
-                                                                    {mode==='BOARDING' ? '하차(취소)' : '지급 취소'}
+                                                                    {mode==='BOARDING' ? '하차' : '지급 취소'}
                                                                 </button>
                                                             ) : (
                                                                 <button onClick={() => handleFastAction(u, selectedSession, targetBus, false)} className={`px-5 py-2 text-white text-xs font-bold rounded-xl shadow-md transition-transform active:scale-95 whitespace-nowrap ${mode==='BOARDING'?'bg-slate-800 hover:bg-slate-700':'bg-emerald-500 hover:bg-emerald-600'}`}>
@@ -2928,31 +2928,42 @@
                 const scanKey = `${session.id}_${user.uid}`;
                 
                 if (isCancel) {
-                    if (!confirm(`${user.name}님의 기록을 취소(하차/지급취소)하시겠습니까?`)) return;
+                    const confirmMessage = session.type === 'PAYMENT' 
+                        ? `${user.name}님의 지급을 취소하시겠습니까?`
+                        : `${user.name}님의 탑승을 취소하시겠습니까?`;
+                        
+                    if (!confirm(confirmMessage)) return;
                     
-                    const logToDelete = logs.find(l => l.uid === String(user.uid) && l.sessionId === session.id);
+                    const logToDelete = logs.find(l => String(l.uid) === String(user.uid) && String(l.sessionId) === String(session.id));
                     if (logToDelete) {
-                        if (db) {
-                            await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logToDelete.id).delete();
-                            if (session.type === 'PAYMENT' && logToDelete.penaltyApplied > 0) {
-                                const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
-                                await userRef.update({ penaltyTotal: (user.penaltyTotal || 0) + logToDelete.penaltyApplied });
+                        try {
+                            if (db) {
+                                await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logToDelete.id).delete();
+                                if (session.type === 'PAYMENT' && logToDelete.penaltyApplied > 0) {
+                                    const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
+                                    await userRef.update({ penaltyTotal: (user.penaltyTotal || 0) + logToDelete.penaltyApplied });
+                                }
+                            } else {
+                                setLogs(prev => prev.filter(l => l.id !== logToDelete.id));
+                                if (session.type === 'PAYMENT' && logToDelete.penaltyApplied > 0) {
+                                    setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: (u.penaltyTotal || 0) + logToDelete.penaltyApplied } : u));
+                                }
                             }
-                        } else {
-                            setLogs(prev => prev.filter(l => l.id !== logToDelete.id));
-                            if (session.type === 'PAYMENT' && logToDelete.penaltyApplied > 0) {
-                                setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: (u.penaltyTotal || 0) + logToDelete.penaltyApplied } : u));
-                            }
-                        }
-                        GLOBAL_PROCESSED_SCANS.delete(scanKey);
+                            GLOBAL_PROCESSED_SCANS.delete(scanKey);
 
-                        const changeLog = { 
-                            id: `CHG_${Date.now()}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, 
-                            targetOption: session.title, oldVal: session.type === 'PAYMENT' ? '지급완료' : '탑승완료', newVal: session.type === 'PAYMENT' ? '지급취소' : '하차처리', 
-                            penalty: 0, reason: '현장 수동 취소(하차)', processedBy: `${currentAdmin?.name}(${currentAdmin?.id})` 
-                        };
-                        if (db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
-                        else setChangeLogs(prev => [changeLog, ...changeLogs]);
+                            const changeLog = { 
+                                id: `CHG_${Date.now()}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, 
+                                targetOption: session.title, oldVal: session.type === 'PAYMENT' ? '지급완료' : '탑승완료', newVal: session.type === 'PAYMENT' ? '지급취소' : '하차', 
+                                penalty: 0, reason: '현장 수동 취소', processedBy: `${currentAdmin?.name}(${currentAdmin?.id})` 
+                            };
+                            if (db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
+                            else setChangeLogs(prev => [changeLog, ...changeLogs]);
+                        } catch (error) {
+                            console.error("취소 중 오류 발생:", error);
+                            alert("취소 처리 중 시스템 오류가 발생했습니다.");
+                        }
+                    } else {
+                        alert("삭제할 수 있는 기존 기록을 찾을 수 없습니다.");
                     }
                 } else {
                     processScan(String(user.uid));
