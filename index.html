@@ -2611,6 +2611,7 @@
             useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
             
             useEffect(() => {
+                GLOBAL_PROCESSED_SCANS.clear();
                 logs.forEach(l => {
                     if (l.sessionId && l.uid && !l.isCancelled) GLOBAL_PROCESSED_SCANS.add(`${l.sessionId}_${l.uid}`);
                 });
