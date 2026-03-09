@@ -2190,9 +2190,9 @@
                             <p className="text-slate-400 text-xs mt-1 break-keep">엑셀 CSV 파일을 업로드하여 초기 데이터를 세팅합니다. (Master 전용)</p>
                             <div className="space-y-3 mt-5">
                                 <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="users" className="text-indigo-400"/><div className="font-bold text-sm break-keep">1. 참가자 명단 (CSV)</div></div><label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors break-keep"><input type="file" accept=".csv" onChange={handleUserUpload} className="hidden" />업로드</label></div>
-                                <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="dashboard" className="text-indigo-400"/><div className="font-bold text-sm break-keep">2. 일정 마스터 정보 (CSV)</div></div><label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors break-keep"><input type="file" accept=".csv" onChange={handleScheduleUpload} className="hidden" />업로드</label></div>
-                                <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="image" className="text-indigo-400"/><div className="font-bold text-sm break-keep">3. 앱 배경화면 이미지</div></div><div className="flex gap-2">{appBgImage && <button onClick={() => setAppBgImage(null)} className="px-3 py-2 bg-rose-500/80 hover:bg-rose-500 rounded-lg text-xs font-bold transition-colors break-keep">초기화</button>}<label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors break-keep"><input type="file" accept="image/*" onChange={handleAppBgUpload} className="hidden" />업로드</label></div></div>
-                                <p className="text-[10px] text-slate-400 mt-1 break-keep">* CSV 파일에 <strong>'순서'</strong> 열(Column)을 추가하여 숫자를 기재하거나 작성된 행(Row) 순서에 따라 현황판 정렬이 보장됩니다.</p>
+                                <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="dashboard" className="text-indigo-400"/><div className="font-bold text-sm break-keep">2. 일정 정보 (CSV)</div></div><label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors break-keep"><input type="file" accept=".csv" onChange={handleScheduleUpload} className="hidden" />업로드</label></div>
+                                <div className="bg-slate-900/50 rounded-2xl border border-slate-600/50 p-4 flex justify-between items-center"><div className="flex items-center gap-3"><Icon name="image" className="text-indigo-400"/><div className="font-bold text-sm break-keep">3. 앱 배경화면</div></div><div className="flex gap-2">{appBgImage && <button onClick={() => setAppBgImage(null)} className="px-3 py-2 bg-rose-500/80 hover:bg-rose-500 rounded-lg text-xs font-bold transition-colors break-keep">초기화</button>}<label className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white font-bold rounded-lg cursor-pointer text-xs transition-colors break-keep"><input type="file" accept="image/*" onChange={handleAppBgUpload} className="hidden" />업로드</label></div></div>
+                                <p className="text-[10px] text-slate-400 mt-1 break-keep">* CSV 파일에 <strong>'순서'</strong> 열(Column)을 추가하여 숫자를 기재하거나 작성된 행(Row) 순서에 따라 현황판 정렬이 가능합니다.</p>
                             </div>
                         </div>
                     )}
@@ -2213,8 +2213,8 @@
                                 <div>
                                     <label className="text-[10px] font-bold text-slate-400 mb-1 block break-keep">권한 등급</label>
                                     <select value={newAdminRole} onChange={(e) => setNewAdminRole(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-incar bg-white break-keep">
-                                        <option value="manager">MANAGER (일정변경/설정)</option>
-                                        <option value="staff">STAFF (스캔/조회만)</option>
+                                        <option value="manager">MANAGER (관리/설정)</option>
+                                        <option value="staff">STAFF (스캔/조회)</option>
                                     </select>
                                 </div>
                                 <button onClick={() => {
@@ -3206,5 +3206,6 @@
     </script>
 </body>
 </html>
+
 
 
