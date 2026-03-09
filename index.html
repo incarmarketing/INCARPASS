@@ -149,61 +149,67 @@
 
             const targetVals = session.targetVal !== 'ALL' ? session.targetVal.split(',').map(s => s.trim()) : [];
 
-            if (session.targetKey && session.targetKey !== 'ALL') {
+            if (session.targetKey === 'ALL') {
+                isTarget = true;
+            } else {
                 const userVal = user.options[session.targetKey];
-                if (userVal) {
+                // 1. 컬럼명(Key)이 정확히 일치하는 경우
+                if (userVal !== undefined) {
                     if (session.targetVal === 'ALL') {
                         isTarget = true;
                         matchedKey = session.targetKey;
-                    } else if (targetVals.some(tv => userVal.includes(tv))) {
+                    } else if (targetVals.some(tv => String(userVal).includes(tv))) {
                         isTarget = true;
                         matchedKey = session.targetKey;
                     }
-                }
-            } else {
-                for (const key of Object.keys(user.options)) {
-                    if (key.includes('버스')) continue;
-                    const val = user.options[key];
-                    if (typeof val === 'string') {
-                        if (val.includes(session.title) || (targetVals.length > 0 && targetVals.some(tv => val.includes(tv)))) {
+                } else {
+                    // 2. 컬럼명이 없더라도, 옵션 값들 중에 매칭되는 것이 있는지 전체 탐색 (유연성 강화)
+                    for (const key of Object.keys(user.options)) {
+                        if (key.includes('버스')) continue;
+                        const val = String(user.options[key] || '');
+                        
+                        if (targetVals.length > 0 && targetVals.some(tv => val.includes(tv))) {
+                            isTarget = true; matchedKey = key; break;
+                        } else if (val.includes(session.targetKey) || val.includes(session.title)) {
                             isTarget = true; matchedKey = key; break;
                         }
                     }
                 }
-                if (!isTarget && session.targetKey === 'ALL') isTarget = true;
             }
             
             let foundSpecificBus = false;
             const domainInfo = getSessionDomainInfo(session);
             
+            // 항공 스캔일 경우 항공편명 가져오기
             if (domainInfo.isOutbound && user.options['항공']) {
                 expectedBus = user.options['항공'].trim();
                 foundSpecificBus = true;
             }
 
+            // N일차 특수 버스 배정 확인 (예: 2일차버스)
             if (!foundSpecificBus && session.displayDate) {
                 const dayMatch = session.displayDate.match(/(\d+일차)/);
                 if (dayMatch) {
                     const dayStr = dayMatch[1]; 
-                    if (user.options[`${dayStr}버스`]) {
-                        expectedBus = user.options[`${dayStr}버스`].trim();
-                        foundSpecificBus = true;
-                    } else if (user.options[`${dayStr} 버스`]) {
-                        expectedBus = user.options[`${dayStr} 버스`].trim();
+                    let dayBus = user.options[`${dayStr}버스`] || user.options[`${dayStr} 버스`];
+                    if (dayBus) {
+                        expectedBus = String(dayBus).trim();
                         foundSpecificBus = true;
                     }
                 }
             }
 
+            // 기본 버스 또는 옵션별 버스 배정
             if (!foundSpecificBus) {
-                if (matchedKey && user.options[`${matchedKey} 버스`]) expectedBus = user.options[`${matchedKey} 버스`].trim();
+                if (matchedKey && user.options[`${matchedKey} 버스`]) expectedBus = String(user.options[`${matchedKey} 버스`]).trim();
                 else if (user.bus && user.bus !== '미정') expectedBus = user.bus;
-                else if (user.options['버스']) expectedBus = user.options['버스'];
-                else if (user.options['탑승버스']) expectedBus = user.options['탑승버스'];
+                else if (user.options['버스']) expectedBus = String(user.options['버스']).trim();
+                else if (user.options['탑승버스']) expectedBus = String(user.options['탑승버스']).trim();
             }
 
-            if (expectedBus !== '미정' && expectedBus !== '-' && !expectedBus.includes('호차') && !isNaN(parseInt(expectedBus))) {
-                expectedBus += '호차';
+            // 버스 번호 정규화 (예: '4' -> '4호차')
+            if (expectedBus && expectedBus !== '미정' && expectedBus !== '-' && !expectedBus.includes('호차') && !isNaN(parseInt(expectedBus))) {
+                expectedBus = parseInt(expectedBus) + '호차';
             }
 
             return { isTarget, expectedBus };
@@ -2446,12 +2452,21 @@
                             const uid = String(r.uid || r['사번']).trim();
                             const name = (r.name || r['이름'] || r['성명'] || '').trim();
                             const org = (r.org || r['소속'] || '').trim();
-                            const bus = (r.bus || r['차량'] || r['버스'] || '미정').trim();
+                            
+                            // 기본 버스 호차 정규화
+                            const busRaw = String(r.bus || r['차량'] || r['버스'] || '미정').trim();
+                            const bus = (busRaw !== '미정' && busRaw !== '-' && !busRaw.includes('호차') && !isNaN(parseInt(busRaw))) 
+                                        ? parseInt(busRaw) + '호차' : busRaw;
                             
                             const options = {};
                             Object.keys(r).forEach(k => {
                                 if (!['uid', '사번', 'name', '이름', '성명', 'org', '소속', 'bus', '차량', '버스'].includes(k)) {
-                                    options[k] = r[k];
+                                    let optVal = String(r[k] || '').trim();
+                                    // 2일차버스 등 개별 버스 옵션 정규화
+                                    if (k.includes('버스') && optVal !== '-' && !optVal.includes('호차') && !isNaN(parseInt(optVal))) {
+                                        optVal = parseInt(optVal) + '호차';
+                                    }
+                                    options[k] = optVal;
                                 }
                             });
                             return { uid, name, org, bus, options, penaltyTotal: 0 };
@@ -2495,20 +2510,29 @@
                 Papa.parse(file, {
                     header: true,
                     complete: (results) => {
-                        const data = results.data.filter(r => r.title || r['일정명']).map((r, i) => {
+                        // 1. '장소' 또는 '일정명' 또는 'title' 열이 존재하는 행만 필터링
+                        const data = results.data.filter(r => r.title || r['일정명'] || r['장소']).map((r, i) => {
+                            // 2. 지급(금액)에서 특수문자($, ₩, 공백 등)를 제거하고 숫자만 추출
+                            const rawPrice = String(r.price || r['금액'] || r['지급'] || '0').replace(/[^0-9]/g, '');
+                            const parsedPrice = parseInt(rawPrice) || 0;
+                            
+                            // 3. 타입이 명시되지 않은 경우, 금액이 있으면 PAYMENT, 없으면 BOARDING으로 자동 추론
+                            const defaultType = parsedPrice > 0 ? 'PAYMENT' : 'BOARDING';
+
                             return {
                                 id: `S${String(i+1).padStart(2, '0')}`,
                                 order: parseInt(r.order || r['순서']) || i + 1,
                                 date: (r.date || r['날짜'] || '').trim(),
-                                displayDate: (r.displayDate || r['일자표기'] || '').trim(),
-                                title: (r.title || r['일정명'] || '').trim(),
-                                type: (r.type || r['구분'] || 'BOARDING').trim(),
-                                targetKey: (r.targetKey || r['옵션명'] || 'ALL').trim(),
-                                targetVal: (r.targetVal || r['매칭값'] || 'ALL').trim(),
-                                nature: (r.nature || r['속성'] || '관광').trim(),
-                                price: parseInt(r.price || r['금액']) || 0
+                                displayDate: (r.displayDate || r['일자표기'] || r['일정'] || '').trim(),
+                                title: (r.title || r['일정명'] || r['장소'] || '').trim(),
+                                type: (r.type || r['구분'] || defaultType).trim(),
+                                targetKey: (r.targetKey || r['옵션명'] || r['타겟옵션'] || 'ALL').trim(),
+                                targetVal: (r.targetVal || r['매칭값'] || r['타겟값'] || 'ALL').trim(),
+                                nature: (r.nature || r['속성'] || r['타입'] || '관광').trim(),
+                                price: parsedPrice
                             };
                         });
+                        
                         if (data.length > 0) {
                             if (db) {
                                 const batch = db.batch();
@@ -2521,6 +2545,8 @@
                                 setSchedules(data);
                                 alert(`일정 ${data.length}개 업로드 완료 (로컬)`);
                             }
+                        } else {
+                            alert("업로드할 유효한 데이터가 없습니다. (헤더에 '장소' 또는 '일정명'이 포함되어 있는지 확인하세요.)");
                         }
                     }
                 });
