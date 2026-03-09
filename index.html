@@ -153,7 +153,8 @@
                 isTarget = true;
             } else {
                 const userVal = user.options[session.targetKey];
-                // 1. 컬럼명(Key)이 정확히 일치하는 경우
+                
+                // 1. 우선 지정된 targetKey(예: '1일차')의 값에서 찾기 시도
                 if (userVal !== undefined) {
                     if (session.targetVal === 'ALL') {
                         isTarget = true;
@@ -162,10 +163,13 @@
                         isTarget = true;
                         matchedKey = session.targetKey;
                     }
-                } else {
-                    // 2. 컬럼명이 없더라도, 옵션 값들 중에 매칭되는 것이 있는지 전체 탐색 (유연성 강화)
+                }
+                
+                // 2. 위에서 못 찾았거나 컬럼이 없으면, 전체 옵션을 모두 뒤지는 강력한 폴백 스캔 실행
+                // (예: 타겟키는 '1일차'인데 실제 '아시아나'라는 값은 '항공' 컬럼에 있는 경우 해결)
+                if (!isTarget && session.targetVal !== 'ALL') {
                     for (const key of Object.keys(user.options)) {
-                        if (key.includes('버스')) continue;
+                        if (key.includes('버스')) continue; // 버스 관련 열은 매칭에서 제외
                         const val = String(user.options[key] || '');
                         
                         if (targetVals.length > 0 && targetVals.some(tv => val.includes(tv))) {
@@ -841,7 +845,7 @@
                                     {groupKeys.length === 0 ? <div className="py-10 text-center text-slate-400 text-sm">{searchTerm ? '검색 결과가 없습니다.' : '해당 인원이 없습니다.'}</div> : groupKeys.map(groupName => (
                                         <div key={groupName} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                                             <button onClick={() => toggleGroup(groupName)} className="w-full p-4 flex justify-between items-center bg-slate-50 hover:bg-slate-100 transition-colors">
-                                                <div className="flex items-center gap-2"><div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${tab==='done'?'bg-emerald-500':'bg-incar'}`}><Icon name={isPaymentSession ? 'money' : domainInfo.icon} size={16} /></div><div className="text-left"><div className="font-bold text-slate-800 text-sm break-keep">{groupName} {!isPaymentSession ? (tab==='done'?`(실제 ${domainInfo.action})`:`(배정 ${domainInfo.isOutbound ? '항공' : '차량'})`) : ''}</div><div className="text-[10px] text-slate-500">{filteredGroups[groupName].length}명 {tab === 'done' ? '처리 완료' : '대기중'}</div></div></div>
+                                                <div className="flex items-center gap-2"><div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${tab==='done'?'bg-emerald-500':'bg-incar'}`}><Icon name={isPaymentSession ? 'money' : domainInfo.icon} size={16} /></div><div className="text-left"><div className="font-bold text-slate-800 text-sm break-keep">{groupName}</div><div className="text-[10px] text-slate-500">{filteredGroups[groupName].length}명 {tab === 'done' ? '처리 완료' : '대기중'}</div></div></div>
                                                 <Icon name={expandedGroups[groupName] || searchTerm ? "up" : "down"} size={20} className="text-slate-400" />
                                             </button>
                                             {(expandedGroups[groupName] || searchTerm) && (
@@ -1072,7 +1076,7 @@
         };
 
         const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile, busList, setBusList, scanResult, logs, handleFastAction }) => {
-            const scannerRef = useRef(null); const isRunningRef = useRef(false); const [isStrictBusMode, setIsStrictBusMode] = useState(false);
+            const scannerRef = useRef(null); const isRunningRef = useRef(false);
             const [manualCode, setManualCode] = useState('');
             const [cameraList, setCameraList] = useState([]);
             const [currentCamId, setCurrentCamId] = useState(null);
@@ -1127,7 +1131,7 @@
                         if (barcodeStr.length > 0) {
                             if (isProcessingRef.current) { barcodeStr = ''; return; } 
                             isProcessingRef.current = true;
-                            processScan(barcodeStr, isStrictBusMode);
+                            processScan(barcodeStr);
                             barcodeStr = '';
                         }
                     } else if (e.key.length === 1) { 
@@ -1138,7 +1142,7 @@
                 };
                 window.addEventListener('keydown', handleKeyDown);
                 return () => window.removeEventListener('keydown', handleKeyDown);
-            }, [isStrictBusMode, processScan]);
+            }, [processScan]);
 
 
             const handleAddBus = () => {
@@ -1215,7 +1219,7 @@
                 const onScan = (decodedText) => {
                     if (isProcessingRef.current) return; 
                     isProcessingRef.current = true;
-                    processScan(decodedText, isStrictBusMode);
+                    processScan(decodedText);
                 };
 
                 try {
@@ -1275,7 +1279,7 @@
                 if(manualCode.trim()) {
                     if (isProcessingRef.current) return;
                     isProcessingRef.current = true;
-                    processScan(manualCode.trim(), isStrictBusMode);
+                    processScan(manualCode.trim());
                     setManualCode('');
                 }
             }
@@ -1292,7 +1296,7 @@
                 
                 if (mode === 'PAYMENT') return allTargets;
                 
-                // 탑승 모드일 때는 '배차 검증' 토글과 무관하게 선택된 차량(targetBus) 명단만 표시
+                // 탑승 모드일 때는 선택된 차량(targetBus) 명단만 표시 (깔끔한 관리를 위해)
                 return allTargets.filter(u => {
                     const expectedBus = getUserSessionInfo(u, selectedSession).expectedBus;
                     const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id);
@@ -1310,13 +1314,13 @@
             return (
                 <div className="space-y-6 h-full flex flex-col animate-slide-up">
                     <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
-                        <div className="flex items-center gap-2 mb-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING' ? 'STEP 1' : '지급'}</span><h3 className="text-lg font-bold text-slate-800 break-keep">{mode==='BOARDING' ? '탑승/수속 일정을 선택하세요' : '지급할 항목을 선택하세요'}</h3></div>
+                        <div className="flex items-center gap-2 mb-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING' ? 'STEP 1' : '지급'}</span><h3 className="text-lg font-bold text-slate-800 break-keep">{mode==='BOARDING' ? '일정을 선택하세요' : '지급 항목을 선택하세요'}</h3></div>
                         <div className="mb-6">
                             {filteredSchedules.length > 0 ? (
                                 <select value={targetSessionId} onChange={(e) => setTargetSessionId(e.target.value)} className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-lg outline-none focus:ring-4 transition-all break-keep ${mode==='BOARDING'?'focus:ring-incar/20':'focus:ring-emerald-500/20'}`}>
                                     {filteredSchedules.map(s => {
                                         const dInfo = getSessionDomainInfo(s);
-                                        return <option key={s.id} value={s.id}>[{s.displayDate}] {s.title} ({dInfo.nature} - {dInfo.action})</option>
+                                        return <option key={s.id} value={s.id}>[{s.displayDate}] {s.title} ({dInfo.action})</option>
                                     })}
                                 </select>
                             ) : (
@@ -1345,14 +1349,10 @@
                                             </div>
                                         )}
                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 w-full">
-                                            <div className="flex items-center gap-2 shrink-0"><span className="px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-slate-800 text-white">STEP 2</span><h3 className="text-base sm:text-lg font-bold text-slate-800 break-keep">현장 탑승 차량을 선택하세요</h3></div>
+                                            <div className="flex items-center gap-2 shrink-0"><span className="px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-slate-800 text-white">STEP 2</span><h3 className="text-base sm:text-lg font-bold text-slate-800 break-keep">현장 차량을 선택하세요</h3></div>
                                             <div className="flex gap-2 items-center shrink-0 w-full sm:w-auto">
-                                                <div className="flex flex-1 sm:flex-none items-center justify-center sm:justify-start bg-slate-100 rounded-lg px-2 py-1.5 gap-2 cursor-pointer" onClick={() => setIsStrictBusMode(!isStrictBusMode)}>
-                                                    <div className={`w-8 h-4 rounded-full relative transition-colors shrink-0 ${isStrictBusMode ? 'bg-incar' : 'bg-slate-300'}`}><div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${isStrictBusMode ? 'translate-x-4' : 'translate-x-0'}`}></div></div>
-                                                    <span className={`text-[10px] font-bold break-keep ${isStrictBusMode ? 'text-incar' : 'text-slate-400'}`}>배차 검증 (지정호차)</span>
-                                                </div>
                                                 <button onClick={()=>setManualBus(!manualBus)} className={`text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shrink-0 whitespace-nowrap ${manualBus ? 'bg-incar text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
-                                                    {manualBus ? '관리 완료' : '차량 관리'}
+                                                    {manualBus ? '관리 완료' : '차량 추가/수정'}
                                                 </button>
                                             </div>
                                         </div>
@@ -1375,7 +1375,7 @@
                     </div>
                     
                     <div className="mt-2 mb-2">
-                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> {domainInfo.action} 스캔 시작</button>
+                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> 스캔</button>
                     </div>
 
                     {filteredSchedules.length > 0 && (
@@ -1385,7 +1385,7 @@
                                     <div className="flex justify-between items-center mb-3">
                                         <h4 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                                             <Icon name={mode==='BOARDING'?'users':'money'} size={18} className={mode==='BOARDING'?'text-incar':'text-emerald-500'} />
-                                            {mode === 'BOARDING' ? <><span className="text-incar bg-indigo-50 px-2 py-0.5 rounded ml-1 mr-1">[{targetBus}]</span> 탑승 및 하차 관리</> : '전체 지급 대상자 관리'}
+                                            {mode === 'BOARDING' ? <><span className="text-incar bg-indigo-50 px-2 py-0.5 rounded ml-1 mr-1">[{targetBus}]</span> 탑승 명단</> : '전체 지급 대상자 관리'}
                                         </h4>
                                         <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-1 rounded font-bold">
                                             {filteredTargetUsers.length}명
@@ -1405,11 +1405,13 @@
                                     </div>
                                     <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2">
                                         {filteredTargetUsers.length === 0 ? (
-                                            <div className="text-center text-slate-400 text-xs py-8 break-keep">{mode === 'BOARDING' && isStrictBusMode ? '해당 차량(수단)에 배정된 대상자가 없습니다.\n다른 차량을 선택해보세요.' : '대상이 없습니다.'}</div>
+                                            <div className="text-center text-slate-400 text-xs py-8 break-keep">{mode === 'BOARDING' ? '해당 차량(수단)에 배정된 대상자가 없거나 검색 결과가 없습니다.\n다른 차량을 선택해보세요.' : '대상이 없습니다.'}</div>
                                         ) : (
                                             filteredTargetUsers.map(u => {
                                                 const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id);
                                                 const isBoarded = !!log;
+                                                const { expectedBus } = getUserSessionInfo(u, selectedSession);
+                                                
                                                 return (
                                                     <div key={u.uid} className={`flex justify-between items-center p-3 rounded-xl border transition-colors ${isBoarded ? (mode==='BOARDING'?'bg-indigo-50 border-indigo-100':'bg-emerald-50 border-emerald-100') : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
                                                         <div className="flex items-center gap-3">
@@ -1421,7 +1423,7 @@
                                                                 </div>
                                                                 <div className="text-[10px] text-slate-400 mt-0.5 flex gap-2">
                                                                     <span>{u.org}</span>
-                                                                    {mode === 'BOARDING' && <span className="font-bold text-incar">배정: {getUserSessionInfo(u, selectedSession).expectedBus}</span>}
+                                                                    {mode === 'BOARDING' && expectedBus && !['미정', '-', '자유일정'].includes(expectedBus) && <span className="font-bold text-incar">배정: {expectedBus}</span>}
                                                                 </div>
                                                             </div>
                                                         </div>
@@ -1432,7 +1434,7 @@
                                                                 </button>
                                                             ) : (
                                                                 <button onClick={() => handleFastAction(u, selectedSession, targetBus, false)} className={`px-5 py-2 text-white text-xs font-bold rounded-xl shadow-md transition-transform active:scale-95 whitespace-nowrap ${mode==='BOARDING'?'bg-slate-800 hover:bg-slate-700':'bg-emerald-500 hover:bg-emerald-600'}`}>
-                                                                    {mode==='BOARDING' ? '수동 탑승' : '수동 지급'}
+                                                                    {mode==='BOARDING' ? '탑승' : '지급'}
                                                                 </button>
                                                             )}
                                                         </div>
@@ -1460,7 +1462,7 @@
                                                             <div>
                                                                 <div className="font-bold text-sm text-slate-800">{u.name}</div>
                                                                 <div className="text-[10px] text-slate-400">{u.org} | {u.uid}</div>
-                                                                {mode === 'BOARDING' && <div className="text-[10px] text-incar font-bold mt-0.5">배정: {expectedBus}</div>}
+                                                                {mode === 'BOARDING' && expectedBus && !['미정', '-', '자유일정'].includes(expectedBus) && <div className="text-[10px] text-incar font-bold mt-0.5">배정: {expectedBus}</div>}
                                                             </div>
                                                         </div>
                                                         <button
@@ -1469,18 +1471,13 @@
                                                                 e.preventDefault();
                                                                 if (isProcessingRef.current) return;
                                                                 
-                                                                const oldScheduleName = u.options[selectedSession?.targetKey] || '미선택';
-                                                                let confirmMsg = `${u.name}님을 수동으로 처리하시겠습니까?\n\n▶ 현재 스캔 중인 일정: ${selectedSession?.title}\n▶ 기존 신청 일정: ${oldScheduleName}`;
-                                                                if (expectedBus && expectedBus !== '미정') confirmMsg += `\n▶ 배정 차량/항공: ${expectedBus}`;
-                                                                if (!confirm(confirmMsg)) return;
-
                                                                 isProcessingRef.current = true;
-                                                                processScan(String(u.uid), isStrictBusMode);
+                                                                processScan(String(u.uid));
                                                                 setManualCode('');
                                                             }}
                                                             className={`px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition-colors shrink-0 cursor-pointer ${mode === 'BOARDING' ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}
                                                         >
-                                                            스캔 적용
+                                                            {mode === 'BOARDING' ? '탑승' : '지급'} 적용
                                                         </button>
                                                     </div>
                                                 );
@@ -1505,9 +1502,6 @@
                                         </div>
                                         <button type="submit" className="bg-slate-800 text-white px-6 rounded-xl font-bold text-sm shadow-md hover:bg-slate-700 shrink-0 break-keep">입력</button>
                                     </form>
-                                    <p className="text-[10px] text-slate-400 mt-2 text-center break-keep">
-                                        * 수동 처리는 상단의 대상자 리스트 [탑승] 버튼을 누르는 것이 가장 빠릅니다.
-                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -1564,7 +1558,7 @@
                     const isStillExist = users.find(u => u.uid === selectedUser.uid);
                     if (!isStillExist) {
                         setSelectedUser(null);
-                        setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' });
+                        setEditForm({ optKey: '', optVal: '', newBus: '', penalty: 0, reason: '' });
                     }
                 }
             }, [users]); 
@@ -1714,6 +1708,17 @@
             }, [editForm.optKey, users, schedules]);
 
             useEffect(() => {
+                if (selectedUser && editForm.optKey) {
+                    const dayStrMatch = editForm.optKey.match(/(\d+일차)/);
+                    let busKey = '버스';
+                    if (dayStrMatch) busKey = `${dayStrMatch[1]}버스`;
+                    
+                    let currentBus = selectedUser.options[busKey] || selectedUser.options[`${dayStrMatch ? dayStrMatch[1]+' ' : ''}버스`] || selectedUser.bus || '';
+                    setEditForm(prev => ({ ...prev, newBus: currentBus }));
+                }
+            }, [editForm.optKey, selectedUser]);
+
+            useEffect(() => {
                 if (!selectedUser || !editForm.optKey || !editForm.optVal || !schedules) {
                     setFinancialImpact(null);
                     return;
@@ -1795,7 +1800,6 @@
 
             const resolveLocalRefund = (isReturned) => {
                 if (isReturned) {
-                    // 🔥 반환 시 마이너스 정산을 통해 차감
                     handleUserUpdate(-localRefundReq.amount, `기존 지급액(${CURRENCY}${localRefundReq.amount}) 현장 반환 완료`);
                 } else {
                     handleUserUpdate(localRefundReq.amount, `미반환금 패널티 부과 (${localRefundReq.oldVal} -> ${localRefundReq.newVal})`);
@@ -1861,9 +1865,10 @@
                                         <div className="max-h-60 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                                             {userSchedules.map((s, idx) => {
                                                 const dInfo = getSessionDomainInfo(s);
+                                                const { expectedBus } = getUserSessionInfo(selectedUser, s);
                                                 return (
                                                 <div key={idx} className="bg-white p-3 rounded-xl border border-indigo-100 shadow-sm flex justify-between items-center">
-                                                    <div><span className="text-[10px] font-bold text-slate-400 block break-keep">{s.displayDate}</span><span className="font-bold text-slate-800 break-keep">{s.title}</span>{s.type === 'BOARDING' && <div className="text-[10px] text-incar mt-0.5 font-bold break-keep">배정수단: {getUserSessionInfo(selectedUser, s).expectedBus}</div>}</div>
+                                                    <div><span className="text-[10px] font-bold text-slate-400 block break-keep">{s.displayDate}</span><span className="font-bold text-slate-800 break-keep">{s.title}</span>{s.type === 'BOARDING' && expectedBus && !['미정', '-', '자유일정'].includes(expectedBus) && <div className="text-[10px] text-incar mt-0.5 font-bold break-keep">배정수단: {expectedBus}</div>}</div>
                                                     <div className="text-right shrink-0 ml-2"><span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${s.type==='PAYMENT'?'bg-emerald-100 text-emerald-600':s.type==='NONE'?'bg-slate-100 text-slate-500':'bg-slate-100 text-slate-500'}`}>{s.type==='PAYMENT' ? `지급 ${CURRENCY}${s.price}` : s.type==='NONE' ? '단순안내' : dInfo.label}</span></div>
                                                 </div>
                                             )})}
@@ -1885,6 +1890,10 @@
                                 <div className="grid grid-cols-2 gap-4 mt-4">
                                     <div><label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 전 옵션</label><select value={editForm.optKey} onChange={e=>setEditForm({...editForm, optKey: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{Object.keys(selectedUser.options).map(key => <option key={key} value={key}>{cleanOptionKey(key)} (현재: {selectedUser.options[key]})</option>)}</select></div>
                                     <div><div className="flex justify-between items-center mb-1"><label className="block text-xs font-bold text-slate-400 break-keep">변경 후 옵션</label><button onClick={()=>setManualInput(!manualInput)} className="text-[10px] text-incar underline font-bold break-keep">{manualInput ? '목록에서 선택' : '직접 입력'}</button></div>{manualInput ? <input type="text" value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white break-keep" placeholder="직접 입력하세요" /> : <select value={editForm.optVal} onChange={e=>setEditForm({...editForm, optVal: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white"><option value="">선택하세요</option>{uniqueValues.map(val => <option key={val} value={val}>{val}</option>)}<option value="직접입력">[목록에 없음]</option></select>}</div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 후 호차 (선택사항)</label>
+                                    <input type="text" value={editForm.newBus} onChange={e=>setEditForm({...editForm, newBus: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm bg-white break-keep" placeholder="예: 2호차" />
                                 </div>
 
                                 {financialImpact && (
@@ -2350,7 +2359,7 @@
             
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedUser, setSelectedUser] = useState(null);
-            const [editForm, setEditForm] = useState({ optKey: '', optVal: '', penalty: 0, reason: '' });
+            const [editForm, setEditForm] = useState({ optKey: '', optVal: '', newBus: '', penalty: 0, reason: '' });
             const [refundRequest, setRefundRequest] = useState(null);
             const [forfeitRequest, setForfeitRequest] = useState(null);
             
@@ -2369,6 +2378,37 @@
 
             useEffect(() => { localStorage.setItem('incar_pro_bus_list', JSON.stringify(busList)); }, [busList]);
             useEffect(() => { if (appBgImage) localStorage.setItem('incar_pro_app_bg', appBgImage); else localStorage.removeItem('incar_pro_app_bg'); }, [appBgImage]);
+
+            // 추가: 데이터 기반 버스 목록 자동 정화(Self-healing) 및 동기화 로직
+            useEffect(() => {
+                if (users.length > 0) {
+                    setBusList(prev => {
+                        const activeBuses = new Set(users.map(u => u.bus).filter(b => b && b !== '미정' && b !== '-'));
+                        const usedBuses = new Set(logs.map(l => l.bus).filter(b => b && b !== '미정' && b !== '-'));
+                        
+                        // 기존 탭 중에서 명단에 있거나 스캔 기록이 있는 '유효한 차량'만 남김 (과거 11호차 등 불필요한 캐시 청소)
+                        const cleaned = prev.filter(bus => activeBuses.has(bus) || usedBuses.has(bus));
+                        
+                        // 명단에 새롭게 등장한 버스가 있다면 추가
+                        activeBuses.forEach(bus => { if (!cleaned.includes(bus)) cleaned.push(bus); });
+                        
+                        // 숫자 순서대로 예쁘게 정렬
+                        cleaned.sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+                        
+                        if (JSON.stringify(prev) !== JSON.stringify(cleaned)) {
+                            return cleaned;
+                        }
+                        return prev;
+                    });
+                }
+            }, [users, logs]);
+
+            // 추가: 선택된 탭(호차)이 청소되어 사라졌을 경우 첫 번째 탭으로 자동 복귀
+            useEffect(() => {
+                if (busList.length > 0 && !busList.includes(targetBus)) {
+                    setTargetBus(busList[0]);
+                }
+            }, [busList, targetBus]);
 
             useEffect(() => {
                 const initLocal = () => {
@@ -2560,14 +2600,24 @@
                 const requiredChoice = editForm.optVal;
                 const oldVal = selectedUser.options[editForm.optKey];
                 
+                const newOptions = { ...selectedUser.options, [editForm.optKey]: requiredChoice };
+                
+                // 사용자가 버스도 함께 변경하겠다고 값을 입력한 경우
+                if (editForm.newBus !== undefined && editForm.newBus.trim() !== '') {
+                    const dayStrMatch = editForm.optKey.match(/(\d+일차)/);
+                    if (dayStrMatch) {
+                        newOptions[`${dayStrMatch[1]}버스`] = editForm.newBus.trim();
+                    } else {
+                        newOptions['버스'] = editForm.newBus.trim();
+                    }
+                }
+                
                 if(db) { 
                     const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(selectedUser.uid)); 
-                    const updatedOptions = { ...selectedUser.options, [editForm.optKey]: requiredChoice }; 
-                    await userRef.update({ options: updatedOptions, penaltyTotal: (selectedUser.penaltyTotal || 0) + penalty }); 
+                    await userRef.update({ options: newOptions, penaltyTotal: (selectedUser.penaltyTotal || 0) + penalty }); 
                 } else { 
                     const updatedUsers = users.map(u => { 
                         if (String(u.uid) === String(selectedUser.uid)) { 
-                            const newOptions = { ...u.options, [editForm.optKey]: requiredChoice }; 
                             return { ...u, options: newOptions, penaltyTotal: (u.penaltyTotal || 0) + penalty }; 
                         } 
                         return u; 
@@ -2582,7 +2632,7 @@
 
                 alert('변경이 저장되었습니다.');
                 setSelectedUser(null);
-                setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' });
+                setEditForm({ optKey: '', optVal: '', newBus: '', penalty: 0, reason: '' });
             };
 
             const handleForceUpdateAndProcess = (user, session, requiredChoice) => {
@@ -2792,46 +2842,7 @@
                         else setChangeLogs(prev => [changeLog, ...changeLogs]);
                     }
                 } else {
-                    if (!confirm(`${user.name}님을 [${session.type === 'PAYMENT' ? '지급 완료' : actionBus + ' 탑승'}] 처리하시겠습니까?`)) return;
-                    
-                    if (GLOBAL_PROCESSED_SCANS.has(scanKey) || logs.some(l => String(l.uid) === String(user.uid) && l.sessionId === session.id)) {
-                        return alert('이미 처리된 인원입니다.');
-                    }
-                    
-                    GLOBAL_PROCESSED_SCANS.add(scanKey);
-                    
-                    let finalAmount = 0; let penaltyApplied = 0; 
-                    if (session.type === 'PAYMENT') { 
-                        const baseAmount = session.price; const deduction = user.penaltyTotal || 0; 
-                        finalAmount = Math.max(0, baseAmount - deduction); penaltyApplied = (baseAmount - finalAmount); 
-                    } 
-                    
-                    const newLog = { 
-                        id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, 
-                        action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, 
-                        bus: session.type === 'PAYMENT' ? '-' : actionBus, amount: session.type === 'PAYMENT' ? session.price : 0, 
-                        penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin?.name}(${currentAdmin?.id})`
-                    }; 
-                    
-                    if (db) { 
-                        await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); 
-                        if (penaltyApplied > 0) { 
-                            const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
-                            await userRef.update({ penaltyTotal: (user.penaltyTotal || 0) - penaltyApplied }); 
-                        } 
-                    } else { 
-                        setLogs(prev => [newLog, ...prev]); 
-                        if (penaltyApplied > 0) { 
-                            setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: (u.penaltyTotal || 0) - penaltyApplied } : u)); 
-                        } 
-                    } 
-                    
-                    if (session.type === 'PAYMENT') {
-                        fetch(GOOGLE_SHEET_URL, {
-                            method: "POST", mode: "no-cors",
-                            body: JSON.stringify({ type: "meal", id: "\u200B" + String(user.uid), name: user.name, action: "APPROVE", tour: session.title, time: formatTimeSafe(newLog.timestamp) })
-                        }).catch(console.error);
-                    }
+                    processScan(String(user.uid));
                 }
             };
 
@@ -2930,7 +2941,7 @@
                 alert(alertMsg);
             };
 
-            const processScan = useCallback(async (scannedText, strictMode = false) => { 
+            const processScan = useCallback(async (scannedText) => { 
                 let scannedUid = scannedText;
                 if (scannedText.includes('eid=')) {
                     scannedUid = scannedText.split('eid=')[1].split('&')[0];
@@ -2957,13 +2968,25 @@
                      return setScanResult({ status: 'error', msg: '대상자 아님', subMsg: '해당 일정에 신청되지 않은 참가자입니다.', user, session, requiredChoice: session.targetVal !== 'ALL' ? session.targetVal : session.title });
                 }
 
-                if (strictMode && session.type === 'BOARDING' && !domainInfo.isOutbound) {
+                let saveBus = targetBus;
+
+                if (session.type === 'BOARDING' && !domainInfo.isOutbound && !domainInfo.isInbound) {
+                    const eBusClean = expectedBus.replace('호차','').trim();
+                    const tBusClean = targetBus.replace('호차','').trim();
+
                     if (['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) {
-                         return setScanResult({ status: 'error', msg: '탑승 대상 아님', subMsg: `해당 일정은 [${expectedBus}] 대상자입니다.`, user, session });
+                         if(!confirm(`${user.name}님은 현재 탑승 대상([${expectedBus}])이 아닙니다.\n\n그래도 [${targetBus}]에 강제 탑승 처리하시겠습니까?`)) {
+                             isProcessingRef.current = false;
+                             return;
+                         }
+                    } else if (eBusClean !== tBusClean) {
+                         if(!confirm(`${user.name}님의 지정 호차는 [${expectedBus}]입니다.\n\n현재 [${targetBus}]으로 변경하여 탑승 처리하시겠습니까?`)) {
+                             isProcessingRef.current = false;
+                             return;
+                         }
                     }
-                    if (expectedBus.trim() !== targetBus.trim() && expectedBus.replace('호차','') !== targetBus.replace('호차','')) {
-                         return setScanResult({ status: 'error', msg: '탑승 불가 (차량 불일치)', subMsg: `배정: ${expectedBus} / 현재: ${targetBus}`, user, session });
-                    }
+                } else {
+                    saveBus = domainInfo.isOutbound ? expectedBus : targetBus;
                 }
                 
                 const scanKey = `${session.id}_${user.uid}`;
@@ -2978,11 +3001,9 @@
                     const baseAmount = session.price; const deduction = user.penaltyTotal || 0; 
                     finalAmount = Math.max(0, baseAmount - deduction); penaltyApplied = (baseAmount - finalAmount); 
                 } 
-                
-                const savedBus = session.type === 'BOARDING' ? (domainInfo.isOutbound ? expectedBus : targetBus) : '-';
 
                 const newLog = { 
-                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: savedBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`
+                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: session.type === 'PAYMENT' ? '-' : saveBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`
                 }; 
                 
                 if (db) { 
