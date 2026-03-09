@@ -1085,6 +1085,7 @@
             const [currentCamId, setCurrentCamId] = useState(null);
             const [listSearch, setListSearch] = useState('');
             const [scanTab, setScanTab] = useState('yet'); // 🔥 명단 탭 상태 추가
+            const [isExpandedList, setIsExpandedList] = useState(false); // 🔥 명단 확대 팝업 상태 추가
             
             const isProcessingRef = useRef(false);
 
@@ -1425,8 +1426,14 @@
                         )}
                     </div>
                     
-                    <div className="mt-2 mb-2">
+                    <div className="mt-2 mb-2 flex flex-col gap-3">
                         <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> 스캔</button>
+                        
+                        {filteredSchedules.length > 0 && selectedSession && (
+                            <button onClick={() => setIsExpandedList(true)} className={`w-full py-4 font-bold rounded-2xl flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-sm border ${mode==='BOARDING'?'bg-indigo-50 text-incar border-indigo-100 hover:bg-indigo-100':'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'}`}>
+                                <Icon name="table" size={20}/> 직접 입력
+                            </button>
+                        )}
                     </div>
 
                     {filteredSchedules.length > 0 && (
@@ -1584,6 +1591,86 @@
                             <p className="text-amber-400 mt-4 text-xs text-center break-keep font-medium leading-relaxed">
                                 💡 가까이 대지 마시고 15cm 정도 떨어뜨려주세요.<br/>초점이 맞지 않는 경우, '렌즈 변경' 버튼을 누르면 초점이 맞습니다.
                             </p>
+                        </div>
+                    )}
+
+                    {isExpandedList && selectedSession && (
+                        <div className="fixed inset-0 z-[300] bg-slate-50 flex flex-col animate-slide-up">
+                            <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm pb-2 pt-6 shrink-0">
+                                <div>
+                                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                                        <Icon name={mode==='BOARDING'?'users':'money'} size={20} className={mode==='BOARDING'?'text-incar':'text-emerald-500'} />
+                                        {mode === 'BOARDING' ? <><span className="text-incar bg-indigo-50 px-2 py-0.5 rounded ml-1 mr-1">[{domainInfo.isOutbound ? '항공전체' : targetBus}]</span> 탑승 명단</> : '전체 명단'}
+                                    </h3>
+                                    <span className="text-xs text-slate-500 font-bold mt-1 block">{filteredTargetUsers.length}명 대상</span>
+                                </div>
+                                <button onClick={() => setIsExpandedList(false)} className="p-3 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200"><Icon name="x" size={24}/></button>
+                            </div>
+                            
+                            <div className="p-4 bg-white border-b border-slate-100 shadow-sm z-10 shrink-0">
+                                <div className="relative">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                                        <Icon name="search" size={16} />
+                                    </div>
+                                    <input 
+                                        type="text" 
+                                        placeholder="이름 또는 사번으로 검색" 
+                                        value={listSearch}
+                                        onChange={(e) => setListSearch(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-incar/20 transition-all"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex border-b border-slate-200 bg-white shrink-0">
+                                <button onClick={() => setScanTab('yet')} className={`flex-1 py-3 text-sm font-bold transition-colors ${scanTab==='yet' ? (mode==='BOARDING'?'text-incar border-b-2 border-incar bg-indigo-50/50':'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50') : 'text-slate-400 hover:bg-slate-50'}`}>
+                                    {mode === 'BOARDING' ? `미탑승 (${yetUsers.length})` : `미지급 (${yetUsers.length})`}
+                                </button>
+                                <button onClick={() => setScanTab('done')} className={`flex-1 py-3 text-sm font-bold transition-colors ${scanTab==='done' ? (mode==='BOARDING'?'text-incar border-b-2 border-incar bg-indigo-50/50':'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50') : 'text-slate-400 hover:bg-slate-50'}`}>
+                                    {mode === 'BOARDING' ? `탑승완료 (${doneUsers.length})` : `지급완료 (${doneUsers.length})`}
+                                </button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 pb-safe bg-slate-50">
+                                {currentList.length === 0 ? (
+                                    <div className="text-center text-slate-400 text-sm py-12 break-keep">{scanTab === 'yet' ? (mode === 'BOARDING' ? '해당 수단에 탑승 대기중인 대상자가 없습니다.' : '대기중인 대상자가 없습니다.') : '처리된 대상자가 없습니다.'}</div>
+                                ) : (
+                                    currentList.map(item => {
+                                        const u = item;
+                                        const isBoarded = scanTab === 'done';
+                                        const { expectedBus } = getUserSessionInfo(u, selectedSession);
+                                        
+                                        return (
+                                            <div key={u.uid} className={`flex justify-between items-center p-4 rounded-2xl border transition-colors shadow-sm ${isBoarded ? (mode==='BOARDING'?'bg-indigo-50/50 border-indigo-100':'bg-emerald-50/50 border-emerald-100') : 'bg-white border-slate-200'}`}>
+                                                <div className="flex items-center gap-4">
+                                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white shrink-0 shadow-sm ${isBoarded ? (mode==='BOARDING'?'bg-incar':'bg-emerald-500') : 'bg-slate-300'}`}>{u.name[0]}</div>
+                                                    <div>
+                                                        <div className="font-bold text-base text-slate-800 flex items-center gap-2">
+                                                            {u.name}
+                                                            {isBoarded && <span className={`text-[10px] px-2 py-0.5 rounded font-black ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING'?'탑승완료':'지급완료'}</span>}
+                                                        </div>
+                                                        <div className="text-xs text-slate-400 mt-1 flex flex-col gap-1">
+                                                            <span>{u.org} | {u.uid}</span>
+                                                            {mode === 'BOARDING' && expectedBus && !['미정', '-', '자유일정'].includes(expectedBus) && <span className="font-bold text-incar">배정: {expectedBus}</span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    {isBoarded ? (
+                                                        <button onClick={() => handleFastAction(u, selectedSession, targetBus, true)} className="px-4 py-2.5 bg-white text-slate-500 border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-xs font-bold rounded-xl transition-colors shadow-sm whitespace-nowrap">
+                                                            {mode==='BOARDING' ? '하차' : '지급 취소'}
+                                                        </button>
+                                                    ) : (
+                                                        <button onClick={() => handleFastAction(u, selectedSession, targetBus, false)} className={`px-6 py-3 text-white text-sm font-bold rounded-xl shadow-md transition-transform active:scale-95 whitespace-nowrap ${mode==='BOARDING'?'bg-slate-800 hover:bg-slate-700':'bg-emerald-500 hover:bg-emerald-600'}`}>
+                                                            {mode==='BOARDING' ? '탑승' : '지급'}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )
+                                    })
+                                )}
+                            </div>
                         </div>
                     )}
                 </div>
