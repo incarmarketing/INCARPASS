@@ -166,7 +166,6 @@
                 }
                 
                 // 2. 위에서 못 찾았거나 컬럼이 없으면, 전체 옵션을 모두 뒤지는 강력한 폴백 스캔 실행
-                // (예: 타겟키는 '1일차'인데 실제 '아시아나'라는 값은 '항공' 컬럼에 있는 경우 해결)
                 if (!isTarget && session.targetVal !== 'ALL') {
                     for (const key of Object.keys(user.options)) {
                         if (key.includes('버스')) continue; // 버스 관련 열은 매칭에서 제외
@@ -369,7 +368,7 @@
 
             const generateSystemPrompt = () => {
                 const userSummary = users.map(u => `{이름:"${u.name}",사번:"${u.uid}",배정차량:"${u.bus}",옵션:${JSON.stringify(u.options)}}`);
-                const logSummary = logs.slice(0, 500).map(l => `{이름:"${l.name}",사번:"${l.uid}",일정:"${l.sessionTitle}",수단:"${l.bus}",액션:"${l.action}"}`);
+                const logSummary = logs.filter(l => !l.isCancelled).slice(0, 500).map(l => `{이름:"${l.name}",사번:"${l.uid}",일정:"${l.sessionTitle}",수단:"${l.bus}",액션:"${l.action}"}`);
                 
                 const detailedSchedule = `
                 [INCAR ISC TAIWAN 대만 3박 4일 상세 일정표]
@@ -720,7 +719,7 @@
             }, [session, users]);
 
             const { doneList, yetList } = useMemo(() => {
-                const doneLogs = logs.filter(l => l.sessionId === session.id);
+                const doneLogs = logs.filter(l => l.sessionId === session.id && !l.isCancelled);
                 const doneIds = new Set(doneLogs.map(l => l.uid));
                 const done = []; const yet = [];
                 
@@ -931,7 +930,7 @@
                         </div>
                         <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-emerald-50 flex flex-col justify-center">
                             <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">총 지급액</div>
-                            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 break-keep">{CURRENCY}{logs.reduce((sum, l) => sum + (l.finalAmount||0), 0).toLocaleString()}</div>
+                            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 break-keep">{CURRENCY}{logs.reduce((sum, l) => sum + (l.isCancelled ? 0 : (l.finalAmount||0)), 0).toLocaleString()}</div>
                         </div>
                         <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-indigo-400 flex flex-col justify-center">
                             <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">전체 달성률</div>
@@ -950,7 +949,7 @@
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {scheduleStats.map(stat => {
                                 const domainInfo = getSessionDomainInfo(stat);
-                                const sessionPenalties = logs.filter(l => l.sessionId === stat.id).reduce((sum, l) => sum + (l.penaltyApplied || 0), 0);
+                                const sessionPenalties = logs.filter(l => l.sessionId === stat.id && !l.isCancelled).reduce((sum, l) => sum + (l.penaltyApplied || 0), 0);
                                 return (
                                     <div key={stat.id} onClick={() => onSessionClick(stat)} className="cursor-pointer bg-white p-5 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group hover:shadow-md transition-shadow active:scale-[0.98] transition-transform">
                                         <div className={`absolute right-0 top-0 p-4 pointer-events-none ${stat.type === 'PAYMENT' ? 'text-emerald-500 opacity-20' : stat.type === 'NONE' ? 'text-slate-400 opacity-15' : 'text-incar opacity-15'}`}>
@@ -1294,6 +1293,7 @@
                 return users.filter(u => u.name.toLowerCase().includes(term) || String(u.uid).includes(term)).slice(0, 5);
             }, [manualCode, users]);
 
+            // 타겟 유저 리스트 가져오기
             const targetUsersList = useMemo(() => {
                 if (!selectedSession) return [];
                 const allTargets = users.filter(u => getUserSessionInfo(u, selectedSession).isTarget);
@@ -1304,7 +1304,7 @@
                     // 탑승 모드일 때는 선택된 차량(targetBus) 명단만 표시 (깔끔한 관리를 위해)
                     filtered = allTargets.filter(u => {
                         const expectedBus = getUserSessionInfo(u, selectedSession).expectedBus;
-                        const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id);
+                        const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id && !l.isCancelled);
                         if (log) return log.bus === targetBus;
                         return expectedBus === targetBus || expectedBus === targetBus.replace('호차','');
                     });
@@ -1317,6 +1317,27 @@
                 const term = listSearch.trim().toLowerCase();
                 return targetUsersList.filter(u => u.name.toLowerCase().includes(term) || String(u.uid).includes(term));
             }, [targetUsersList, listSearch]);
+
+            // 현재 선택된 일정에 배정된 호차들만 동적으로 추출
+            const activeBusesForSession = useMemo(() => {
+                if (!selectedSession || manualBus) return busList;
+                const buses = new Set();
+                users.forEach(u => {
+                    const { isTarget, expectedBus } = getUserSessionInfo(u, selectedSession);
+                    if (isTarget && expectedBus && expectedBus !== '미정' && expectedBus !== '-' && expectedBus !== '자유일정') {
+                        const b = busList.find(bl => bl === expectedBus || bl.replace('호차','') === expectedBus.replace('호차',''));
+                        if (b) buses.add(b);
+                    }
+                });
+                const sorted = Array.from(buses).sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
+                return sorted.length > 0 ? sorted : busList;
+            }, [users, selectedSession, busList, manualBus]);
+
+            useEffect(() => {
+                if (!manualBus && activeBusesForSession.length > 0 && !activeBusesForSession.includes(targetBus)) {
+                    setTargetBus(activeBusesForSession[0]);
+                }
+            }, [activeBusesForSession, targetBus, manualBus]);
 
             return (
                 <div className="space-y-6 h-full flex flex-col animate-slide-up">
@@ -1364,16 +1385,16 @@
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                                            {busList.map((bus, i) => (
+                                            {activeBusesForSession.map((bus, i) => (
                                                 <div key={i} className="relative group">
-                                                    <button onClick={() => manualBus ? handleRenameBus(i) : setTargetBus(bus)} className={`w-full py-3 rounded-xl text-sm font-bold transition-all relative break-keep ${targetBus === bus && !manualBus ? 'bg-incar text-white shadow-lg scale-105 z-10' : manualBus ? 'bg-white border-2 border-dashed border-indigo-200 text-indigo-400 hover:bg-indigo-50' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                                                    <button onClick={() => manualBus ? handleRenameBus(busList.indexOf(bus)) : setTargetBus(bus)} className={`w-full py-3 rounded-xl text-sm font-bold transition-all relative break-keep ${targetBus === bus && !manualBus ? 'bg-incar text-white shadow-lg scale-105 z-10' : manualBus ? 'bg-white border-2 border-dashed border-indigo-200 text-indigo-400 hover:bg-indigo-50' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
                                                         {bus}
                                                         {manualBus && <span className="absolute bottom-0.5 right-1 text-[8px] opacity-50">수정</span>}
                                                     </button>
-                                                    {manualBus && <button onClick={(e) => handleDeleteBus(i, e)} className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-md z-20 hover:scale-110"><Icon name="x" size={12} /></button>}
+                                                    {manualBus && <button onClick={(e) => handleDeleteBus(busList.indexOf(bus), e)} className="absolute -top-2 -right-2 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-md z-20 hover:scale-110"><Icon name="x" size={12} /></button>}
                                                 </div>
                                             ))}
-                                            <button onClick={handleAddBus} className="py-3 rounded-xl text-sm font-bold bg-slate-50 border-2 border-dashed border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all flex items-center justify-center"><Icon name="plus" size={20} /></button>
+                                            {manualBus && <button onClick={handleAddBus} className="py-3 rounded-xl text-sm font-bold bg-slate-50 border-2 border-dashed border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all flex items-center justify-center"><Icon name="plus" size={20} /></button>}
                                         </div>
                                     </>
                                 )}
@@ -1415,7 +1436,7 @@
                                             <div className="text-center text-slate-400 text-xs py-8 break-keep">{mode === 'BOARDING' ? '해당 차량(수단)에 배정된 대상자가 없거나 검색 결과가 없습니다.\n다른 차량을 선택해보세요.' : '대상이 없습니다.'}</div>
                                         ) : (
                                             filteredTargetUsers.map(u => {
-                                                const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id);
+                                                const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id && !l.isCancelled);
                                                 const isBoarded = !!log;
                                                 const { expectedBus } = getUserSessionInfo(u, selectedSession);
                                                 
@@ -1781,7 +1802,7 @@
                 const oldPrice = oldRelatedSchedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === oldVal && s.type === 'PAYMENT').reduce((sum, s) => sum + (s.price || 0), 0);
                 const newPrice = newRelatedSchedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === newVal && s.type === 'PAYMENT').reduce((sum, s) => sum + (s.price || 0), 0);
                 
-                const oldLogs = logs.filter(l => l.uid === selectedUser.uid && oldRelatedSchedules.some(s => s.id === l.sessionId));
+                const oldLogs = logs.filter(l => l.uid === selectedUser.uid && oldRelatedSchedules.some(s => s.id === l.sessionId) && !l.isCancelled);
                 const paidAmount = oldLogs.filter(l => l.action === '지급').reduce((sum, l) => sum + (l.finalAmount || 0), 0);
 
                 const diff = oldPrice - newPrice;
@@ -2591,7 +2612,7 @@
             
             useEffect(() => {
                 logs.forEach(l => {
-                    if (l.sessionId && l.uid) GLOBAL_PROCESSED_SCANS.add(`${l.sessionId}_${l.uid}`);
+                    if (l.sessionId && l.uid && !l.isCancelled) GLOBAL_PROCESSED_SCANS.add(`${l.sessionId}_${l.uid}`);
                 });
             }, [logs]);
 
@@ -2800,7 +2821,7 @@
                 if(logs.length === 0 && changeLogs.length === 0) return alert("내보낼 데이터가 없습니다.");
                 
                 const combinedData = [];
-                logs.forEach(l => combinedData.push({ rawTime: l.timestamp, 일시: formatDateSafe(l.timestamp), 사번: String(l.uid), 성명: l.name, 구분: l.action, 일정명: l.sessionTitle, 금액: l.finalAmount || 0, 패널티: l.penaltyApplied || 0, 배정수단: l.bus, 비고: '', 처리자: l.processedBy || '시스템' }));
+                logs.forEach(l => combinedData.push({ rawTime: l.timestamp, 일시: formatDateSafe(l.timestamp), 사번: String(l.uid), 성명: l.name, 구분: l.action, 일정명: l.sessionTitle, 금액: l.finalAmount || 0, 패널티: l.penaltyApplied || 0, 배정수단: l.bus, 비고: l.isCancelled ? '취소/하차됨' : '', 처리자: l.processedBy || '시스템' }));
                 changeLogs.forEach(c => combinedData.push({ rawTime: c.timestamp, 일시: formatDateSafe(c.timestamp), 사번: String(c.uid), 성명: c.name, 구분: '변경', 일정명: c.targetOption, 금액: 0, 패널티: c.penalty || 0, 배정수단: '', 비고: `${c.oldVal} -> ${c.newVal} | ${c.reason}`, 처리자: c.processedBy || '시스템' }));
                 
                 combinedData.sort((a, b) => {
@@ -2890,10 +2911,10 @@
                     });
                     const targetCount = validUsers.length;
                     
-                    const doneCount = new Set(logs.filter(l => l.sessionId === s.id).map(l => l.uid)).size;
+                    const doneCount = new Set(logs.filter(l => l.sessionId === s.id && !l.isCancelled).map(l => l.uid)).size;
                     const percent = targetCount > 0 ? Math.round((doneCount / targetCount) * 100) : (doneCount > 0 ? 100 : 0);
                     const expectedAmount = targetCount * (s.price || 0);
-                    const actualAmount = logs.filter(l => l.sessionId === s.id).reduce((sum, l) => sum + (l.finalAmount || 0), 0);
+                    const actualAmount = logs.filter(l => l.sessionId === s.id && !l.isCancelled).reduce((sum, l) => sum + (l.finalAmount || 0), 0);
                     
                     return { ...s, targetCount, doneCount, percent, expectedAmount, actualAmount, diffCount: doneCount - targetCount, diffAmount: actualAmount - expectedAmount };
                 });
@@ -2915,11 +2936,20 @@
 
             const cleanupOldLogs = async (uid, targetKey, oldVal, performUpdate = true) => {
                 const relatedSessions = schedules.filter(s => s.targetKey === targetKey);
-                const logsToDelete = logs.filter(l => String(l.uid) === String(uid) && relatedSessions.some(s => s.id === l.sessionId));
-                const oldLogIds = logsToDelete.map(l => l.id);
+                const logsToCancel = logs.filter(l => String(l.uid) === String(uid) && relatedSessions.some(s => s.id === l.sessionId) && !l.isCancelled);
+                const oldLogIds = logsToCancel.map(l => l.id);
                 if(performUpdate && oldLogIds.length > 0) {
-                    if (db) { const batch = db.batch(); oldLogIds.forEach(logId => { const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logId); batch.delete(ref); }); await batch.commit(); } 
-                    else { setLogs(prevLogs => prevLogs.filter(l => !oldLogIds.includes(l.id))); }
+                    if (db) { 
+                        const batch = db.batch(); 
+                        oldLogIds.forEach(logId => { 
+                            const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logId); 
+                            batch.update(ref, { isCancelled: true }); 
+                        }); 
+                        await batch.commit(); 
+                    } 
+                    else { 
+                        setLogs(prevLogs => prevLogs.map(l => oldLogIds.includes(l.id) ? { ...l, isCancelled: true } : l)); 
+                    }
                 }
                 return oldLogIds;
             };
@@ -2929,24 +2959,24 @@
                 
                 if (isCancel) {
                     const confirmMessage = session.type === 'PAYMENT' 
-                        ? `${user.name}님의 지급을 취소하시겠습니까?`
-                        : `${user.name}님의 탑승을 취소하시겠습니까?`;
+                        ? `${user.name}님의 지급을 취소하시겠습니까?\n(엑셀 데이터에 취소 이력이 남습니다)`
+                        : `${user.name}님의 탑승을 하차 처리하시겠습니까?\n(엑셀 데이터에 하차 이력이 남습니다)`;
                         
                     if (!confirm(confirmMessage)) return;
                     
-                    const logToDelete = logs.find(l => String(l.uid) === String(user.uid) && String(l.sessionId) === String(session.id));
-                    if (logToDelete) {
+                    const logToCancel = logs.find(l => String(l.uid) === String(user.uid) && String(l.sessionId) === String(session.id) && !l.isCancelled);
+                    if (logToCancel) {
                         try {
                             if (db) {
-                                await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logToDelete.id).delete();
-                                if (session.type === 'PAYMENT' && logToDelete.penaltyApplied > 0) {
+                                await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logToCancel.id).update({ isCancelled: true });
+                                if (session.type === 'PAYMENT' && logToCancel.penaltyApplied > 0) {
                                     const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
-                                    await userRef.update({ penaltyTotal: (user.penaltyTotal || 0) + logToDelete.penaltyApplied });
+                                    await userRef.update({ penaltyTotal: (user.penaltyTotal || 0) + logToCancel.penaltyApplied });
                                 }
                             } else {
-                                setLogs(prev => prev.filter(l => l.id !== logToDelete.id));
-                                if (session.type === 'PAYMENT' && logToDelete.penaltyApplied > 0) {
-                                    setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: (u.penaltyTotal || 0) + logToDelete.penaltyApplied } : u));
+                                setLogs(prev => prev.map(l => l.id === logToCancel.id ? { ...l, isCancelled: true } : l));
+                                if (session.type === 'PAYMENT' && logToCancel.penaltyApplied > 0) {
+                                    setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: (u.penaltyTotal || 0) + logToCancel.penaltyApplied } : u));
                                 }
                             }
                             GLOBAL_PROCESSED_SCANS.delete(scanKey);
@@ -2957,7 +2987,8 @@
                                 penalty: 0, reason: '현장 취소', processedBy: `${currentAdmin?.name}(${currentAdmin?.id})` 
                             };
                             if (db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
-                            else setChangeLogs(prev => [changeLog, ...changeLogs]);
+                            else setChangeLogs(prev => [changeLog, ...prev]);
+                            
                         } catch (error) {
                             console.error("취소 중 오류 발생:", error);
                             alert("취소 처리 중 시스템 오류가 발생했습니다.");
@@ -3027,10 +3058,7 @@
                         await userRef.update({ penaltyTotal: currentPenalty - penaltyApplied }); 
                     } 
                 } else { 
-                    setLogs(prevLogs => { 
-                        const filtered = prevLogs.filter(l => !logIdsToRemove.includes(l.id)); 
-                        return [newLog, ...filtered]; 
-                    }); 
+                    setLogs(prevLogs => [newLog, ...prevLogs]); 
                     if (penaltyApplied > 0) { 
                         const currentPenalty = (user.penaltyTotal || 0) + newPenalty; 
                         const updatedUsers2 = users.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: currentPenalty - penaltyApplied } : u); 
@@ -3060,7 +3088,7 @@
                 if(penaltyAmount > 0) alertMsg += `\n\n⚠️ 미반환 처리: ${CURRENCY}${penaltyAmount}가 패널티로 등록되었습니다.`; 
                 else if (reason.includes('반환')) alertMsg += `\n\n✅ 반환 확인: 기존 지급액이 정상적으로 회수되었습니다.`; 
                 else if (payoutOverride === 0) alertMsg += `\n\nℹ️ 지급 보류: 기존 일정 비용을 고려하여 이번 지급은 생략되었습니다.`; 
-                else alertMsg += `\n(이전 일정에 대한 완료 기록은 삭제되었습니다.)`; 
+                else alertMsg += `\n(이전 일정에 대한 완료 기록은 무효 처리되었습니다.)`; 
                 
                 alert(alertMsg);
             };
@@ -3084,6 +3112,20 @@
                 
                 const session = schedules.find(s => s.id === targetSessionId); 
                 if (!session) return setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' }); 
+
+                const scanKey = `${session.id}_${user.uid}`;
+                const existingLog = logs.find(l => String(l.uid) === String(user.uid) && l.sessionId === session.id && !l.isCancelled);
+                
+                if (GLOBAL_PROCESSED_SCANS.has(scanKey) || existingLog) {
+                    return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
+                }
+
+                // 🌟 중요: 처리 전 명시적 Confirm 단계 추가
+                const actionName = session.type === 'PAYMENT' ? '지급' : '탑승';
+                if (!confirm(`[${user.name}]님을 ${session.title} 일정에 ${actionName} 처리하시겠습니까?`)) {
+                    isProcessingRef.current = false;
+                    return;
+                }
 
                 const { isTarget, expectedBus } = getUserSessionInfo(user, session);
                 const domainInfo = getSessionDomainInfo(session);
@@ -3113,21 +3155,17 @@
                     saveBus = domainInfo.isOutbound ? expectedBus : targetBus;
                 }
                 
-                const scanKey = `${session.id}_${user.uid}`;
-                if (GLOBAL_PROCESSED_SCANS.has(scanKey) || logs.some(l => String(l.uid) === String(user.uid) && l.sessionId === session.id)) {
-                    return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
-                }
-                
                 GLOBAL_PROCESSED_SCANS.add(scanKey);
 
                 let finalAmount = 0; let penaltyApplied = 0; 
                 if (session.type === 'PAYMENT') { 
                     const baseAmount = session.price; const deduction = user.penaltyTotal || 0; 
                     finalAmount = Math.max(0, baseAmount - deduction); penaltyApplied = (baseAmount - finalAmount); 
-                } 
-
+                }
+                
                 const newLog = { 
-                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: session.type === 'PAYMENT' ? '-' : saveBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`
+                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: session.type === 'PAYMENT' ? '-' : saveBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`,
+                    isCancelled: false // 🔥 추가: 소프트 삭제 처리를 위한 필드
                 }; 
                 
                 if (db) { 
@@ -3157,7 +3195,7 @@
                     }).catch(console.error);
                 }
 
-                const todayLogs = logs.filter(l => String(l.uid) === String(user.uid) && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급'); 
+                const todayLogs = logs.filter(l => String(l.uid) === String(user.uid) && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급' && !l.isCancelled); 
                 setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':getSessionDomainInfo(session).action+' 완료', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
             }, [db, users, schedules, logs, targetSessionId, targetBus, currentAdmin]);
 
@@ -3206,8 +3244,3 @@
     </script>
 </body>
 </html>
-
-
-
-
-
