@@ -1305,7 +1305,7 @@
             return (
                 <div className="space-y-6 h-full flex flex-col animate-slide-up">
                     <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
-                        <div className="flex items-center gap-2 mb-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING' ? 'STEP 1' : '지급'}</span><h3 className="text-lg font-bold text-slate-800 break-keep">{mode==='BOARDING' ? '탑승/수속 일정 선택' : '지급 항목 선택'}</h3></div>
+                        <div className="flex items-center gap-2 mb-4"><span className={`px-2 py-1 rounded-lg text-xs font-bold ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING' ? 'STEP 1' : '지급'}</span><h3 className="text-lg font-bold text-slate-800 break-keep">{mode==='BOARDING' ? '탑승/수속 일정을 선택하세요' : '지급할 항목을 선택하세요'}</h3></div>
                         <div className="mb-6">
                             {filteredSchedules.length > 0 ? (
                                 <select value={targetSessionId} onChange={(e) => setTargetSessionId(e.target.value)} className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-lg outline-none focus:ring-4 transition-all break-keep ${mode==='BOARDING'?'focus:ring-incar/20':'focus:ring-emerald-500/20'}`}>
@@ -1340,7 +1340,7 @@
                                             </div>
                                         )}
                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 w-full">
-                                            <div className="flex items-center gap-2 shrink-0"><span className="px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-slate-800 text-white">STEP 2</span><h3 className="text-base sm:text-lg font-bold text-slate-800 break-keep">현장 탑승 차량 선택</h3></div>
+                                            <div className="flex items-center gap-2 shrink-0"><span className="px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-slate-800 text-white">STEP 2</span><h3 className="text-base sm:text-lg font-bold text-slate-800 break-keep">현장 탑승 차량을 선택하세요</h3></div>
                                             <div className="flex gap-2 items-center shrink-0 w-full sm:w-auto">
                                                 <div className="flex flex-1 sm:flex-none items-center justify-center sm:justify-start bg-slate-100 rounded-lg px-2 py-1.5 gap-2 cursor-pointer" onClick={() => setIsStrictBusMode(!isStrictBusMode)}>
                                                     <div className={`w-8 h-4 rounded-full relative transition-colors shrink-0 ${isStrictBusMode ? 'bg-incar' : 'bg-slate-300'}`}><div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${isStrictBusMode ? 'translate-x-4' : 'translate-x-0'}`}></div></div>
@@ -2437,6 +2437,138 @@
                 });
             }, [logs]);
 
+            const handleUserUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                Papa.parse(file, {
+                    header: true,
+                    complete: (results) => {
+                        const data = results.data.filter(r => r.uid || r['사번']).map(r => {
+                            const uid = String(r.uid || r['사번']).trim();
+                            const name = (r.name || r['이름'] || r['성명'] || '').trim();
+                            const org = (r.org || r['소속'] || '').trim();
+                            const bus = (r.bus || r['차량'] || r['버스'] || '미정').trim();
+                            
+                            const options = {};
+                            Object.keys(r).forEach(k => {
+                                if (!['uid', '사번', 'name', '이름', '성명', 'org', '소속', 'bus', '차량', '버스'].includes(k)) {
+                                    options[k] = r[k];
+                                }
+                            });
+                            return { uid, name, org, bus, options, penaltyTotal: 0 };
+                        });
+                        
+                        if (data.length > 0) {
+                            if (db) {
+                                const batch = db.batch();
+                                data.forEach(user => {
+                                    const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(user.uid);
+                                    batch.set(ref, user);
+                                });
+                                batch.commit().then(() => alert(`참가자 ${data.length}명 업로드 완료`));
+                            } else {
+                                setUsers(data);
+                                alert(`참가자 ${data.length}명 업로드 완료 (로컬)`);
+                            }
+                        }
+                    }
+                });
+            };
+
+            const handleScheduleUpload = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                Papa.parse(file, {
+                    header: true,
+                    complete: (results) => {
+                        const data = results.data.filter(r => r.title || r['일정명']).map((r, i) => {
+                            return {
+                                id: `S${String(i+1).padStart(2, '0')}`,
+                                order: parseInt(r.order || r['순서']) || i + 1,
+                                date: (r.date || r['날짜'] || '').trim(),
+                                displayDate: (r.displayDate || r['일자표기'] || '').trim(),
+                                title: (r.title || r['일정명'] || '').trim(),
+                                type: (r.type || r['구분'] || 'BOARDING').trim(),
+                                targetKey: (r.targetKey || r['옵션명'] || 'ALL').trim(),
+                                targetVal: (r.targetVal || r['매칭값'] || 'ALL').trim(),
+                                nature: (r.nature || r['속성'] || '관광').trim(),
+                                price: parseInt(r.price || r['금액']) || 0
+                            };
+                        });
+                        if (data.length > 0) {
+                            if (db) {
+                                const batch = db.batch();
+                                data.forEach(s => {
+                                    const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(s.id);
+                                    batch.set(ref, s);
+                                });
+                                batch.commit().then(() => alert(`일정 ${data.length}개 업로드 완료`));
+                            } else {
+                                setSchedules(data);
+                                alert(`일정 ${data.length}개 업로드 완료 (로컬)`);
+                            }
+                        }
+                    }
+                });
+            };
+
+            const handleUserUpdate = async (penaltyOverride = null, reasonOverride = null) => {
+                if (!selectedUser || !editForm.optKey || !editForm.optVal) return;
+                
+                const penalty = penaltyOverride !== null ? penaltyOverride : parseInt(editForm.penalty) || 0;
+                const reason = reasonOverride || editForm.reason || '현장 수동 변경';
+                const requiredChoice = editForm.optVal;
+                const oldVal = selectedUser.options[editForm.optKey];
+                
+                if(db) { 
+                    const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(selectedUser.uid)); 
+                    const updatedOptions = { ...selectedUser.options, [editForm.optKey]: requiredChoice }; 
+                    await userRef.update({ options: updatedOptions, penaltyTotal: (selectedUser.penaltyTotal || 0) + penalty }); 
+                } else { 
+                    const updatedUsers = users.map(u => { 
+                        if (String(u.uid) === String(selectedUser.uid)) { 
+                            const newOptions = { ...u.options, [editForm.optKey]: requiredChoice }; 
+                            return { ...u, options: newOptions, penaltyTotal: (u.penaltyTotal || 0) + penalty }; 
+                        } 
+                        return u; 
+                    }); 
+                    setUsers([...updatedUsers]); 
+                }
+
+                const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toISOString(), uid: String(selectedUser.uid), name: selectedUser.name, targetOption: editForm.optKey, oldVal: oldVal || '미선택', newVal: requiredChoice, penalty: penalty, reason: reason, processedBy: `${currentAdmin?.name}(${currentAdmin?.id})` };
+                
+                if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog); 
+                else setChangeLogs([changeLog, ...changeLogs]);
+
+                alert('변경이 저장되었습니다.');
+                setSelectedUser(null);
+                setEditForm({ optKey: '', optVal: '', penalty: 0, reason: '' });
+            };
+
+            const handleForceUpdateAndProcess = (user, session, requiredChoice) => {
+                executeUpdate(user, session, requiredChoice, 0, '현장 즉시 변경 및 승인');
+            };
+
+            const resolveRefundRequest = (isReturned) => {
+                if(!refundRequest) return;
+                if (isReturned) {
+                    executeUpdate(refundRequest.user, refundRequest.session, refundRequest.newVal, -refundRequest.amount, `기존 지급액 반환 완료`, refundRequest.session.price);
+                } else {
+                    executeUpdate(refundRequest.user, refundRequest.session, refundRequest.newVal, refundRequest.amount, `미반환금 패널티 부과`);
+                }
+                setRefundRequest(null);
+            };
+
+            const resolveForfeitRequest = (shouldPay) => {
+                if(!forfeitRequest) return;
+                if (shouldPay) {
+                    executeUpdate(forfeitRequest.user, forfeitRequest.session, forfeitRequest.newVal, 0, `예약 위약금 면제`);
+                } else {
+                    executeUpdate(forfeitRequest.user, forfeitRequest.session, forfeitRequest.newVal, forfeitRequest.price, `예약취소 위약금 부과`, 0);
+                }
+                setForfeitRequest(null);
+            };
+
             const handleAppBgUpload = (e) => {
                 const file = e.target.files[0];
                 if (file) {
@@ -2617,7 +2749,7 @@
                             penalty: 0, reason: '현장 수동 취소(하차)', processedBy: `${currentAdmin?.name}(${currentAdmin?.id})` 
                         };
                         if (db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
-                        else setChangeLogs(prev => [changeLog, ...prev]);
+                        else setChangeLogs(prev => [changeLog, ...changeLogs]);
                     }
                 } else {
                     if (!confirm(`${user.name}님을 [${session.type === 'PAYMENT' ? '지급 완료' : actionBus + ' 탑승'}] 처리하시겠습니까?`)) return;
@@ -2889,4 +3021,3 @@
     </script>
 </body>
 </html>
-
