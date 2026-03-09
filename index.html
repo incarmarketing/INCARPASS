@@ -2587,7 +2587,8 @@
                         setDb(_db);
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('admins').onSnapshot(snap => { setAdmins(snap.docs.map(d => d.data())); setIsAdminsLoaded(true); });
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').onSnapshot(snap => { 
-                            const list = snap.docs.map(d => ({id:d.id, ...d.data()})).sort((a,b) => {
+                            // 수정: d.data()를 먼저 풀고 id를 덮어씌워 진짜 Firestore 문서 ID 보존
+                            const list = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => {
                                 if (a.date === b.date) return (a.order || 0) - (b.order || 0);
                                 return a.date > b.date ? 1 : -1;
                             }); 
@@ -2597,8 +2598,9 @@
                                 if(scanOnly.length > 0) setTargetSessionId(scanOnly[0].id);
                             }
                         });
-                        _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').orderBy('timestamp','desc').onSnapshot(snap => setLogs(snap.docs.map(d => ({id:d.id, ...d.data()}))));
-                        _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').orderBy('timestamp','desc').onSnapshot(snap => setChangeLogs(snap.docs.map(d => ({id:d.id, ...d.data()}))));
+                        // 수정: 로그와 변경이력도 동일하게 진짜 문서 ID가 보존되도록 순서 변경
+                        _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').orderBy('timestamp','desc').onSnapshot(snap => setLogs(snap.docs.map(d => ({ ...d.data(), id: d.id }))));
+                        _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').orderBy('timestamp','desc').onSnapshot(snap => setChangeLogs(snap.docs.map(d => ({ ...d.data(), id: d.id }))));
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').onSnapshot(snap => setUsers(snap.docs.map(d => d.data())));
                     }).catch(e => initLocal());
                 } catch (e) { initLocal(); }
@@ -2703,7 +2705,8 @@
                                 type: (r.type || r['구분'] || defaultType).trim(),
                                 targetKey: (r.targetKey || r['옵션명'] || r['타겟옵션'] || 'ALL').trim(),
                                 targetVal: (r.targetVal || r['매칭값'] || r['타겟값'] || 'ALL').trim(),
-                                nature: (r.nature || r['속성'] || r['타입'] || '관광').trim(),
+                                // 수정: 빈 문자열('')을 기본값으로 두어 앱 내부의 자동 추론 로직이 개입할 수 있도록 개선
+                                nature: (r.nature || r['속성'] || r['타입'] || '').trim(),
                                 price: parsedPrice
                             };
                         });
