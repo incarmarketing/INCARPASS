@@ -690,7 +690,7 @@
                                 )}
                                 {isBusMismatch && (
                                     <div className="p-4 bg-amber-50 border border-amber-100 rounded-2xl text-center">
-                                        <p className="text-sm font-bold text-amber-600 mb-1 break-keep">배정수단 불일치</p>
+                                        <p className="text-sm font-bold text-amber-600 mb-1 break-keep">탑승 호차 불일치</p>
                                         <p className="text-xs text-slate-600 mb-1 break-keep">해당 인원은 <strong>{getUserSessionInfo(user, session).expectedBus}</strong> 탑승 대상입니다.</p>
                                         <p className="text-[10px] text-slate-400 break-keep">다른 수단으로 안내하거나 관리자에게 문의하세요.</p>
                                     </div>
@@ -2213,8 +2213,8 @@
                                 <div>
                                     <label className="text-[10px] font-bold text-slate-400 mb-1 block break-keep">권한 등급</label>
                                     <select value={newAdminRole} onChange={(e) => setNewAdminRole(e.target.value)} className="w-full p-3 border border-slate-200 rounded-xl font-bold text-sm outline-none focus:border-incar bg-white break-keep">
-                                        <option value="manager">MANAGER (관리/설정)</option>
-                                        <option value="staff">STAFF (스캔/조회)</option>
+                                        <option value="manager">매니저 (관리/설정)</option>
+                                        <option value="staff">스태프 (스캔/조회)</option>
                                     </select>
                                 </div>
                                 <button onClick={() => {
@@ -3206,6 +3206,7 @@
     </script>
 </body>
 </html>
+
 
 
 
