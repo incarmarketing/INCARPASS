@@ -2709,7 +2709,7 @@
                 if (!selectedUser || !editForm.optKey || !editForm.optVal) return;
                 
                 const penalty = penaltyOverride !== null ? penaltyOverride : parseInt(editForm.penalty) || 0;
-                const reason = reasonOverride || editForm.reason || '현장 수동 변경';
+                const reason = reasonOverride || editForm.reason || '현장 변경';
                 const requiredChoice = editForm.optVal;
                 const oldVal = selectedUser.options[editForm.optKey];
                 
@@ -2954,7 +2954,7 @@
                             const changeLog = { 
                                 id: `CHG_${Date.now()}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, 
                                 targetOption: session.title, oldVal: session.type === 'PAYMENT' ? '지급완료' : '탑승완료', newVal: session.type === 'PAYMENT' ? '지급취소' : '하차', 
-                                penalty: 0, reason: '현장 수동 취소', processedBy: `${currentAdmin?.name}(${currentAdmin?.id})` 
+                                penalty: 0, reason: '현장 취소', processedBy: `${currentAdmin?.name}(${currentAdmin?.id})` 
                             };
                             if (db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
                             else setChangeLogs(prev => [changeLog, ...changeLogs]);
@@ -3206,6 +3206,7 @@
     </script>
 </body>
 </html>
+
 
 
 
