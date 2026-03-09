@@ -592,11 +592,11 @@
 
         const MobileTab = ({ activeTab, setActiveTab, currentAdmin }) => (
             <nav className="fixed bottom-0 w-full bg-white border-t border-slate-200 pb-safe pt-2 px-4 flex justify-around items-center z-30 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] md:hidden">
-                <button onClick={()=>setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='dashboard'?'text-incar':'text-slate-300'}`}><Icon name="dashboard" size={20}/><span className="text-[9px] font-bold">현황</span></button>
-                <button onClick={()=>setActiveTab('boarding')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='boarding'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='boarding'?'bg-incar text-white shadow-lg ring-2 ring-slate-100':''}`}><Icon name="bus" size={20} /></div><span className="text-[9px] font-bold">탑승</span></button>
-                {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('payment')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='payment'?'text-emerald-500':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='payment'?'bg-emerald-500 text-white shadow-lg ring-2 ring-slate-100':''}`}><Icon name="money" size={20} /></div><span className="text-[9px] font-bold">지급</span></button>}
-                {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('change')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='change'?'text-incar':'text-slate-300'}`}><Icon name="edit" size={20}/><span className="text-[9px] font-bold">관리</span></button>}
-                {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('manage')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='manage'?'text-incar':'text-slate-300'}`}><Icon name="settings" size={20}/><span className="text-[9px] font-bold">설정</span></button>}
+                <button onClick={()=>setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='dashboard'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='dashboard'?'bg-incar text-white shadow-lg ring-2 ring-slate-100':''}`}><Icon name="dashboard" size={20} /></div><span className="text-[9px] font-black">현황</span></button>
+                <button onClick={()=>setActiveTab('boarding')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='boarding'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='boarding'?'bg-incar text-white shadow-lg ring-2 ring-slate-100':''}`}><Icon name="bus" size={20} /></div><span className="text-[9px] font-black">탑승</span></button>
+                {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('payment')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='payment'?'text-emerald-500':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='payment'?'bg-emerald-500 text-white shadow-lg ring-2 ring-slate-100':''}`}><Icon name="money" size={20} /></div><span className="text-[9px] font-black">지급</span></button>}
+                {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('change')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='change'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='change'?'bg-incar text-white shadow-lg ring-2 ring-slate-100':''}`}><Icon name="edit" size={20} /></div><span className="text-[9px] font-black">관리</span></button>}
+                {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('manage')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='manage'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='manage'?'bg-incar text-white shadow-lg ring-2 ring-slate-100':''}`}><Icon name="settings" size={20} /></div><span className="text-[9px] font-black">설정</span></button>}
             </nav>
         );
 
@@ -1084,6 +1084,7 @@
             const [cameraList, setCameraList] = useState([]);
             const [currentCamId, setCurrentCamId] = useState(null);
             const [listSearch, setListSearch] = useState('');
+            const [scanTab, setScanTab] = useState('yet'); // 🔥 명단 탭 상태 추가
             
             const isProcessingRef = useRef(false);
 
@@ -1124,6 +1125,9 @@
             
             const selectedSession = useMemo(() => filteredSchedules.find(s => s.id === targetSessionId), [filteredSchedules, targetSessionId]);
             const domainInfo = getSessionDomainInfo(selectedSession);
+
+            // 🔥 세션이나 호차가 변경되면 탭을 기본값('yet')으로 초기화
+            useEffect(() => { setScanTab('yet'); }, [targetSessionId, mode, targetBus]);
 
             useEffect(() => {
                 let barcodeStr = '';
@@ -1299,7 +1303,10 @@
                 const allTargets = users.filter(u => getUserSessionInfo(u, selectedSession).isTarget);
                 
                 let filtered = [];
-                if (mode === 'PAYMENT') filtered = allTargets;
+                const dInfo = getSessionDomainInfo(selectedSession);
+
+                // 🔥 출국(항공)이거나 지급인 경우 전체 대상을 보여줌
+                if (mode === 'PAYMENT' || dInfo.isOutbound) filtered = allTargets;
                 else {
                     // 탑승 모드일 때는 선택된 차량(targetBus) 명단만 표시 (깔끔한 관리를 위해)
                     filtered = allTargets.filter(u => {
@@ -1317,6 +1324,21 @@
                 const term = listSearch.trim().toLowerCase();
                 return targetUsersList.filter(u => u.name.toLowerCase().includes(term) || String(u.uid).includes(term));
             }, [targetUsersList, listSearch]);
+
+            // 🔥 완료/대기 유저 분리 로직
+            const { doneUsers, yetUsers } = useMemo(() => {
+                if (!selectedSession) return { doneUsers: [], yetUsers: [] };
+                const done = [];
+                const yet = [];
+                filteredTargetUsers.forEach(u => {
+                    const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id && !l.isCancelled);
+                    if (log) done.push({ ...u, log });
+                    else yet.push(u);
+                });
+                return { doneUsers: done, yetUsers: yet };
+            }, [filteredTargetUsers, logs, selectedSession]);
+
+            const currentList = scanTab === 'done' ? doneUsers : yetUsers;
 
             // 현재 선택된 일정에 배정된 호차들만 동적으로 추출
             const activeBusesForSession = useMemo(() => {
@@ -1376,6 +1398,7 @@
                                                 </div>
                                             </div>
                                         )}
+                                        {/* 🔥 출국이 아닐 때만 호차 선택 UI 렌더링 */}
                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 w-full">
                                             <div className="flex items-center gap-2 shrink-0"><span className="px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-slate-800 text-white">STEP 2</span><h3 className="text-base sm:text-lg font-bold text-slate-800 break-keep">현장 차량을 선택하세요</h3></div>
                                             <div className="flex gap-2 items-center shrink-0 w-full sm:w-auto">
@@ -1413,7 +1436,7 @@
                                     <div className="flex justify-between items-center mb-3">
                                         <h4 className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
                                             <Icon name={mode==='BOARDING'?'users':'money'} size={18} className={mode==='BOARDING'?'text-incar':'text-emerald-500'} />
-                                            {mode === 'BOARDING' ? <><span className="text-incar bg-indigo-50 px-2 py-0.5 rounded ml-1 mr-1">[{targetBus}]</span> 탑승 명단</> : '전체 명단'}
+                                            {mode === 'BOARDING' ? <><span className="text-incar bg-indigo-50 px-2 py-0.5 rounded ml-1 mr-1">[{domainInfo.isOutbound ? '항공전체' : targetBus}]</span> 탑승 명단</> : '전체 명단'}
                                         </h4>
                                         <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-1 rounded font-bold">
                                             {filteredTargetUsers.length}명
@@ -1431,13 +1454,24 @@
                                             className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-incar"
                                         />
                                     </div>
+                                    
+                                    {/* 🔥 명단 상태 탭 분리 적용 */}
+                                    <div className="flex border-b border-slate-100 mb-3 rounded-t-xl overflow-hidden bg-slate-50 shrink-0">
+                                        <button onClick={() => setScanTab('yet')} className={`flex-1 py-2 text-xs font-bold transition-colors ${scanTab==='yet' ? (mode==='BOARDING'?'text-incar border-b-2 border-incar bg-indigo-50/50':'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50') : 'text-slate-400 hover:bg-slate-100'}`}>
+                                            {mode === 'BOARDING' ? `미탑승 (${yetUsers.length})` : `미지급 (${yetUsers.length})`}
+                                        </button>
+                                        <button onClick={() => setScanTab('done')} className={`flex-1 py-2 text-xs font-bold transition-colors ${scanTab==='done' ? (mode==='BOARDING'?'text-incar border-b-2 border-incar bg-indigo-50/50':'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50') : 'text-slate-400 hover:bg-slate-100'}`}>
+                                            {mode === 'BOARDING' ? `탑승완료 (${doneUsers.length})` : `지급완료 (${doneUsers.length})`}
+                                        </button>
+                                    </div>
+
                                     <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 space-y-2">
-                                        {filteredTargetUsers.length === 0 ? (
-                                            <div className="text-center text-slate-400 text-xs py-8 break-keep">{mode === 'BOARDING' ? '해당 차량(수단)에 배정된 대상자가 없거나 검색 결과가 없습니다.\n다른 차량을 선택해보세요.' : '대상이 없습니다.'}</div>
+                                        {currentList.length === 0 ? (
+                                            <div className="text-center text-slate-400 text-xs py-8 break-keep">{scanTab === 'yet' ? (mode === 'BOARDING' ? '해당 수단에 탑승 대기중인 대상자가 없습니다.' : '대기중인 대상자가 없습니다.') : '처리된 대상자가 없습니다.'}</div>
                                         ) : (
-                                            filteredTargetUsers.map(u => {
-                                                const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id && !l.isCancelled);
-                                                const isBoarded = !!log;
+                                            currentList.map(item => {
+                                                const u = item;
+                                                const isBoarded = scanTab === 'done';
                                                 const { expectedBus } = getUserSessionInfo(u, selectedSession);
                                                 
                                                 return (
