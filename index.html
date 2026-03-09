@@ -593,8 +593,8 @@
         const MobileTab = ({ activeTab, setActiveTab, currentAdmin }) => (
             <nav className="fixed bottom-0 w-full bg-white border-t border-slate-200 pb-safe pt-2 px-4 flex justify-around items-center z-30 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] md:hidden">
                 <button onClick={()=>setActiveTab('dashboard')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='dashboard'?'text-incar':'text-slate-300'}`}><Icon name="dashboard" size={20}/><span className="text-[9px] font-bold">현황</span></button>
-                <button onClick={()=>setActiveTab('boarding')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='boarding'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='boarding'?'bg-incar text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="bus" size={20} /></div>{activeTab!=='boarding' && <span className="text-[9px] font-bold">탑승</span>}</button>
-                {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('payment')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='payment'?'text-emerald-500':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='payment'?'bg-emerald-500 text-white shadow-lg ring-2 ring-slate-100 mb-1':''}`}><Icon name="money" size={20} /></div>{activeTab!=='payment' && <span className="text-[9px] font-bold">지급</span>}</button>}
+                <button onClick={()=>setActiveTab('boarding')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='boarding'?'text-incar':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='boarding'?'bg-incar text-white shadow-lg ring-2 ring-slate-100':''}`}><Icon name="bus" size={20} /></div><span className="text-[9px] font-bold">탑승</span></button>
+                {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('payment')} className={`flex flex-col items-center gap-1 p-2 w-14 relative ${activeTab==='payment'?'text-emerald-500':'text-slate-300'}`}><div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${activeTab==='payment'?'bg-emerald-500 text-white shadow-lg ring-2 ring-slate-100':''}`}><Icon name="money" size={20} /></div><span className="text-[9px] font-bold">지급</span></button>}
                 {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('change')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='change'?'text-incar':'text-slate-300'}`}><Icon name="edit" size={20}/><span className="text-[9px] font-bold">관리</span></button>}
                 {currentAdmin?.role !== 'staff' && <button onClick={()=>setActiveTab('manage')} className={`flex flex-col items-center gap-1 p-2 w-14 ${activeTab==='manage'?'text-incar':'text-slate-300'}`}><Icon name="settings" size={20}/><span className="text-[9px] font-bold">설정</span></button>}
             </nav>
@@ -2705,7 +2705,6 @@
                                 type: (r.type || r['구분'] || defaultType).trim(),
                                 targetKey: (r.targetKey || r['옵션명'] || r['타겟옵션'] || 'ALL').trim(),
                                 targetVal: (r.targetVal || r['매칭값'] || r['타겟값'] || 'ALL').trim(),
-                                // 수정: 빈 문자열('')을 기본값으로 두어 앱 내부의 자동 추론 로직이 개입할 수 있도록 개선
                                 nature: (r.nature || r['속성'] || r['타입'] || '').trim(),
                                 price: parsedPrice
                             };
@@ -2748,6 +2747,27 @@
                     } else {
                         newOptions['버스'] = editForm.newBus.trim();
                     }
+                }
+
+                // 🔥 옵션 변경 시: 기존 일정과 매칭되어 이미 처리된(로그) 항목들을 취소(isCancelled) 처리하여 통계에서 제외
+                const oldRelatedSchedules = schedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === oldVal);
+                const logsToCancel = logs.filter(l => String(l.uid) === String(selectedUser.uid) && oldRelatedSchedules.some(s => s.id === l.sessionId) && !l.isCancelled);
+                const oldLogIds = logsToCancel.map(l => l.id);
+
+                if (oldLogIds.length > 0) {
+                    if (db) {
+                        const batch = db.batch();
+                        oldLogIds.forEach(logId => {
+                            const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logId);
+                            batch.set(ref, { isCancelled: true }, { merge: true });
+                        });
+                        await batch.commit();
+                    } else {
+                        setLogs(prev => prev.map(l => oldLogIds.includes(l.id) ? { ...l, isCancelled: true } : l));
+                    }
+                    oldRelatedSchedules.forEach(s => {
+                        GLOBAL_PROCESSED_SCANS.delete(`${s.id}_${selectedUser.uid}`);
+                    });
                 }
                 
                 if(db) { 
