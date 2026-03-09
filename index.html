@@ -2944,7 +2944,7 @@
                         const batch = db.batch(); 
                         oldLogIds.forEach(logId => { 
                             const ref = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logId); 
-                            batch.update(ref, { isCancelled: true }); 
+                            batch.set(ref, { isCancelled: true }, { merge: true }); 
                         }); 
                         await batch.commit(); 
                     } 
@@ -2969,10 +2969,10 @@
                     if (logToCancel) {
                         try {
                             if (db) {
-                                await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logToCancel.id).update({ isCancelled: true });
+                                await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logToCancel.id).set({ isCancelled: true }, { merge: true });
                                 if (session.type === 'PAYMENT' && logToCancel.penaltyApplied > 0) {
                                     const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
-                                    await userRef.update({ penaltyTotal: (user.penaltyTotal || 0) + logToCancel.penaltyApplied });
+                                    await userRef.set({ penaltyTotal: (user.penaltyTotal || 0) + logToCancel.penaltyApplied }, { merge: true });
                                 }
                             } else {
                                 setLogs(prev => prev.map(l => l.id === logToCancel.id ? { ...l, isCancelled: true } : l));
@@ -2992,7 +2992,7 @@
                             
                         } catch (error) {
                             console.error("취소 중 오류 발생:", error);
-                            alert("취소 처리 중 시스템 오류가 발생했습니다.");
+                            alert(`취소 처리 중 시스템 오류가 발생했습니다.\n${error.message}`);
                         }
                     } else {
                         alert("삭제할 수 있는 기존 기록을 찾을 수 없습니다.");
@@ -3006,7 +3006,7 @@
                 if(!db && !confirm("로컬 모드입니다. 변경사항이 다른 기기에 반영되지 않습니다. 계속하시겠습니까?")) return;
                 
                 const oldVal = user.options[session.targetKey];
-                const logIdsToRemove = await cleanupOldLogs(user.uid, session.targetKey, oldVal, !!db);
+                const logIdsToRemove = await cleanupOldLogs(user.uid, session.targetKey, oldVal, true);
                 const newPenalty = penaltyAmount;
 
                 GLOBAL_PROCESSED_SCANS.add(`${session.id}_${user.uid}`);
@@ -3014,21 +3014,20 @@
                 if(db) { 
                     const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
                     const updatedOptions = { ...user.options, [session.targetKey]: requiredChoice }; 
-                    await userRef.update({ options: updatedOptions, penaltyTotal: (user.penaltyTotal || 0) + newPenalty }); 
+                    await userRef.set({ options: updatedOptions, penaltyTotal: (user.penaltyTotal || 0) + newPenalty }, { merge: true }); 
                 } else { 
-                    const updatedUsers = users.map(u => { 
+                    setUsers(prev => prev.map(u => { 
                         if (String(u.uid) === String(user.uid)) { 
                             const newOptions = { ...u.options, [session.targetKey]: requiredChoice }; 
                             return { ...u, options: newOptions, penaltyTotal: (u.penaltyTotal || 0) + newPenalty }; 
                         } 
                         return u; 
-                    }); 
-                    setUsers([...updatedUsers]); 
+                    })); 
                 }
 
                 const changeLog = { id: `CHG_${Date.now()}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, targetOption: session.targetKey, oldVal: oldVal || '미선택', newVal: requiredChoice, penalty: newPenalty, reason: reason, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
                 if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog); 
-                else setChangeLogs([changeLog, ...changeLogs]);
+                else setChangeLogs(prev => [changeLog, ...prev]);
 
                 let finalAmount = 0; 
                 let penaltyApplied = 0;
@@ -3049,21 +3048,23 @@
                 const { expectedBus } = getUserSessionInfo(user, session);
                 const savedBus = session.type === 'BOARDING' ? (domainInfo.isOutbound ? expectedBus : targetBus) : '-';
 
-                const newLog = { id: `LOG_${Date.now()}_FORCE`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: savedBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})` };
+                const newLog = { 
+                    id: `LOG_${Date.now()}_FORCE`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: savedBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`,
+                    isCancelled: false
+                };
                 
                 if(db) { 
                     await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); 
                     if (penaltyApplied > 0) { 
                         const currentPenalty = (user.penaltyTotal || 0) + newPenalty; 
                         const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
-                        await userRef.update({ penaltyTotal: currentPenalty - penaltyApplied }); 
+                        await userRef.set({ penaltyTotal: currentPenalty - penaltyApplied }, { merge: true }); 
                     } 
                 } else { 
                     setLogs(prevLogs => [newLog, ...prevLogs]); 
                     if (penaltyApplied > 0) { 
                         const currentPenalty = (user.penaltyTotal || 0) + newPenalty; 
-                        const updatedUsers2 = users.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: currentPenalty - penaltyApplied } : u); 
-                        setUsers([...updatedUsers2]); 
+                        setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: currentPenalty - penaltyApplied } : u)); 
                     } 
                 }
                 
