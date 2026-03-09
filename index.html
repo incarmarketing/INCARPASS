@@ -80,37 +80,36 @@
         const getSessionDomainInfo = (session) => {
             if (!session) return { isFlight: false, isOutbound: false, isInbound: false, nature: '관광', action: '탑승', icon: 'bus', label: '탑승' };
             
-            const isFlight = session.title && (session.title.includes('아시아나') || session.title.includes('대한항공') || session.title.includes('항공') || session.title.includes('공항'));
+            // 🔥 수정: 사용자가 명시적으로 지정한 nature(구분) 값이 있으면 최우선으로 따름!
+            let nature = session.nature;
             
-            let isOutbound = false;
-            let isInbound = false;
-            let nature = '관광'; 
-            
-            if (isFlight) {
-                isOutbound = session.displayDate && session.displayDate.includes('1일차');
-                isInbound = !isOutbound;
-                nature = isOutbound ? '출국' : '귀국';
-            } else if (session.title.includes('만찬')) {
-                nature = '만찬';
-            } else if (session.title.includes('석식')) {
-                nature = '석식';
-            } else if (session.title.includes('중식')) {
-                nature = '중식';
-            } else if (session.title.includes('조식')) {
-                nature = '조식';
+            // 명시적 값이 없을 때만 기존처럼 타이틀 텍스트로 유추
+            if (!nature) {
+                const isFlightTitle = session.title && (session.title.includes('아시아나') || session.title.includes('대한항공') || session.title.includes('항공') || session.title.includes('공항'));
+                if (isFlightTitle) {
+                    nature = (session.displayDate && session.displayDate.includes('1일차')) ? '출국' : '귀국';
+                } else if (session.title && session.title.includes('만찬')) { nature = '만찬'; }
+                else if (session.title && session.title.includes('석식')) { nature = '석식'; }
+                else if (session.title && session.title.includes('중식')) { nature = '중식'; }
+                else if (session.title && session.title.includes('조식')) { nature = '조식'; }
+                else { nature = '관광'; }
             }
+            
+            const isOutbound = nature === '출국';
+            const isInbound = nature === '귀국';
+            const isFlight = isOutbound || isInbound;
 
             let action = '탑승';
             let icon = isFlight ? 'plane' : 'bus';
             
-            if (session.type === 'PAYMENT') {
-                action = '지급';
-                icon = 'money';
-            } else if (session.type === 'NONE') {
-                action = '안내';
-                icon = 'info';
-            }
+            if (session.type === 'PAYMENT') { action = '지급'; icon = 'money'; }
+            else if (session.type === 'NONE') { action = '안내'; icon = 'info'; }
             
+            // 식사인데 탑승스캔인 경우 버스 아이콘 유지
+            if ((nature === '만찬' || nature === '석식' || nature === '중식' || nature === '조식') && session.type === 'BOARDING') {
+                icon = 'bus';
+            }
+
             return { isFlight, isOutbound, isInbound, nature, action, icon, label: action };
         };
 
@@ -137,9 +136,9 @@
         };
 
         const defaultSchedules = [
-            { id: 'S01', order: 1, date: '2026-03-11', displayDate: '1일차 13:30', title: '아시아나', type: 'BOARDING', targetKey: '아시아나', targetVal: '아시아나' },
-            { id: 'S02', order: 2, date: '2026-03-11', displayDate: '1일차 14:00', title: '대한항공', type: 'BOARDING', targetKey: '대한항공', targetVal: '대한항공' },
-            { id: 'S03', order: 3, date: '2026-03-11', displayDate: '1일차 14:30', title: '타이베이 101 전망대', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL' }
+            { id: 'S01', order: 1, date: '2026-03-11', displayDate: '1일차 13:30', title: '아시아나', type: 'BOARDING', targetKey: '아시아나', targetVal: '아시아나', nature: '출국' },
+            { id: 'S02', order: 2, date: '2026-03-11', displayDate: '1일차 14:00', title: '대한항공', type: 'BOARDING', targetKey: '대한항공', targetVal: '대한항공', nature: '출국' },
+            { id: 'S03', order: 3, date: '2026-03-11', displayDate: '1일차 14:30', title: '타이베이 101 전망대', type: 'BOARDING', targetKey: 'ALL', targetVal: 'ALL', nature: '관광' }
         ];
 
         const defaultUsers = [
@@ -155,30 +154,31 @@
 
             const targetVals = session.targetVal !== 'ALL' ? session.targetVal.split(',').map(s => s.trim()) : [];
 
-            for (const key of Object.keys(user.options)) {
-                if (key.includes('버스')) continue;
-                const val = user.options[key];
-                if (typeof val === 'string') {
-                    if (val.includes(session.title) || 
-                       (session.targetVal !== 'ALL' && targetVals.some(tv => val.includes(tv))) ||
-                       (session.targetKey !== 'ALL' && val.includes(session.targetKey))) {
-                        isTarget = true; matchedKey = key; break;
-                    }
-                }
-            }
-            
-            if (!isTarget && session.targetKey && session.targetKey !== 'ALL') {
+            // 🔥 수정됨: targetKey가 명시된 경우(예: '3일차'), 무조건 그 특정 옵션만 검사하여 2일차/3일차 중복 매칭 차단!
+            if (session.targetKey && session.targetKey !== 'ALL') {
                 const userVal = user.options[session.targetKey];
-                if (session.targetVal === 'ALL') {
-                    if(!!userVal) { isTarget = true; matchedKey = session.targetKey; }
-                } else if (userVal) {
-                    if(targetVals.some(tv => userVal.includes(tv))) {
-                        isTarget = true; matchedKey = session.targetKey;
+                if (userVal) {
+                    if (session.targetVal === 'ALL') {
+                        isTarget = true;
+                        matchedKey = session.targetKey;
+                    } else if (targetVals.some(tv => userVal.includes(tv))) {
+                        isTarget = true;
+                        matchedKey = session.targetKey;
                     }
                 }
+            } else {
+                // targetKey가 ALL인 경우에만 사용자의 모든 옵션을 뒤져서 검사
+                for (const key of Object.keys(user.options)) {
+                    if (key.includes('버스')) continue;
+                    const val = user.options[key];
+                    if (typeof val === 'string') {
+                        if (val.includes(session.title) || (targetVals.length > 0 && targetVals.some(tv => val.includes(tv)))) {
+                            isTarget = true; matchedKey = key; break;
+                        }
+                    }
+                }
+                if (!isTarget && session.targetKey === 'ALL') isTarget = true;
             }
-            
-            if (!isTarget && session.targetKey === 'ALL') isTarget = true;
             
             let foundSpecificBus = false;
             
@@ -335,7 +335,7 @@
                     if (e.cancelable && e.type === 'touchmove') e.preventDefault();
                     
                     const clientX = e.type.includes('touch') ? e.touches[0].clientX : e.clientX;
-                    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientX;
+                    const clientY = e.type.includes('touch') ? e.touches[0].clientY : e.clientY;
                     
                     const w = isOpen ? Math.min(window.innerWidth - 20, 380) : 56;
                     const h = isOpen ? Math.min(window.innerHeight - 40, 500) : 56;
@@ -711,19 +711,16 @@
                 });
             }, [session, users]);
 
-            // 🔥 수정: 스캔된 기록이 있는 사용자는 targetUsers에 없더라도(미정 버스 등) 무조건 doneList에 포함되도록 로직 수정!
             const { doneList, yetList } = useMemo(() => {
                 const doneLogs = logs.filter(l => l.sessionId === session.id);
                 const doneIds = new Set(doneLogs.map(l => l.uid));
                 const done = []; const yet = [];
                 
-                // 1. 실제로 스캔(완료)된 로그가 있는 사람은 모두 done에 추가 (조건 불문)
                 doneLogs.forEach(log => {
                     const u = users.find(user => String(user.uid) === String(log.uid));
                     if (u) done.push({ ...u, log });
                 });
 
-                // 2. targetUsers 중에서 스캔되지 않은 사람만 yet에 추가
                 targetUsers.forEach(u => {
                     if (!doneIds.has(u.uid)) { 
                         yet.push(u); 
@@ -1895,14 +1892,14 @@
                                         <p className="text-slate-600 font-bold text-sm break-keep">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p>
                                     </div>
                                     <div className="p-6 space-y-4">
-                                        <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {forfeitRequest.oldVal} (예약취소)<br/>▼ <br/>변경: {forfeitRequest.session.title} (지급 {CURRENCY}{forfeitRequest.price})</div>
+                                        <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {localForfeitReq.oldVal} (예약취소)<br/>▼ <br/>변경: {localForfeitReq.session.title} (지급 {CURRENCY}{localForfeitReq.price})</div>
                                         <button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
                                             <span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span>
                                         </button>
                                         <button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{forfeitRequest.price} 지급 승인)</span>
+                                            <span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{localForfeitReq.price} 지급 승인)</span>
                                         </button>
-                                        <button onClick={() => setForfeitRequest(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button>
+                                        <button onClick={() => setLocalForfeitReq(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button>
                                     </div>
                                 </div>
                             </div>
@@ -1916,15 +1913,61 @@
             const [editingScheduleId, setEditingScheduleId] = useState(null);
             const [newAdminRole, setNewAdminRole] = useState('manager');
             
-            const handleUpdateScheduleType = async (id, newType) => {
-                const updated = schedules.map(s => s.id === id ? { ...s, type: newType } : s);
-                if (db) {
-                    try {
-                        await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(id).update({ type: newType });
-                    } catch(e) { console.error(e); alert("DB 업데이트 실패"); return; }
-                } else {
-                    setSchedules(updated);
-                }
+            // 🔥 추가됨: 관리 탭에서 스케줄 항목을 즉시 수정하는 강력한 핸들러
+            const handleScheduleChange = (id, field, val) => {
+                const newSchedules = schedules.map(s => {
+                    if(s.id === id) {
+                        const updated = { ...s, [field]: val };
+                        if (db) db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(id).update({ [field]: val }).catch(console.error);
+                        return updated;
+                    }
+                    return s;
+                });
+                setSchedules(newSchedules);
+            };
+
+            // 🔥 추가됨: 화살표를 눌러 현황판 순서를 즉시 위아래로 바꾸는 핸들러
+            const handleMoveSchedule = (index, dir) => {
+                if(index === 0 && dir === -1) return;
+                if(index === schedules.length - 1 && dir === 1) return;
+                
+                const newSchedules = [...schedules];
+                const temp = newSchedules[index];
+                newSchedules[index] = newSchedules[index + dir];
+                newSchedules[index + dir] = temp;
+                
+                newSchedules.forEach((s, i) => {
+                    s.order = i + 1;
+                    if(db) db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(s.id).update({ order: s.order });
+                });
+                setSchedules(newSchedules);
+            };
+
+            // 🔥 추가됨: 세션을 아예 삭제해버리는 기능
+            const handleDeleteSchedule = (id) => {
+                if(!confirm('이 일정을 정말 삭제하시겠습니까? (관련된 스캔 기록은 모두 삭제됩니다)')) return;
+                if(db) db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(id).delete();
+                setSchedules(schedules.filter(s => s.id !== id));
+            };
+
+            // 🔥 추가됨: 새로운 커스텀 일정을 즉석에서 생성하는 기능
+            const handleAddSchedule = () => {
+                const newId = `SCHED_${Date.now()}`;
+                const newOrder = schedules.length > 0 ? Math.max(...schedules.map(s => s.order || 0)) + 1 : 1;
+                const newSched = {
+                    id: newId,
+                    order: newOrder,
+                    date: new Date().toISOString().split('T')[0],
+                    displayDate: 'N일차',
+                    title: '새로운 일정',
+                    type: 'BOARDING',
+                    nature: '관광',
+                    price: 0,
+                    targetKey: 'ALL',
+                    targetVal: 'ALL'
+                };
+                if(db) db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').doc(newId).set(newSched);
+                setSchedules([...schedules, newSched]);
             };
             
             const isMaster = currentAdmin && ['master', 'manager'].includes(currentAdmin.role);
@@ -2020,53 +2063,88 @@
                         </div>
                     </div>
                     
+                    {/* 🔥 추가 및 전면 개편: 세션 슈퍼 커스터마이징 에디터 */}
                     {isMaster && (
                         <div className="bg-white p-6 rounded-3xl shadow-card border border-slate-200">
-                            <div className="flex justify-between items-center mb-4">
+                            <div className="flex justify-between items-start mb-4">
                                 <div>
-                                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 break-keep">세션(관광/일정) 상세 속성 관리</h3>
-                                    <p className="text-xs text-slate-500 mt-1 break-keep">엑셀 업로드 후 일정의 성격(탑승/지급/자유)을 직접 수정합니다. (Master 전용)</p>
+                                    <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 break-keep">일정(세션) 슈퍼 커스터마이징</h3>
+                                    <p className="text-xs text-slate-500 mt-1 break-keep">엑셀 없이도 현장에서 일정을 직접 추가하고 모든 속성을 자유자재로 편집하세요.</p>
                                 </div>
                                 <div className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-lg shrink-0">총 {schedules.length}개 세션</div>
                             </div>
                             
                             {schedules.length === 0 ? (
-                                <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm break-keep">먼저 [일정 마스터 정보] 엑셀을 업로드해주세요.</div>
+                                <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm break-keep">먼저 [일정 마스터 정보] 엑셀을 업로드하거나 새 일정을 추가하세요.</div>
                             ) : (
                                 <div className="overflow-x-auto rounded-xl border border-slate-200">
                                     <table className="w-full text-sm text-left">
-                                        <thead className="bg-slate-50 text-slate-500 font-bold text-xs">
-                                            <tr><th className="p-3 whitespace-nowrap">일자</th><th className="p-3 whitespace-nowrap">일정(세션)명</th><th className="p-3 whitespace-nowrap">금액({CURRENCY})</th><th className="p-3 whitespace-nowrap">타겟옵션=값</th><th className="p-3 text-center whitespace-nowrap">동작 속성 (Type)</th></tr>
+                                        <thead className="bg-slate-50 text-slate-500 font-bold text-[10px]">
+                                            <tr>
+                                                <th className="p-2 text-center whitespace-nowrap">순서</th>
+                                                <th className="p-2 whitespace-nowrap">일자 표기</th>
+                                                <th className="p-2 whitespace-nowrap">일정명 (타이틀)</th>
+                                                <th className="p-2 text-center whitespace-nowrap">구분 (아이콘/특성)</th>
+                                                <th className="p-2 text-center whitespace-nowrap">동작 속성 (Action)</th>
+                                                <th className="p-2 whitespace-nowrap">지급액({CURRENCY})</th>
+                                                <th className="p-2 whitespace-nowrap min-w-[150px]">타겟 대상자 (옵션Key=Value)</th>
+                                                <th className="p-2 text-center whitespace-nowrap">삭제</th>
+                                            </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {schedules.map((s) => (
-                                                <tr key={s.id} className="hover:bg-slate-50 transition-colors">
-                                                    <td className="p-3 text-slate-500 font-medium whitespace-nowrap">{s.displayDate}</td>
-                                                    <td className="p-3 font-bold text-slate-800 whitespace-nowrap">{s.title}</td>
-                                                    <td className="p-3 text-slate-600 whitespace-nowrap">{s.price > 0 ? s.price.toLocaleString() : '-'}</td>
-                                                    <td className="p-3 text-xs text-slate-400 whitespace-nowrap"><span className="bg-slate-100 px-1.5 py-0.5 rounded">{s.targetKey}</span> = {s.targetVal}</td>
-                                                    <td className="p-3 text-center">
-                                                        <select 
-                                                            value={s.type} 
-                                                            onChange={(e) => handleUpdateScheduleType(s.id, e.target.value)}
-                                                            className={`font-bold text-xs p-2 rounded-lg border outline-none cursor-pointer whitespace-nowrap ${
-                                                                s.type === 'PAYMENT' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 focus:ring-emerald-500' : 
-                                                                s.type === 'NONE' ? 'bg-slate-100 text-slate-600 border-slate-300 focus:ring-slate-500' : 
-                                                                'bg-indigo-50 text-incar border-indigo-200 focus:ring-incar'
-                                                            }`}
-                                                        >
-                                                            <option value="BOARDING">🚍 탑승스캔 (Boarding)</option>
-                                                            <option value="PAYMENT">💰 지급스캔 (Payment)</option>
-                                                            <option value="NONE">☕ 자유/안내 (No Scan)</option>
+                                            {schedules.map((s, i) => (
+                                                <tr key={s.id} className="hover:bg-slate-50 transition-colors group">
+                                                    <td className="p-2 text-center whitespace-nowrap flex flex-col items-center gap-1">
+                                                        <button onClick={()=>handleMoveSchedule(i, -1)} className="text-slate-300 hover:text-incar"><Icon name="up" size={14}/></button>
+                                                        <span className="text-xs font-black text-slate-400">{i + 1}</span>
+                                                        <button onClick={()=>handleMoveSchedule(i, 1)} className="text-slate-300 hover:text-incar"><Icon name="down" size={14}/></button>
+                                                    </td>
+                                                    <td className="p-2 align-top pt-4"><input type="text" value={s.displayDate} onChange={e=>handleScheduleChange(s.id, 'displayDate', e.target.value)} className="w-16 p-1.5 text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:border-incar outline-none rounded whitespace-nowrap"/></td>
+                                                    <td className="p-2 align-top pt-4"><input type="text" value={s.title} onChange={e=>handleScheduleChange(s.id, 'title', e.target.value)} className="w-full min-w-[100px] p-1.5 text-xs font-bold bg-slate-50 border border-slate-200 focus:bg-white focus:border-incar outline-none rounded"/></td>
+                                                    <td className="p-2 text-center align-top pt-4">
+                                                        <select value={s.nature || getSessionDomainInfo(s).nature} onChange={e=>handleScheduleChange(s.id, 'nature', e.target.value)} className="p-1.5 text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:border-incar outline-none rounded whitespace-nowrap cursor-pointer">
+                                                            <option value="출국">✈️ 출국 (항공)</option>
+                                                            <option value="귀국">🛬 귀국 (항공)</option>
+                                                            <option value="관광">📸 관광 (일반)</option>
+                                                            <option value="만찬">🍷 만찬 (행사)</option>
+                                                            <option value="조식">🍳 조식 (식사)</option>
+                                                            <option value="중식">🍱 중식 (식사)</option>
+                                                            <option value="석식">🍲 석식 (식사)</option>
                                                         </select>
+                                                    </td>
+                                                    <td className="p-2 text-center align-top pt-4">
+                                                        <select value={s.type} onChange={e=>handleScheduleChange(s.id, 'type', e.target.value)} className="p-1.5 text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:border-incar outline-none rounded whitespace-nowrap cursor-pointer">
+                                                            <option value="BOARDING">🚍 탑승 스캔</option>
+                                                            <option value="PAYMENT">💰 지급 스캔</option>
+                                                            <option value="NONE">☕ 단순 안내(스캔X)</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-2 align-top pt-4"><input type="number" value={s.price} onChange={e=>handleScheduleChange(s.id, 'price', parseInt(e.target.value)||0)} disabled={s.type !== 'PAYMENT'} className="w-16 p-1.5 text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:border-incar outline-none rounded disabled:opacity-50"/></td>
+                                                    <td className="p-2 align-top pt-4 flex gap-1 items-center">
+                                                        <input type="text" value={s.targetKey} onChange={e=>handleScheduleChange(s.id, 'targetKey', e.target.value)} className="w-16 p-1.5 text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:border-incar outline-none rounded" placeholder="옵션명"/>
+                                                        <span className="text-slate-400 font-bold">=</span>
+                                                        <input type="text" value={s.targetVal} onChange={e=>handleScheduleChange(s.id, 'targetVal', e.target.value)} className="w-full min-w-[80px] p-1.5 text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:border-incar outline-none rounded" placeholder="매칭값"/>
+                                                    </td>
+                                                    <td className="p-2 text-center align-top pt-4">
+                                                        <button onClick={()=>handleDeleteSchedule(s.id)} className="p-1.5 bg-rose-50 text-rose-400 rounded-lg hover:bg-rose-500 hover:text-white transition-colors"><Icon name="trash" size={14}/></button>
                                                     </td>
                                                 </tr>
                                             ))}
                                         </tbody>
                                     </table>
+                                    <div className="p-3 border-t border-slate-200 bg-slate-50 rounded-b-xl flex justify-center">
+                                        <button onClick={handleAddSchedule} className="flex items-center gap-2 px-6 py-2.5 bg-slate-800 text-white font-bold rounded-xl hover:bg-slate-700 text-xs shadow-md transition-all active:scale-95"><Icon name="plus" size={14}/> 새 일정 추가하기</button>
+                                    </div>
                                 </div>
                             )}
-                            <p className="text-[10px] text-slate-400 mt-3 break-keep">* <strong>자유/안내 (No Scan)</strong>로 설정된 일정은 스캔 메뉴에서 제외되며 현황판에서 회색으로 표기됩니다.</p>
+                            <div className="mt-4 p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+                                <h4 className="text-xs font-bold text-indigo-800 mb-1 flex items-center gap-1"><Icon name="info" size={14}/> 일정 매칭(타겟팅) 팁</h4>
+                                <ul className="text-[10px] text-indigo-700 space-y-1 list-disc pl-4">
+                                    <li><strong>옵션명(Key)</strong>과 <strong>매칭값(Val)</strong>이 일치하는 사람만 이 일정의 대상으로 묶입니다. (예: <code>3일차</code> = <code>자유일정</code>)</li>
+                                    <li>만약 전체 인원이 모두 대상이라면 양쪽에 <code>ALL</code> 이라고 적어주세요.</li>
+                                    <li>구분(Nature)에서 '출국'이나 '귀국'을 선택하면, 스캔 시 버스 호차가 아닌 <strong>'항공'</strong> 정보로 탑승 수단을 검증합니다.</li>
+                                </ul>
+                            </div>
                         </div>
                     )}
 
@@ -2691,6 +2769,14 @@
                             else if (row['타입'] && row['타입'].includes('집합')) type = 'BOARDING';
                             else if (title.includes('자유') || title.includes('휴식') || title.includes('개인') || title.includes('안내')) type = 'NONE';
                             
+                            // 🔥 수정: CSV 업로드 시에도 기본 Nature 속성을 부여
+                            let nature = '관광';
+                            if (title.includes('항공') || title.includes('공항')) { nature = rawDate.includes('1일') ? '출국' : '귀국'; }
+                            else if (title.includes('만찬')) { nature = '만찬'; }
+                            else if (title.includes('석식')) { nature = '석식'; }
+                            else if (title.includes('중식')) { nature = '중식'; }
+                            else if (title.includes('조식')) { nature = '조식'; }
+
                             const orderVal = row['순서'] || row['Order'] || row['order'];
                             const order = orderVal !== undefined && orderVal !== '' ? parseInt(orderVal, 10) : idx;
 
@@ -2701,6 +2787,7 @@
                                 displayDate: rawDate, 
                                 title: title, 
                                 type: type, 
+                                nature: nature,
                                 price: price, 
                                 targetKey: row['타겟옵션'] || row['OptionKey'] || 'ALL', 
                                 targetVal: row['타겟값'] || row['OptionVal'] || 'ALL' 
