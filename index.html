@@ -3014,11 +3014,15 @@
                 } catch (e) { initLocal(); }
             }, []);
 
-            useEffect(() => { if(!db) localStorage.setItem('incar_pro_admins', JSON.stringify(admins)); }, [admins, db]);
-            useEffect(() => { if(!db) localStorage.setItem('incar_pro_users', JSON.stringify(users)); }, [users, db]);
-            useEffect(() => { if(!db) localStorage.setItem('incar_pro_schedules', JSON.stringify(schedules)); }, [schedules, db]);
-            useEffect(() => { if(!db) localStorage.setItem('incar_pro_logs', JSON.stringify(logs)); }, [logs, db]);
-            useEffect(() => { if(!db) localStorage.setItem('incar_pro_changelogs', JSON.stringify(changeLogs)); }, [changeLogs, db]);
+          useEffect(() => { if(!db) localStorage.setItem('incar_pro_admins', JSON.stringify(admins)); }, [admins, db]);
+            
+            useEffect(() => {
+                if (currentAdmin && admins.length > 0 && !admins.find(a => a.id === currentAdmin.id)) {
+                    sessionStorage.removeItem('incar_pro_admin');
+                    localStorage.removeItem('incar_pro_admin');
+                    setCurrentAdmin(null);
+                }
+            }, [admins, currentAdmin]);
             
             useEffect(() => {
                 GLOBAL_PROCESSED_SCANS.clear();
@@ -3983,4 +3987,5 @@
     </script>
 </body>
 </html>
+
 
