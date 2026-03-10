@@ -1103,9 +1103,10 @@
             );
         };
 
-        const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile, busList, setBusList, scanResult, logs, handleFastAction }) => {
+        const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile, busList, setBusList, scanResult, logs, handleFastAction, handleBusChange }) => {
             const scannerRef = useRef(null); const isRunningRef = useRef(false);
             const [manualCode, setManualCode] = useState('');
+            const [busChangeTarget, setBusChangeTarget] = useState(null);
             const [cameraList, setCameraList] = useState([]);
             const [currentCamId, setCurrentCamId] = useState(null);
             const [listSearch, setListSearch] = useState('');
@@ -1661,42 +1662,101 @@
                                         const u = item;
                                         const isBoarded = scanTab === 'done';
                                         const { expectedBus } = getUserSessionInfo(u, selectedSession);
+                                        const domainInfoCard = getSessionDomainInfo(selectedSession);
+                                        const showBusChange = mode === 'BOARDING' && handleBusChange && !domainInfoCard.isOutbound && expectedBus && !['미정', '-', '자유일정'].includes(expectedBus);
                                         
                                         return (
-                                            <div key={u.uid} className={`flex justify-between items-center p-4 rounded-2xl border transition-colors shadow-sm ${isBoarded ? (mode==='BOARDING'?'bg-indigo-50/50 border-indigo-100':'bg-emerald-50/50 border-emerald-100') : 'bg-white border-slate-200'}`}>
-                                                <div className="flex items-center gap-4">
-                                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white shrink-0 shadow-sm ${isBoarded ? (mode==='BOARDING'?'bg-incar':'bg-emerald-500') : 'bg-slate-300'}`}>{u.name[0]}</div>
-                                                    <div>
-                                                        <div className="font-bold text-base text-slate-800 flex items-center gap-2">
-                                                            {u.name}
-                                                            {isBoarded && <span className={`text-[10px] px-2 py-0.5 rounded font-black ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING'?'탑승완료':'지급완료'}</span>}
-                                                        </div>
-                                                        <div className="text-xs text-slate-400 mt-1 flex flex-col gap-1">
-                                                            <span>{u.org} | {u.uid}</span>
-                                                            {mode === 'BOARDING' && expectedBus && !['미정', '-', '자유일정'].includes(expectedBus) && <span className="font-bold text-incar">배정: {expectedBus}</span>}
+                                            <div key={u.uid} className={`p-4 rounded-2xl border transition-colors shadow-sm ${isBoarded ? (mode==='BOARDING'?'bg-indigo-50/50 border-indigo-100':'bg-emerald-50/50 border-emerald-100') : 'bg-white border-slate-200'}`}>
+                                                <div className="flex justify-between items-center">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white shrink-0 shadow-sm ${isBoarded ? (mode==='BOARDING'?'bg-incar':'bg-emerald-500') : 'bg-slate-300'}`}>{u.name[0]}</div>
+                                                        <div>
+                                                            <div className="font-bold text-base text-slate-800 flex items-center gap-2">
+                                                                {u.name}
+                                                                {isBoarded && <span className={`text-[10px] px-2 py-0.5 rounded font-black ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING'?'탑승완료':'지급완료'}</span>}
+                                                            </div>
+                                                            <div className="text-xs text-slate-400 mt-1 flex flex-col gap-1">
+                                                                <span>{u.org} | {u.uid}</span>
+                                                                {mode === 'BOARDING' && expectedBus && !['미정', '-', '자유일정'].includes(expectedBus) && (
+                                                                    <span className="font-bold text-incar flex items-center gap-2">
+                                                                        배정: {expectedBus}
+                                                                        {showBusChange && (
+                                                                            <button 
+                                                                                onClick={(e) => { e.stopPropagation(); setBusChangeTarget(u); }}
+                                                                                className="text-[10px] font-bold text-white bg-slate-400 hover:bg-incar px-2 py-0.5 rounded-md transition-colors"
+                                                                            >
+                                                                                변경
+                                                                            </button>
+                                                                        )}
+                                                                    </span>
+                                                                )}
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                                <div>
-                                                    {isBoarded ? (
-                                                        <button onClick={() => handleFastAction(u, selectedSession, targetBus, true)} className="px-4 py-2.5 bg-white text-slate-500 border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-xs font-bold rounded-xl transition-colors shadow-sm whitespace-nowrap">
-                                                            {mode==='BOARDING' ? '하차' : '지급 취소'}
-                                                        </button>
-                                                    ) : (
-                                                        <button onClick={() => handleFastAction(u, selectedSession, targetBus, false)} className={`px-6 py-3 text-white text-sm font-bold rounded-xl shadow-md transition-transform active:scale-95 whitespace-nowrap ${mode==='BOARDING'?'bg-slate-800 hover:bg-slate-700':'bg-emerald-500 hover:bg-emerald-600'}`}>
-                                                            {mode==='BOARDING' ? '탑승' : '지급'}
-                                                        </button>
-                                                    )}
+                                                    <div>
+                                                        {isBoarded ? (
+                                                            <button onClick={() => handleFastAction(u, selectedSession, targetBus, true)} className="px-4 py-2.5 bg-white text-slate-500 border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-xs font-bold rounded-xl transition-colors shadow-sm whitespace-nowrap">
+                                                                {mode==='BOARDING' ? '하차' : '지급 취소'}
+                                                            </button>
+                                                        ) : (
+                                                            <button onClick={() => handleFastAction(u, selectedSession, targetBus, false)} className={`px-6 py-3 text-white text-sm font-bold rounded-xl shadow-md transition-transform active:scale-95 whitespace-nowrap ${mode==='BOARDING'?'bg-slate-800 hover:bg-slate-700':'bg-emerald-500 hover:bg-emerald-600'}`}>
+                                                                {mode==='BOARDING' ? '탑승' : '지급'}
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                         )
                                     })
                                 )}
                             </div>
+
+                            {busChangeTarget && selectedSession && (
+                                <div className="fixed inset-0 z-[400] flex items-end justify-center bg-slate-900/50 backdrop-blur-sm animate-fade-in" onClick={() => setBusChangeTarget(null)}>
+                                    <div className="bg-white w-full max-w-lg rounded-t-3xl shadow-2xl animate-slide-up pb-safe" onClick={e => e.stopPropagation()}>
+                                        <div className="p-6 border-b border-slate-100">
+                                            <div className="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-4"></div>
+                                            <h3 className="font-black text-lg text-slate-800 text-center break-keep">호차 변경</h3>
+                                            <div className="mt-3 flex items-center justify-center gap-3 bg-slate-50 p-3 rounded-xl">
+                                                <div className="w-10 h-10 rounded-full bg-incar text-white flex items-center justify-center font-bold text-sm shrink-0">{busChangeTarget.name[0]}</div>
+                                                <div>
+                                                    <div className="font-bold text-sm text-slate-800">{busChangeTarget.name}</div>
+                                                    <div className="text-[10px] text-slate-400">{busChangeTarget.org} | {busChangeTarget.uid}</div>
+                                                    <div className="text-xs text-incar font-bold mt-0.5">현재: {getUserSessionInfo(busChangeTarget, selectedSession).expectedBus}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="p-6">
+                                            <p className="text-xs font-bold text-slate-500 mb-3">변경할 호차를 선택하세요</p>
+                                            <div className="grid grid-cols-3 gap-3">
+                                                {busList.map(bus => {
+                                                    const currentExpected = getUserSessionInfo(busChangeTarget, selectedSession).expectedBus;
+                                                    const isCurrent = bus === currentExpected || bus.replace('호차','') === currentExpected.replace('호차','');
+                                                    return (
+                                                        <button 
+                                                            key={bus}
+                                                            onClick={async () => {
+                                                                if (isCurrent) return;
+                                                                await handleBusChange(busChangeTarget, selectedSession, bus);
+                                                                setBusChangeTarget(null);
+                                                            }}
+                                                            className={`py-4 rounded-xl text-sm font-bold transition-all ${isCurrent ? 'bg-incar text-white shadow-lg ring-2 ring-incar/30' : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-incar active:scale-95'}`}
+                                                        >
+                                                            {bus}
+                                                            {isCurrent && <div className="text-[9px] font-normal mt-0.5 opacity-80">현재</div>}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                        <div className="px-6 pb-6">
+                                            <button onClick={() => setBusChangeTarget(null)} className="w-full py-4 bg-slate-100 text-slate-500 font-bold rounded-xl hover:bg-slate-200 transition-colors">닫기</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
-                </div>
-            );
         };
 
         const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules, changeLogs, logs, busList }) => {
@@ -3295,6 +3355,59 @@
                 return oldLogIds;
             };
 
+            const handleBusChange = async (user, session, newBus) => {
+                const dayMatch = session.displayDate?.match(/(\d+일차)/);
+                const busKey = dayMatch ? `${dayMatch[1]}버스` : '버스';
+                const busKey2 = dayMatch ? `${dayMatch[1]} 버스` : '버스';
+                
+                const oldBus = user.options[busKey] || user.options[busKey2] || user.bus || '미정';
+                
+                if (oldBus === newBus) return;
+                
+                let doChange = false;
+                try {
+                    doChange = window.confirm(`${user.name}님의 호차를 변경합니다.\n\n${oldBus} → ${newBus}\n\n진행하시겠습니까?`);
+                } catch(e) { doChange = true; }
+                if (!doChange) return;
+                
+                const newOptions = { ...user.options };
+                if (user.options[busKey] !== undefined) newOptions[busKey] = newBus;
+                else if (user.options[busKey2] !== undefined) newOptions[busKey2] = newBus;
+                else newOptions[busKey] = newBus;
+                
+                if (db) {
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)).update({ options: newOptions });
+                } else {
+                    setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, options: newOptions } : u));
+                }
+                
+                const existingLog = logs.find(l => String(l.uid) === String(user.uid) && l.sessionId === session.id && !l.isCancelled);
+                if (existingLog) {
+                    if (db) {
+                        const logRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(existingLog.id);
+                        await logRef.update({ bus: newBus });
+                    } else {
+                        setLogs(prev => prev.map(l => l.id === existingLog.id ? { ...l, bus: newBus } : l));
+                    }
+                }
+                
+                const changeLog = {
+                    id: `CHG_${Date.now()}`,
+                    timestamp: new Date().toISOString(),
+                    uid: String(user.uid),
+                    name: user.name,
+                    targetOption: session.title,
+                    oldVal: oldBus,
+                    newVal: newBus,
+                    penalty: 0,
+                    reason: '현장 호차 변경',
+                    processedBy: `${currentAdmin?.name}(${currentAdmin?.id})`
+                };
+                
+                if (db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
+                else setChangeLogs(prev => [changeLog, ...prev]);
+            };
+
             const handleFastAction = async (user, session, actionBus, isCancel) => {
                 const scanKey = `${session.id}_${user.uid}`;
                 
@@ -3568,7 +3681,7 @@
                                 <div className="flex-1 overflow-y-auto p-4 pb-32 md:pb-8 md:p-8 w-full h-full z-10 custom-scrollbar min-h-0">
                                     <div className="max-w-5xl mx-auto w-full">
                                         {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} groupKeys={groupKeys} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
-                                        {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} scanResult={scanResult} logs={logs} handleFastAction={handleFastAction} />}
+                                        {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} scanResult={scanResult} logs={logs} handleFastAction={handleFastAction} handleBusChange={handleBusChange} />}
                                         {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} scanResult={scanResult} logs={logs} handleFastAction={handleFastAction} />}
                                         {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} schedules={schedules} changeLogs={changeLogs} logs={logs} busList={busList} />}
                                         {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} exportAllData={exportAllData} handleFullReset={handleFullReset} handlePartialReset={handlePartialReset} schedules={schedules} setSchedules={setSchedules} logs={logs} appBgImage={appBgImage} setAppBgImage={setAppBgImage} handleAppBgUpload={handleAppBgUpload} db={db} SYSTEM_APP_ID={SYSTEM_APP_ID} admins={admins} handleAddAdmin={handleAddAdmin} handleDeleteAdmin={handleDeleteAdmin} handleUpdateAdminRole={handleUpdateAdminRole} currentAdmin={currentAdmin} />}
@@ -3601,6 +3714,7 @@
     </script>
 </body>
 </html>
+
 
 
 
