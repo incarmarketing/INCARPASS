@@ -1999,7 +1999,13 @@
                 
                 if (oldBoardingSchedules.length > 0 && newPaymentSchedules.length > 0) {
                     const newPrice = newPaymentSchedules.reduce((sum, s) => sum + (s.price || 0), 0);
-                    if (newPrice > 0) {
+                    const hasRecentRefundHandling = changeLogs.some(cl => 
+                        cl.uid === String(selectedUser.uid) && 
+                        cl.targetOption === editForm.optKey &&
+                        cl.oldVal === newVal &&
+                        cl.newVal === oldVal
+                    );
+                    if (newPrice > 0 && !hasRecentRefundHandling) {
                         setLocalForfeitReq({ oldVal, newVal, price: newPrice, session: newPaymentSchedules[0] });
                         return;
                     }
@@ -2009,9 +2015,9 @@
             };
 
             const resolveLocalRefund = (isReturned) => {
-                if (isReturned) {
-                    handleUserUpdate(-localRefundReq.amount, `기존 지급액(${CURRENCY}${localRefundReq.amount}) 현장 반환 완료`);
-                } else {
+    if (isReturned) {
+        handleUserUpdate(0, `기존 지급액(${CURRENCY}${localRefundReq.amount}) 현장 반환 완료`);
+    } else {
                     handleUserUpdate(localRefundReq.amount, `미반환금 패널티 부과 (${localRefundReq.oldVal} -> ${localRefundReq.newVal})`);
                 }
                 setLocalRefundReq(null);
@@ -2960,6 +2966,70 @@
                 if(db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog); 
                 else setChangeLogs([changeLog, ...changeLogs]);
 
+// 자동 지급 처리: PAYMENT 세션으로 복귀한 경우 자동 지급 완료
+                const newPaymentSessions = schedules.filter(s => 
+                    s.targetKey === editForm.optKey && 
+                    s.type === 'PAYMENT' &&
+                    (s.targetVal === requiredChoice || s.targetVal === 'ALL' || 
+                     s.targetVal.split(',').map(v => v.trim()).includes(requiredChoice))
+                );
+
+                for (const paySession of newPaymentSessions) {
+                    const autoScanKey = `${paySession.id}_${selectedUser.uid}`;
+                    const existingPayLog = logs.find(l => String(l.uid) === String(selectedUser.uid) && l.sessionId === paySession.id && !l.isCancelled);
+                    
+                    if (GLOBAL_PROCESSED_SCANS.has(autoScanKey) || existingPayLog) continue;
+                    
+                    GLOBAL_PROCESSED_SCANS.add(autoScanKey);
+                    
+                    const updatedPenaltyTotal = (selectedUser.penaltyTotal || 0) + penalty;
+                    const baseAmount = paySession.price || 0;
+                    const autoFinalAmount = Math.max(0, baseAmount - Math.max(0, updatedPenaltyTotal));
+                    const autoPenaltyApplied = baseAmount - autoFinalAmount;
+                    
+                    const autoLog = {
+                        id: `LOG_${Date.now()}_AUTO_${Math.random().toString(36).substr(2,9)}`,
+                        timestamp: new Date().toISOString(),
+                        uid: String(selectedUser.uid),
+                        name: selectedUser.name,
+                        org: selectedUser.org,
+                        action: '지급',
+                        sessionId: paySession.id,
+                        sessionTitle: paySession.title,
+                        bus: '-',
+                        amount: baseAmount,
+                        penaltyApplied: autoPenaltyApplied,
+                        finalAmount: autoFinalAmount,
+                        processedBy: `${currentAdmin?.name}(${currentAdmin?.id})`,
+                        isCancelled: false
+                    };
+                    
+                    if (db) {
+                        await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(autoLog);
+                        if (autoPenaltyApplied > 0) {
+                            const userRef2 = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(selectedUser.uid));
+                            await userRef2.set({ penaltyTotal: updatedPenaltyTotal - autoPenaltyApplied }, { merge: true });
+                        }
+                    } else {
+                        setLogs(prev => [autoLog, ...prev]);
+                        if (autoPenaltyApplied > 0) {
+                            setUsers(prev => prev.map(u => String(u.uid) === String(selectedUser.uid) ? { ...u, penaltyTotal: updatedPenaltyTotal - autoPenaltyApplied } : u));
+                        }
+                    }
+                    
+                    fetch(GOOGLE_SHEET_URL, {
+                        method: "POST", mode: "no-cors",
+                        body: JSON.stringify({ 
+                            type: "meal", 
+                            id: "\u200B" + String(selectedUser.uid),
+                            name: selectedUser.name, 
+                            action: "APPROVE", 
+                            tour: paySession.title, 
+                            time: formatTimeSafe(autoLog.timestamp) 
+                        })
+                    }).catch(console.error);
+                }
+
                 alert('변경이 저장되었습니다.');
                 setSelectedUser(null);
                 setEditForm({ optKey: '', optVal: '', newBus: '', penalty: 0, reason: '' });
@@ -2969,10 +3039,10 @@
                 executeUpdate(user, session, requiredChoice, 0, '현장 즉시 변경 및 승인');
             };
 
-            const resolveRefundRequest = (isReturned) => {
+           const resolveRefundRequest = (isReturned) => {
                 if(!refundRequest) return;
                 if (isReturned) {
-                    executeUpdate(refundRequest.user, refundRequest.session, refundRequest.newVal, -refundRequest.amount, `기존 지급액 반환 완료`, refundRequest.session.price);
+                    executeUpdate(refundRequest.user, refundRequest.session, refundRequest.newVal, 0, `기존 지급액 반환 완료`, refundRequest.session.price);
                 } else {
                     executeUpdate(refundRequest.user, refundRequest.session, refundRequest.newVal, refundRequest.amount, `미반환금 패널티 부과`);
                 }
@@ -3451,3 +3521,4 @@
     </script>
 </body>
 </html>
+
