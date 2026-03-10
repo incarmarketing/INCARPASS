@@ -1982,7 +1982,7 @@
                     return alert("변경할 항목을 선택하거나 입력하세요.");
                 }
 
-                if (isBusRequired && (!editForm.newBus || editForm.newBus.trim() === '')) {
+                if (isBusRequired && (!editForm.newBus || editForm.newBus.trim() === '' || editForm.newBus === '-')) {
                     return alert(`[${editForm.optVal}] 일정은 버스 배정이 필수입니다. 탑승할 호차를 선택해주세요.`);
                 }
                 
@@ -2000,7 +2000,7 @@
                 if (oldBoardingSchedules.length > 0 && newPaymentSchedules.length > 0) {
                     const newPrice = newPaymentSchedules.reduce((sum, s) => sum + (s.price || 0), 0);
                     if (newPrice > 0) {
-                        setLocalForfeitReq({ oldVal, newVal, price: newPrice });
+                        setLocalForfeitReq({ oldVal, newVal, price: newPrice, session: newPaymentSchedules[0] });
                         return;
                     }
                 }
