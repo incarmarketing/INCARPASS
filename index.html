@@ -2316,10 +2316,10 @@
                                     <div className="p-6 space-y-4">
                                         <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {localForfeitReq.oldVal}<br/>▼ <br/>변경: {localForfeitReq.session.title} (지급 {CURRENCY}{localForfeitReq.price})</div>
                                         <button onClick={() => resolveLocalForfeit(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>네, 반환했습니다 (재지급 필요)</span><span className="text-[10px] opacity-80 font-normal">(이전 반환금 상쇄, 스캔 시 정상 지급됨)</span>
+                                            <span>네, 반환했습니다 (재지급)</span><span className="text-[10px] opacity-80 font-normal">(즉시 지급완료, 총액 100% 반영)</span>
                                         </button>
                                         <button onClick={() => resolveLocalForfeit(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>아니요, 미반환입니다 (지급 안함)</span><span className="text-[10px] opacity-80 font-normal">(미반환금과 상계, 스캔 시 0원 지급됨)</span>
+                                            <span>아니요, 미반환입니다 (상계)</span><span className="text-[10px] opacity-80 font-normal">(즉시 완료, 0원 지급으로 반영)</span>
                                         </button>
                                         <button onClick={() => setLocalForfeitReq(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button>
                                     </div>
