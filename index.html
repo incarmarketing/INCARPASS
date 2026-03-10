@@ -2181,6 +2181,15 @@
                                         </label>
                                         {busStats.length > 0 && (
                                             <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-2">
+                                                {!isBusRequired && (
+                                                    <button 
+                                                        type="button"
+                                                        onClick={() => setEditForm({...editForm, newBus: '-'})}
+                                                        className={`p-3 rounded-xl border text-center flex flex-col items-center justify-center transition-all relative overflow-hidden ${editForm.newBus === '-' || !editForm.newBus ? 'bg-incar text-white border-incar shadow-md' : 'bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-500'}`}
+                                                    >
+                                                        <div className="font-bold text-sm">선택 안함</div>
+                                                    </button>
+                                                )}
                                                 {busStats.map(stat => {
                                                     const isSelected = editForm.newBus === stat.bus;
                                                     const isRecommended = stat.mainDest.includes(editForm.optVal) || (editForm.optVal && editForm.optVal.includes(stat.mainDest));
