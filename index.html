@@ -1729,7 +1729,7 @@
                                         <div className="p-6">
                                             <p className="text-xs font-bold text-slate-500 mb-3">변경할 호차를 선택하세요</p>
                                             <div className="grid grid-cols-3 gap-3">
-                                                {busList.map(bus => {
+                                                {activeBusesForSession.map(bus => {
                                                     const currentExpected = getUserSessionInfo(busChangeTarget, selectedSession).expectedBus;
                                                     const isCurrent = bus === currentExpected || bus.replace('호차','') === currentExpected.replace('호차','');
                                                     return (
@@ -3716,4 +3716,5 @@
     </script>
 </body>
 </html>
+
 
