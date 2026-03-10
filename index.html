@@ -256,7 +256,7 @@
 
         const AIAssistant = ({ users, schedules, logs }) => {
             const [isOpen, setIsOpen] = useState(false);
-            const [messages, setMessages] = useState([{ role: 'assistant', text: '안녕하세요! 현장 운영 AI 어시스턴트입니다. 무엇을 도와드릴까요?\n(예: "김철수 참가자 일정 알려줘", "지금 1호차 탑승 찍힌 사람 누구야?")' }]);
+            const [messages, setMessages] = useState([{ role: 'assistant', text: '안녕하세요! 현장 운영 AI 어시스턴트입니다. 무엇을 도와드릴까요?\n(예: "최진우님 일정 알려줘", "지금 박상현 몇호차 탑승했어?")' }]);
             const [input, setInput] = useState('');
             const [isLoading, setIsLoading] = useState(false);
             const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
@@ -3718,6 +3718,7 @@
     </script>
 </body>
 </html>
+
 
 
 
