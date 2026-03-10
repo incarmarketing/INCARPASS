@@ -2967,16 +2967,22 @@
                 else setChangeLogs([changeLog, ...changeLogs]);
 
 // 자동 지급 처리: PAYMENT 세션으로 복귀한 경우 자동 지급 완료
-                const newPaymentSessions = schedules.filter(s => 
-                    s.targetKey === editForm.optKey && 
-                    s.type === 'PAYMENT' &&
-                    (s.targetVal === requiredChoice || s.targetVal === 'ALL' || 
-                     s.targetVal.split(',').map(v => v.trim()).includes(requiredChoice))
+                // getUserSessionInfo를 사용하여 실제 시스템과 동일한 매칭 로직 적용
+                const simulatedUser = { ...selectedUser, options: newOptions };
+                const targetPaymentSessions = schedules.filter(s => 
+                    s.type === 'PAYMENT' && getUserSessionInfo(simulatedUser, s).isTarget
                 );
 
-                for (const paySession of newPaymentSessions) {
+                for (const paySession of targetPaymentSessions) {
                     const autoScanKey = `${paySession.id}_${selectedUser.uid}`;
-                    const existingPayLog = logs.find(l => String(l.uid) === String(selectedUser.uid) && l.sessionId === paySession.id && !l.isCancelled);
+                    
+                    // 방금 이 함수에서 cancel한 로그(oldLogIds)도 제외하여 stale state 문제 방지
+                    const existingPayLog = logs.find(l => 
+                        String(l.uid) === String(selectedUser.uid) && 
+                        l.sessionId === paySession.id && 
+                        !l.isCancelled &&
+                        !oldLogIds.includes(l.id)
+                    );
                     
                     if (GLOBAL_PROCESSED_SCANS.has(autoScanKey) || existingPayLog) continue;
                     
@@ -3521,4 +3527,5 @@
     </script>
 </body>
 </html>
+
 
