@@ -3309,7 +3309,9 @@
                     const validUsers = users.filter(u => {
                         const { isTarget, expectedBus } = getUserSessionInfo(u, s);
                         if (!isTarget) return false;
-                        if (s.type === 'BOARDING' && ['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) return false;
+                        const dInfo = getSessionDomainInfo(s);
+                        if (s.type === 'BOARDING' && !dInfo.isOutbound && !dInfo.isInbound && ['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) return false;
+                        if (s.type === 'BOARDING' && (dInfo.isOutbound || dInfo.isInbound) && ['비탑승', '제외'].includes(expectedBus)) return false;
                         return true;
                     });
                     const targetCount = validUsers.length;
@@ -3716,5 +3718,6 @@
     </script>
 </body>
 </html>
+
 
 
