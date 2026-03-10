@@ -1780,7 +1780,7 @@
                             </div>
 
                             {isBulkMode && selectedUids.size > 0 && (
-                                <div className="fixed bottom-0 left-0 right-0 z-[350] pb-safe animate-slide-up">
+                                <div className="fixed bottom-20 md:bottom-0 left-0 right-0 z-[350] pb-safe animate-slide-up">
                                     <div className="mx-4 mb-4 rounded-2xl shadow-2xl border overflow-hidden" style={{boxShadow: '0 -4px 30px rgba(0,0,0,0.15)'}}>
                                         <div className={`p-4 flex justify-between items-center ${scanTab === 'done' ? 'bg-rose-500' : (mode==='BOARDING' ? 'bg-incar' : 'bg-emerald-500')}`}>
                                             <div className="text-white">
@@ -3570,6 +3570,101 @@
                 else setChangeLogs(prev => [changeLog, ...prev]);
             };
 
+            const handleBulkAction = async (selectedUsers, session, actionBus) => {
+                const domainInfo = getSessionDomainInfo(session);
+                const actionLabel = session.type === 'PAYMENT' ? '지급' : '탑승';
+                
+                let doProcess = false;
+                try {
+                    doProcess = window.confirm(`${selectedUsers.length}명을 일괄 ${actionLabel} 처리하시겠습니까?`);
+                } catch(e) { doProcess = true; }
+                if (!doProcess) return 0;
+                
+                let successCount = 0;
+                
+                for (const user of selectedUsers) {
+                    const scanKey = `${session.id}_${user.uid}`;
+                    const existingLog = logs.find(l => String(l.uid) === String(user.uid) && l.sessionId === session.id && !l.isCancelled);
+                    
+                    if (GLOBAL_PROCESSED_SCANS.has(scanKey) || existingLog) continue;
+                    
+                    GLOBAL_PROCESSED_SCANS.add(scanKey);
+                    
+                    let finalAmount = 0; let penaltyApplied = 0;
+                    if (session.type === 'PAYMENT') {
+                        const baseAmount = session.price;
+                        const deduction = user.penaltyTotal || 0;
+                        
+                        const hasUnreturnedForThis = changeLogs.some(cl => 
+                            String(cl.uid) === String(user.uid) && 
+                            cl.reason && cl.reason.includes('미반환') &&
+                            (cl.targetOption === session.targetKey || 
+                             schedules.some(s => s.id === session.id && s.targetKey === cl.targetOption))
+                        );
+                        
+                        if (hasUnreturnedForThis && deduction > 0) {
+                            finalAmount = baseAmount;
+                            penaltyApplied = 0;
+                        } else {
+                            finalAmount = Math.max(0, baseAmount - deduction);
+                            penaltyApplied = baseAmount - finalAmount;
+                        }
+                    }
+                    
+                    const { expectedBus } = getUserSessionInfo(user, session);
+                    const saveBus = session.type === 'PAYMENT' ? '-' : (domainInfo.isOutbound ? expectedBus : actionBus);
+                    
+                    const newLog = {
+                        id: `LOG_${Date.now()}_BULK_${Math.random().toString(36).substr(2,9)}`,
+                        timestamp: new Date().toISOString(),
+                        uid: String(user.uid),
+                        name: user.name,
+                        org: user.org,
+                        action: session.type === 'PAYMENT' ? '지급' : '탑승',
+                        sessionId: session.id,
+                        sessionTitle: session.title,
+                        bus: saveBus,
+                        amount: session.type === 'PAYMENT' ? session.price : 0,
+                        penaltyApplied: penaltyApplied,
+                        finalAmount: finalAmount,
+                        processedBy: `${currentAdmin.name}(${currentAdmin.id})`,
+                        isCancelled: false
+                    };
+                    
+                    if (db) {
+                        await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog);
+                        if (penaltyApplied > 0) {
+                            const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid));
+                            await userRef.update({ penaltyTotal: (user.penaltyTotal || 0) - penaltyApplied });
+                        }
+                    } else {
+                        setLogs(prev => [newLog, ...prev]);
+                        if (penaltyApplied > 0) {
+                            setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u));
+                        }
+                    }
+                    
+                    if (session.type === 'PAYMENT') {
+                        fetch(GOOGLE_SHEET_URL, {
+                            method: "POST", mode: "no-cors",
+                            body: JSON.stringify({ 
+                                type: "meal", 
+                                id: "\u200B" + String(user.uid),
+                                name: user.name, 
+                                action: "APPROVE", 
+                                tour: session.title, 
+                                time: formatTimeSafe(newLog.timestamp) 
+                            })
+                        }).catch(console.error);
+                    }
+                    
+                    successCount++;
+                }
+                
+                try { alert(`${successCount}명 ${actionLabel} 처리 완료`); } catch(e) {}
+                return successCount;
+            };
+
             const handleFastAction = async (user, session, actionBus, isCancel) => {
                 const scanKey = `${session.id}_${user.uid}`;
                 
@@ -3876,11 +3971,3 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
