@@ -417,7 +417,7 @@
                 setIsLoading(true);
 
                 try {
-                    const apiKey = "AIzaSyD" + "UVx2p81Aop3Rv3hu8NMnGKcAYhwOaTI4"; 
+                    const apiKey = "" + ""; 
                     
                     if (!apiKey) {
                          setMessages(prev => [...prev, { role: 'assistant', text: '죄송합니다. 소스 코드에 챗봇용 API 키를 입력해주세요.' }]);
@@ -929,7 +929,12 @@
                         </div>
                         <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-emerald-50 flex flex-col justify-center">
                             <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">총 지급액</div>
-                            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 break-keep">{CURRENCY}{logs.reduce((sum, l) => sum + (l.isCancelled ? 0 : (l.finalAmount||0)), 0).toLocaleString()}</div>
+                            <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 break-keep">
+                                {CURRENCY}{(
+                                    logs.reduce((sum, l) => sum + (l.isCancelled ? 0 : (l.finalAmount||0)), 0) +
+                                    changeLogs.filter(c => c.reason && c.reason.includes('미반환')).reduce((sum, c) => sum + (c.penalty || 0), 0)
+                                ).toLocaleString()}
+                            </div>
                         </div>
                         <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-indigo-400 flex flex-col justify-center">
                             <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">전체 달성률</div>
@@ -1131,13 +1136,14 @@
             useEffect(() => {
                 let barcodeStr = '';
                 let timeout = null;
-                const handleKeyDown = (e) => {
+                const handleKeyDown = async (e) => {
                     if(e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
                     if (e.key === 'Enter') {
                         if (barcodeStr.length > 0) {
                             if (isProcessingRef.current) { barcodeStr = ''; return; } 
                             isProcessingRef.current = true;
-                            processScan(barcodeStr);
+                            const res = await processScan(barcodeStr);
+                            if (res === false) isProcessingRef.current = false;
                             barcodeStr = '';
                         }
                     } else if (e.key.length === 1) { 
@@ -1222,10 +1228,11 @@
                     experimentalFeatures: { useBarCodeDetectorIfSupported: true }
                 };
 
-                const onScan = (decodedText) => {
+                const onScan = async (decodedText) => {
                     if (isProcessingRef.current) return; 
                     isProcessingRef.current = true;
-                    processScan(decodedText);
+                    const res = await processScan(decodedText);
+                    if (res === false) isProcessingRef.current = false;
                 };
 
                 try {
@@ -1280,12 +1287,13 @@
                 }
             };
 
-            const handleManualSubmit = (e) => {
+            const handleManualSubmit = async (e) => {
                 e.preventDefault();
                 if(manualCode.trim()) {
                     if (isProcessingRef.current) return;
                     isProcessingRef.current = true;
-                    processScan(manualCode.trim());
+                    const res = await processScan(manualCode.trim());
+                    if (res === false) isProcessingRef.current = false;
                     setManualCode('');
                 }
             }
@@ -1528,11 +1536,12 @@
                                                         </div>
                                                         <button
                                                             type="button"
-                                                            onClick={(e) => {
+                                                            onClick={async (e) => {
                                                                 e.preventDefault();
                                                                 if (isProcessingRef.current) return;
                                                                 isProcessingRef.current = true;
-                                                                processScan(String(u.uid));
+                                                                const res = await processScan(String(u.uid));
+                                                                if (res === false) isProcessingRef.current = false;
                                                                 setManualCode('');
                                                             }}
                                                             className={`px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition-colors shrink-0 cursor-pointer ${mode === 'BOARDING' ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-emerald-500 text-white hover:bg-emerald-600'}`}
@@ -1683,6 +1692,8 @@
             const [localRefundReq, setLocalRefundReq] = useState(null);
             const [localForfeitReq, setLocalForfeitReq] = useState(null);
             
+            const [searchResults, setSearchResults] = useState([]);
+            
             const isRunningRef = useRef(false);
 
             useEffect(() => {
@@ -1775,7 +1786,12 @@
                     let found = users.find(u => String(u.uid) === String(scannedUid));
                     if (!found) found = users.find(u => decodedText.includes(String(u.uid))); 
 
-                    if (found) setSelectedUser(found); else alert(`미등록 사용자입니다. (스캔된 값: ${decodedText})`);
+                    if (found) {
+                        setSelectedUser(found);
+                        setSearchResults([]);
+                    } else {
+                        alert(`미등록 사용자입니다. (스캔된 값: ${decodedText})`);
+                    }
                 };
 
                 try {
@@ -2002,12 +2018,50 @@
                 <div className="space-y-6 animate-slide-up">
                     <div className="bg-white p-6 rounded-3xl shadow-card">
                         <h3 className="font-bold text-lg mb-4 text-slate-800 break-keep">참가자 일정 변경 및 관리</h3>
-                        <div className="flex flex-col gap-2 mb-6">
+                        <div className="flex flex-col gap-2 mb-6 relative">
                             <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="사번 또는 이름 검색" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-incar" />
                             <div className="flex gap-2">
                                 <button onClick={startLookupScanner} className="bg-slate-100 text-slate-600 px-4 py-4 rounded-2xl hover:bg-slate-200 transition-colors border border-slate-200 flex-none" title="QR 스캔으로 찾기"><Icon name="qr" size={24} /></button>
-                                <button onClick={()=>{ const found = users.find(u => String(u.uid).includes(searchQuery) || u.name.includes(searchQuery)); if(found) setSelectedUser(found); else alert("사용자를 찾을 수 없습니다."); }} className="flex-1 bg-slate-800 text-white px-6 py-4 rounded-2xl font-bold break-keep">검색</button>
+                                <button onClick={()=>{ 
+                                    const term = normalizeString(searchQuery);
+                                    if(!term) return alert('검색어를 입력하세요.');
+                                    
+                                    const foundList = users.filter(u => normalizeString(u.uid).includes(term) || normalizeString(u.name).includes(term)); 
+                                    
+                                    if (foundList.length === 1) {
+                                        setSelectedUser(foundList[0]);
+                                        setSearchResults([]);
+                                    } else if (foundList.length > 1) {
+                                        setSearchResults(foundList);
+                                    } else {
+                                        alert("사용자를 찾을 수 없습니다.");
+                                        setSearchResults([]);
+                                    }
+                                }} className="flex-1 bg-slate-800 text-white px-6 py-4 rounded-2xl font-bold break-keep">검색</button>
                             </div>
+                            
+                            {searchResults.length > 0 && !selectedUser && (
+                                <div className="absolute top-full left-0 w-full mt-2 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50 animate-slide-up">
+                                    <div className="p-3 bg-indigo-50 border-b border-indigo-100 text-xs font-bold text-indigo-800 flex justify-between items-center">
+                                        <span>검색 결과 ({searchResults.length}명) - 대상을 선택해주세요</span>
+                                        <button onClick={() => setSearchResults([])} className="text-indigo-400 hover:text-indigo-600"><Icon name="x" size={16}/></button>
+                                    </div>
+                                    <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                                        {searchResults.map(u => (
+                                            <button key={u.uid} onClick={() => { setSelectedUser(u); setSearchResults([]); }} className="w-full text-left p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors flex justify-between items-center group">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600 group-hover:bg-incar group-hover:text-white transition-colors">{u.name[0]}</div>
+                                                    <div>
+                                                        <div className="font-bold text-sm text-slate-800">{u.name}</div>
+                                                        <div className="text-[10px] text-slate-400">{u.org}</div>
+                                                    </div>
+                                                </div>
+                                                <div className="text-xs font-mono font-bold text-incar">{u.uid}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {isLookupScanning && (
@@ -3233,15 +3287,13 @@
 
                     if (!user) {
                         setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `스캔된 값: ${scannedText}` });
-                        isProcessingRef.current = false;
-                        return;
+                        return false;
                     }
                     
                     const session = schedules.find(s => s.id === targetSessionId); 
                     if (!session) {
                         setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' });
-                        isProcessingRef.current = false;
-                        return;
+                        return false;
                     }
 
                     const scanKey = `${session.id}_${user.uid}`;
@@ -3249,14 +3301,12 @@
                     
                     if (GLOBAL_PROCESSED_SCANS.has(scanKey) || existingLog) {
                         setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session });
-                        isProcessingRef.current = false;
-                        return;
+                        return false;
                     }
 
                     const actionName = session.type === 'PAYMENT' ? '지급' : '탑승';
                     if (!confirm(`[${user.name}]님을 ${session.title} 일정에 ${actionName} 처리하시겠습니까?`)) {
-                        isProcessingRef.current = false;
-                        return;
+                        return false;
                     }
 
                     const { isTarget, expectedBus } = getUserSessionInfo(user, session);
@@ -3264,8 +3314,7 @@
 
                     if (!isTarget) {
                         setScanResult({ status: 'error', msg: '대상자 아님', subMsg: '해당 일정에 신청되지 않은 참가자입니다.', user, session, requiredChoice: session.targetVal !== 'ALL' ? session.targetVal : session.title });
-                        isProcessingRef.current = false;
-                        return;
+                        return false;
                     }
 
                     let saveBus = targetBus;
@@ -3276,13 +3325,11 @@
 
                         if (['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) {
                             if(!confirm(`${user.name}님은 현재 탑승 대상([${expectedBus}])이 아닙니다.\n\n그래도 [${targetBus}]에 강제 탑승 처리하시겠습니까?`)) {
-                                isProcessingRef.current = false;
-                                return;
+                                return false;
                             }
                         } else if (eBusClean !== tBusClean) {
                             if(!confirm(`${user.name}님의 지정 호차는 [${expectedBus}]입니다.\n\n현재 [${targetBus}]으로 변경하여 탑승 처리하시겠습니까?`)) {
-                                isProcessingRef.current = false;
-                                return;
+                                return false;
                             }
                         }
                     } else {
@@ -3334,7 +3381,7 @@
                 } catch (error) {
                     console.error("스캔 처리 중 에러 발생:", error);
                     setScanResult({ status: 'error', msg: '시스템 에러', subMsg: '관리자에게 문의하세요' });
-                    isProcessingRef.current = false;
+                    return false;
                 }
             }, [db, users, schedules, logs, targetSessionId, targetBus, currentAdmin]);
 
@@ -3383,4 +3430,3 @@
     </script>
 </body>
 </html>
-
