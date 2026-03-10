@@ -944,7 +944,16 @@
                             <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800 break-keep">
                                 {CURRENCY}{(
                                     logs.reduce((sum, l) => sum + (l.isCancelled ? 0 : (l.finalAmount||0)), 0) +
-                                    changeLogs.filter(c => c.reason && c.reason.includes('미반환')).reduce((sum, c) => sum + (c.penalty || 0), 0)
+                                    changeLogs.filter(c => {
+                                        if (!c.reason || !c.reason.includes('미반환')) return false;
+                                        const resolvedByLaterPay = logs.some(l => 
+                                            String(l.uid) === String(c.uid) && 
+                                            !l.isCancelled && 
+                                            l.action === '지급' &&
+                                            new Date(l.timestamp) > new Date(c.timestamp)
+                                        );
+                                        return !resolvedByLaterPay;
+                                    }).reduce((sum, c) => sum + (c.penalty || 0), 0)
                                 ).toLocaleString()}
                             </div>
                         </div>
@@ -2976,7 +2985,6 @@
                 for (const paySession of targetPaymentSessions) {
                     const autoScanKey = `${paySession.id}_${selectedUser.uid}`;
                     
-                    // 방금 이 함수에서 cancel한 로그(oldLogIds)도 제외하여 stale state 문제 방지
                     const existingPayLog = logs.find(l => 
                         String(l.uid) === String(selectedUser.uid) && 
                         l.sessionId === paySession.id && 
@@ -2985,13 +2993,44 @@
                     );
                     
                     if (GLOBAL_PROCESSED_SCANS.has(autoScanKey) || existingPayLog) continue;
+
+                    const updatedPT = (selectedUser.penaltyTotal || 0) + penalty;
+                    const baseAmt = paySession.price || 0;
+                    const previewAmount = Math.max(0, baseAmt - Math.max(0, updatedPT));
+                    
+                    let doAutoPay = false;
+                    try {
+                        doAutoPay = window.confirm(
+                            `[${paySession.title}] 지급 일정으로 복귀합니다.\n\n` +
+                            `지급 대상: ${selectedUser.name}\n` +
+                            `지급 금액: ${CURRENCY}${previewAmount}` +
+                            (updatedPT > 0 ? ` (기본 ${CURRENCY}${baseAmt} - 패널티 ${CURRENCY}${Math.min(updatedPT, baseAmt)})` : '') +
+                            `\n\n지금 바로 지급 완료 처리하시겠습니까?\n(아니오 선택 시 수동 스캔으로 지급할 수 있습니다)`
+                        );
+                    } catch(e) { doAutoPay = false; }
+                    
+                    if (!doAutoPay) continue;
                     
                     GLOBAL_PROCESSED_SCANS.add(autoScanKey);
                     
                     const updatedPenaltyTotal = (selectedUser.penaltyTotal || 0) + penalty;
                     const baseAmount = paySession.price || 0;
-                    const autoFinalAmount = Math.max(0, baseAmount - Math.max(0, updatedPenaltyTotal));
-                    const autoPenaltyApplied = baseAmount - autoFinalAmount;
+                    
+                    // 미반환 이력이 있으면 이미 돈을 보유중이므로 전액 표시 (패널티 차감 없이)
+                    const hasUnreturnedPenalty = changeLogs.some(cl => 
+                        cl.uid === String(selectedUser.uid) && 
+                        cl.targetOption === editForm.optKey &&
+                        cl.reason && cl.reason.includes('미반환')
+                    );
+                    
+                    let autoFinalAmount, autoPenaltyApplied;
+                    if (hasUnreturnedPenalty && updatedPenaltyTotal > 0) {
+                        autoFinalAmount = baseAmount;
+                        autoPenaltyApplied = 0;
+                    } else {
+                        autoFinalAmount = Math.max(0, baseAmount - Math.max(0, updatedPenaltyTotal));
+                        autoPenaltyApplied = baseAmount - autoFinalAmount;
+                    }
                     
                     const autoLog = {
                         id: `LOG_${Date.now()}_AUTO_${Math.random().toString(36).substr(2,9)}`,
@@ -3012,14 +3051,16 @@
                     
                     if (db) {
                         await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(autoLog);
-                        if (autoPenaltyApplied > 0) {
+                        const newPenalty = hasUnreturnedPenalty ? 0 : (autoPenaltyApplied > 0 ? updatedPenaltyTotal - autoPenaltyApplied : updatedPenaltyTotal);
+                        if (updatedPenaltyTotal !== newPenalty) {
                             const userRef2 = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(selectedUser.uid));
-                            await userRef2.set({ penaltyTotal: updatedPenaltyTotal - autoPenaltyApplied }, { merge: true });
+                            await userRef2.set({ penaltyTotal: newPenalty }, { merge: true });
                         }
                     } else {
                         setLogs(prev => [autoLog, ...prev]);
-                        if (autoPenaltyApplied > 0) {
-                            setUsers(prev => prev.map(u => String(u.uid) === String(selectedUser.uid) ? { ...u, penaltyTotal: updatedPenaltyTotal - autoPenaltyApplied } : u));
+                        const newPenalty = hasUnreturnedPenalty ? 0 : (autoPenaltyApplied > 0 ? updatedPenaltyTotal - autoPenaltyApplied : updatedPenaltyTotal);
+                        if (updatedPenaltyTotal !== newPenalty) {
+                            setUsers(prev => prev.map(u => String(u.uid) === String(selectedUser.uid) ? { ...u, penaltyTotal: newPenalty } : u));
                         }
                     }
                     
@@ -3527,5 +3568,6 @@
     </script>
 </body>
 </html>
+
 
 
