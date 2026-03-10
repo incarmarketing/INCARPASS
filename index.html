@@ -2020,6 +2020,47 @@
                     }
                 }
 
+                // PAYMENT 세션 복귀 시 사전 확인
+                const simulatedOpts = { ...selectedUser.options, [editForm.optKey]: newVal };
+                const simulatedUsr = { ...selectedUser, options: simulatedOpts };
+                const returningPaySessions = schedules.filter(s => 
+                    s.type === 'PAYMENT' && getUserSessionInfo(simulatedUsr, s).isTarget
+                );
+                const cancelledPayLog = returningPaySessions.length > 0 && logs.some(l => 
+                    String(l.uid) === String(selectedUser.uid) && 
+                    returningPaySessions.some(ps => ps.id === l.sessionId) && 
+                    l.isCancelled
+                );
+
+                if (returningPaySessions.length > 0 && cancelledPayLog) {
+                    const ps = returningPaySessions[0];
+                    const updatedPT = (selectedUser.penaltyTotal || 0) + (parseInt(editForm.penalty) || 0);
+                    const baseAmt = ps.price || 0;
+                    const previewAmt = Math.max(0, baseAmt - Math.max(0, updatedPT));
+                    
+                    // 미반환이력 있으면 전액 표시
+                    const hasUnreturned = changeLogs.some(cl => 
+                        cl.uid === String(selectedUser.uid) && 
+                        cl.targetOption === editForm.optKey &&
+                        cl.reason && cl.reason.includes('미반환')
+                    );
+                    const displayAmt = (hasUnreturned && updatedPT > 0) ? baseAmt : previewAmt;
+                    
+                    let doProcess = false;
+                    try {
+                        doProcess = window.confirm(
+                            `[${ps.title}] 지급 일정으로 복귀합니다.\n\n` +
+                            `지급 대상: ${selectedUser.name}\n` +
+                            `지급 금액: ${CURRENCY}${displayAmt}` +
+                            (hasUnreturned && updatedPT > 0 ? ` (미반환금 보유 → 전액 처리)` : 
+                             updatedPT > 0 ? ` (기본 ${CURRENCY}${baseAmt} - 패널티 ${CURRENCY}${Math.min(updatedPT, baseAmt)})` : '') +
+                            `\n\n일정 변경 및 지급 처리하시겠습니까?`
+                        );
+                    } catch(e) { doProcess = true; }
+                    
+                    if (!doProcess) return;
+                }
+
                 handleUserUpdate();
             };
 
@@ -2998,19 +3039,6 @@
                     const baseAmt = paySession.price || 0;
                     const previewAmount = Math.max(0, baseAmt - Math.max(0, updatedPT));
                     
-                    let doAutoPay = false;
-                    try {
-                        doAutoPay = window.confirm(
-                            `[${paySession.title}] 지급 일정으로 복귀합니다.\n\n` +
-                            `지급 대상: ${selectedUser.name}\n` +
-                            `지급 금액: ${CURRENCY}${previewAmount}` +
-                            (updatedPT > 0 ? ` (기본 ${CURRENCY}${baseAmt} - 패널티 ${CURRENCY}${Math.min(updatedPT, baseAmt)})` : '') +
-                            `\n\n지금 바로 지급 완료 처리하시겠습니까?\n(아니오 선택 시 수동 스캔으로 지급할 수 있습니다)`
-                        );
-                    } catch(e) { doAutoPay = false; }
-                    
-                    if (!doAutoPay) continue;
-                    
                     GLOBAL_PROCESSED_SCANS.add(autoScanKey);
                     
                     const updatedPenaltyTotal = (selectedUser.penaltyTotal || 0) + penalty;
@@ -3573,6 +3601,7 @@
     </script>
 </body>
 </html>
+
 
 
 
