@@ -56,6 +56,8 @@
         #reader, #lookup-reader { width: 100% !important; height: 100% !important; position: absolute !important; top: 0; left: 0; border: none !important; }
         #reader video, #lookup-reader video { width: 100% !important; height: 100% !important; object-fit: cover !important; border-radius: 1.2rem; }
         
+        /* 🔥 모바일 스크롤 최적화 및 버벅임 방지 */
+        .custom-scrollbar { overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; will-change: scroll-position; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
@@ -141,39 +143,40 @@
             { uid: '10002', name: '김철수', org: '본사', bus: '1호차', options: { '항공': '대한항공' }, penaltyTotal: 0 }
         ];
 
+        // 🔥 타겟 매칭 폴백 강화를 위한 정규화 함수
+        const normalizeString = (str) => String(str || '').replace(/\s+/g, '').toLowerCase();
+
         const getUserSessionInfo = (user, session) => {
             if (!user) return { isTarget: false, expectedBus: '미정' };
             if (!session) return { isTarget: false, expectedBus: user.bus || '미정' };
             
             let isTarget = false; let expectedBus = '미정'; let matchedKey = null;
 
-            const targetVals = session.targetVal !== 'ALL' ? session.targetVal.split(',').map(s => s.trim()) : [];
+            const targetVals = session.targetVal !== 'ALL' ? session.targetVal.split(',').map(s => normalizeString(s)) : [];
 
             if (session.targetKey === 'ALL') {
                 isTarget = true;
             } else {
                 const userVal = user.options[session.targetKey];
                 
-                // 1. 우선 지정된 targetKey(예: '1일차')의 값에서 찾기 시도
                 if (userVal !== undefined) {
                     if (session.targetVal === 'ALL') {
                         isTarget = true;
                         matchedKey = session.targetKey;
-                    } else if (targetVals.some(tv => String(userVal).includes(tv))) {
+                    } else if (targetVals.some(tv => normalizeString(userVal).includes(tv))) {
                         isTarget = true;
                         matchedKey = session.targetKey;
                     }
                 }
                 
-                // 2. 위에서 못 찾았거나 컬럼이 없으면, 전체 옵션을 모두 뒤지는 강력한 폴백 스캔 실행
                 if (!isTarget && session.targetVal !== 'ALL') {
                     for (const key of Object.keys(user.options)) {
-                        if (key.includes('버스')) continue; // 버스 관련 열은 매칭에서 제외
-                        const val = String(user.options[key] || '');
+                        if (key.includes('버스')) continue; 
+                        const val = normalizeString(user.options[key] || '');
                         
                         if (targetVals.length > 0 && targetVals.some(tv => val.includes(tv))) {
                             isTarget = true; matchedKey = key; break;
-                        } else if (val.includes(session.targetKey) || val.includes(session.title)) {
+                        } else if (val.includes(normalizeString(session.targetKey)) || val.includes(normalizeString(session.title))) {
                             isTarget = true; matchedKey = key; break;
                         }
                     }
@@ -183,13 +186,11 @@
             let foundSpecificBus = false;
             const domainInfo = getSessionDomainInfo(session);
             
-            // 항공 스캔일 경우 항공편명 가져오기
             if (domainInfo.isOutbound && user.options['항공']) {
                 expectedBus = user.options['항공'].trim();
                 foundSpecificBus = true;
             }
 
-            // N일차 특수 버스 배정 확인 (예: 2일차버스)
             if (!foundSpecificBus && session.displayDate) {
                 const dayMatch = session.displayDate.match(/(\d+일차)/);
                 if (dayMatch) {
@@ -202,7 +203,6 @@
                 }
             }
 
-            // 기본 버스 또는 옵션별 버스 배정
             if (!foundSpecificBus) {
                 if (matchedKey && user.options[`${matchedKey} 버스`]) expectedBus = String(user.options[`${matchedKey} 버스`]).trim();
                 else if (user.bus && user.bus !== '미정') expectedBus = user.bus;
@@ -210,7 +210,6 @@
                 else if (user.options['탑승버스']) expectedBus = String(user.options['탑승버스']).trim();
             }
 
-            // 버스 번호 정규화 (예: '4' -> '4호차')
             if (expectedBus && expectedBus !== '미정' && expectedBus !== '-' && !expectedBus.includes('호차') && !isNaN(parseInt(expectedBus))) {
                 expectedBus = parseInt(expectedBus) + '호차';
             }
@@ -1084,8 +1083,8 @@
             const [cameraList, setCameraList] = useState([]);
             const [currentCamId, setCurrentCamId] = useState(null);
             const [listSearch, setListSearch] = useState('');
-            const [scanTab, setScanTab] = useState('yet'); // 🔥 명단 탭 상태 추가
-            const [isExpandedList, setIsExpandedList] = useState(false); // 🔥 명단 확대 팝업 상태 추가
+            const [scanTab, setScanTab] = useState('yet');
+            const [isExpandedList, setIsExpandedList] = useState(false);
             
             const isProcessingRef = useRef(false);
 
@@ -1127,7 +1126,6 @@
             const selectedSession = useMemo(() => filteredSchedules.find(s => s.id === targetSessionId), [filteredSchedules, targetSessionId]);
             const domainInfo = getSessionDomainInfo(selectedSession);
 
-            // 🔥 세션이나 호차가 변경되면 탭을 기본값('yet')으로 초기화
             useEffect(() => { setScanTab('yet'); }, [targetSessionId, mode, targetBus]);
 
             useEffect(() => {
@@ -1298,7 +1296,6 @@
                 return users.filter(u => u.name.toLowerCase().includes(term) || String(u.uid).includes(term)).slice(0, 5);
             }, [manualCode, users]);
 
-            // 타겟 유저 리스트 가져오기
             const targetUsersList = useMemo(() => {
                 if (!selectedSession) return [];
                 const allTargets = users.filter(u => getUserSessionInfo(u, selectedSession).isTarget);
@@ -1306,10 +1303,8 @@
                 let filtered = [];
                 const dInfo = getSessionDomainInfo(selectedSession);
 
-                // 🔥 출국(항공)이거나 지급인 경우 전체 대상을 보여줌
                 if (mode === 'PAYMENT' || dInfo.isOutbound) filtered = allTargets;
                 else {
-                    // 탑승 모드일 때는 선택된 차량(targetBus) 명단만 표시 (깔끔한 관리를 위해)
                     filtered = allTargets.filter(u => {
                         const expectedBus = getUserSessionInfo(u, selectedSession).expectedBus;
                         const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id && !l.isCancelled);
@@ -1326,7 +1321,6 @@
                 return targetUsersList.filter(u => u.name.toLowerCase().includes(term) || String(u.uid).includes(term));
             }, [targetUsersList, listSearch]);
 
-            // 🔥 완료/대기 유저 분리 로직
             const { doneUsers, yetUsers } = useMemo(() => {
                 if (!selectedSession) return { doneUsers: [], yetUsers: [] };
                 const done = [];
@@ -1341,7 +1335,6 @@
 
             const currentList = scanTab === 'done' ? doneUsers : yetUsers;
 
-            // 현재 선택된 일정에 배정된 호차들만 동적으로 추출
             const activeBusesForSession = useMemo(() => {
                 if (!selectedSession || manualBus) return busList;
                 const buses = new Set();
@@ -1399,7 +1392,6 @@
                                                 </div>
                                             </div>
                                         )}
-                                        {/* 🔥 출국이 아닐 때만 호차 선택 UI 렌더링 */}
                                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 w-full">
                                             <div className="flex items-center gap-2 shrink-0"><span className="px-2 py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-slate-800 text-white">STEP 2</span><h3 className="text-base sm:text-lg font-bold text-slate-800 break-keep">현장 차량을 선택하세요</h3></div>
                                             <div className="flex gap-2 items-center shrink-0 w-full sm:w-auto">
@@ -1427,11 +1419,12 @@
                     </div>
                     
                     <div className="mt-2 mb-2 flex flex-col gap-3">
-                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-bold text-xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}><Icon name="qr" size={28}/> 스캔</button>
+                        {/* 🔥 버튼명 변경: 아이콘 제거 및 텍스트 명확화 */}
+                        <button disabled={filteredSchedules.length === 0} onClick={startScanner} className={`w-full py-6 text-white rounded-3xl font-black text-2xl shadow-xl flex items-center justify-center gap-3 transition-transform break-keep ${filteredSchedules.length === 0 ? 'bg-slate-300 shadow-none cursor-not-allowed' : mode==='BOARDING'?'bg-incar shadow-incar/30 active:scale-95':'bg-emerald-500 shadow-emerald-500/30 active:scale-95'}`}>스캔하기</button>
                         
                         {filteredSchedules.length > 0 && selectedSession && (
-                            <button onClick={() => setIsExpandedList(true)} className={`w-full py-4 font-bold rounded-2xl flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-sm border ${mode==='BOARDING'?'bg-indigo-50 text-incar border-indigo-100 hover:bg-indigo-100':'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'}`}>
-                                <Icon name="table" size={20}/> 직접 입력
+                            <button onClick={() => setIsExpandedList(true)} className={`w-full py-4 font-black text-lg rounded-2xl flex items-center justify-center gap-2 transition-transform active:scale-95 shadow-sm border ${mode==='BOARDING'?'bg-indigo-50 text-incar border-indigo-100 hover:bg-indigo-100':'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100'}`}>
+                                직접 입력 (명단)
                             </button>
                         )}
                     </div>
@@ -1462,7 +1455,6 @@
                                         />
                                     </div>
                                     
-                                    {/* 🔥 명단 상태 탭 분리 적용 */}
                                     <div className="flex border-b border-slate-100 mb-3 rounded-t-xl overflow-hidden bg-slate-50 shrink-0">
                                         <button onClick={() => setScanTab('yet')} className={`flex-1 py-2 text-xs font-bold transition-colors ${scanTab==='yet' ? (mode==='BOARDING'?'text-incar border-b-2 border-incar bg-indigo-50/50':'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50') : 'text-slate-400 hover:bg-slate-100'}`}>
                                             {mode === 'BOARDING' ? `미탑승 (${yetUsers.length})` : `미지급 (${yetUsers.length})`}
@@ -1539,7 +1531,6 @@
                                                             onClick={(e) => {
                                                                 e.preventDefault();
                                                                 if (isProcessingRef.current) return;
-                                                                
                                                                 isProcessingRef.current = true;
                                                                 processScan(String(u.uid));
                                                                 setManualCode('');
@@ -1596,7 +1587,8 @@
 
                     {isExpandedList && selectedSession && (
                         <div className="fixed inset-0 z-[300] bg-slate-50 flex flex-col animate-slide-up">
-                            <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm pb-2 pt-6 shrink-0">
+                            {/* 🔥 상단 배너 가림 방지를 위해 pt-20 (안전 여백) 추가 */}
+                            <div className="p-4 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm pb-2 pt-safe md:pt-4 pt-16 shrink-0">
                                 <div>
                                     <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
                                         <Icon name={mode==='BOARDING'?'users':'money'} size={20} className={mode==='BOARDING'?'text-incar':'text-emerald-500'} />
@@ -2634,20 +2626,16 @@
             useEffect(() => { localStorage.setItem('incar_pro_bus_list', JSON.stringify(busList)); }, [busList]);
             useEffect(() => { if (appBgImage) localStorage.setItem('incar_pro_app_bg', appBgImage); else localStorage.removeItem('incar_pro_app_bg'); }, [appBgImage]);
 
-            // 추가: 데이터 기반 버스 목록 자동 정화(Self-healing) 및 동기화 로직
             useEffect(() => {
                 if (users.length > 0) {
                     setBusList(prev => {
                         const activeBuses = new Set(users.map(u => u.bus).filter(b => b && b !== '미정' && b !== '-'));
                         const usedBuses = new Set(logs.map(l => l.bus).filter(b => b && b !== '미정' && b !== '-'));
                         
-                        // 기존 탭 중에서 명단에 있거나 스캔 기록이 있는 '유효한 차량'만 남김 (과거 11호차 등 불필요한 캐시 청소)
                         const cleaned = prev.filter(bus => activeBuses.has(bus) || usedBuses.has(bus));
                         
-                        // 명단에 새롭게 등장한 버스가 있다면 추가
                         activeBuses.forEach(bus => { if (!cleaned.includes(bus)) cleaned.push(bus); });
                         
-                        // 숫자 순서대로 예쁘게 정렬
                         cleaned.sort((a, b) => (parseInt(a) || 0) - (parseInt(b) || 0));
                         
                         if (JSON.stringify(prev) !== JSON.stringify(cleaned)) {
@@ -2658,7 +2646,6 @@
                 }
             }, [users, logs]);
 
-            // 추가: 선택된 탭(호차)이 청소되어 사라졌을 경우 첫 번째 탭으로 자동 복귀
             useEffect(() => {
                 if (busList.length > 0 && !busList.includes(targetBus)) {
                     setTargetBus(busList[0]);
@@ -2708,7 +2695,6 @@
                         setDb(_db);
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('admins').onSnapshot(snap => { setAdmins(snap.docs.map(d => d.data())); setIsAdminsLoaded(true); });
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('schedules').onSnapshot(snap => { 
-                            // 수정: d.data()를 먼저 풀고 id를 덮어씌워 진짜 Firestore 문서 ID 보존
                             const list = snap.docs.map(d => ({ ...d.data(), id: d.id })).sort((a,b) => {
                                 if (a.date === b.date) return (a.order || 0) - (b.order || 0);
                                 return a.date > b.date ? 1 : -1;
@@ -2719,7 +2705,6 @@
                                 if(scanOnly.length > 0) setTargetSessionId(scanOnly[0].id);
                             }
                         });
-                        // 수정: 로그와 변경이력도 동일하게 진짜 문서 ID가 보존되도록 순서 변경
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').orderBy('timestamp','desc').onSnapshot(snap => setLogs(snap.docs.map(d => ({ ...d.data(), id: d.id }))));
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').orderBy('timestamp','desc').onSnapshot(snap => setChangeLogs(snap.docs.map(d => ({ ...d.data(), id: d.id }))));
                         _db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').onSnapshot(snap => setUsers(snap.docs.map(d => d.data())));
@@ -2751,7 +2736,6 @@
                             const name = (r.name || r['이름'] || r['성명'] || '').trim();
                             const org = (r.org || r['소속'] || '').trim();
                             
-                            // 기본 버스 호차 정규화
                             const busRaw = String(r.bus || r['차량'] || r['버스'] || '미정').trim();
                             const bus = (busRaw !== '미정' && busRaw !== '-' && !busRaw.includes('호차') && !isNaN(parseInt(busRaw))) 
                                         ? parseInt(busRaw) + '호차' : busRaw;
@@ -2760,7 +2744,6 @@
                             Object.keys(r).forEach(k => {
                                 if (!['uid', '사번', 'name', '이름', '성명', 'org', '소속', 'bus', '차량', '버스'].includes(k)) {
                                     let optVal = String(r[k] || '').trim();
-                                    // 2일차버스 등 개별 버스 옵션 정규화
                                     if (k.includes('버스') && optVal !== '-' && !optVal.includes('호차') && !isNaN(parseInt(optVal))) {
                                         optVal = parseInt(optVal) + '호차';
                                     }
@@ -2771,18 +2754,16 @@
                         });
                         
                         if (data.length > 0) {
-                            // 추가된 로직: 엑셀 데이터에서 고유 버스/호차 번호 추출 및 정렬
                             const extractedBuses = Array.from(new Set(data.map(u => u.bus).filter(b => b && b !== '미정' && b !== '-'))).sort((a, b) => {
                                 const numA = parseInt(a) || 0;
                                 const numB = parseInt(b) || 0;
                                 return numA - numB;
                             });
                             
-                            // 추출된 호차가 있다면 탑승 관리 화면의 버스 리스트를 즉시 자동 업데이트
                             if (extractedBuses.length > 0) {
                                 setBusList(extractedBuses);
                                 if (!extractedBuses.includes(targetBus)) {
-                                    setTargetBus(extractedBuses[0]); // 현재 선택된 버스가 새 목록에 없으면 첫 번째 버스로 자동 선택
+                                    setTargetBus(extractedBuses[0]); 
                                 }
                             }
 
@@ -2808,13 +2789,10 @@
                 Papa.parse(file, {
                     header: true,
                     complete: (results) => {
-                        // 1. '장소' 또는 '일정명' 또는 'title' 열이 존재하는 행만 필터링
                         const data = results.data.filter(r => r.title || r['일정명'] || r['장소']).map((r, i) => {
-                            // 2. 지급(금액)에서 특수문자($, ₩, 공백 등)를 제거하고 숫자만 추출
                             const rawPrice = String(r.price || r['금액'] || r['지급'] || '0').replace(/[^0-9]/g, '');
                             const parsedPrice = parseInt(rawPrice) || 0;
                             
-                            // 3. 타입이 명시되지 않은 경우, 금액이 있으면 PAYMENT, 없으면 BOARDING으로 자동 추론
                             const defaultType = parsedPrice > 0 ? 'PAYMENT' : 'BOARDING';
 
                             return {
@@ -2860,7 +2838,6 @@
                 
                 const newOptions = { ...selectedUser.options, [editForm.optKey]: requiredChoice };
                 
-                // 사용자가 버스도 함께 변경하겠다고 값을 입력한 경우
                 if (editForm.newBus !== undefined && editForm.newBus.trim() !== '') {
                     const dayStrMatch = editForm.optKey.match(/(\d+일차)/);
                     if (dayStrMatch) {
@@ -2870,7 +2847,6 @@
                     }
                 }
 
-                // 🔥 옵션 변경 시: 기존 일정과 매칭되어 이미 처리된(로그) 항목들을 취소(isCancelled) 처리하여 통계에서 제외
                 const oldRelatedSchedules = schedules.filter(s => s.targetKey === editForm.optKey && s.targetVal === oldVal);
                 const logsToCancel = logs.filter(l => String(l.uid) === String(selectedUser.uid) && oldRelatedSchedules.some(s => s.id === l.sessionId) && !l.isCancelled);
                 const oldLogIds = logsToCancel.map(l => l.id);
@@ -3240,109 +3216,126 @@
             };
 
             const processScan = useCallback(async (scannedText) => { 
-                let scannedUid = scannedText;
-                if (scannedText.includes('eid=')) {
-                    scannedUid = scannedText.split('eid=')[1].split('&')[0];
-                } else if (scannedText.includes('uid=')) {
-                    scannedUid = scannedText.split('uid=')[1].split('&')[0];
-                } else if (scannedText.includes('_')) {
-                    scannedUid = scannedText.split('_')[0]; 
-                }
-                scannedUid = String(scannedUid).trim(); 
-
-                let user = users.find(u => String(u.uid) === String(scannedUid)); 
-                if (!user) user = users.find(u => scannedText.includes(String(u.uid))); 
-                if (!user) user = users.find(u => u.name === scannedText.trim()); 
-
-                if (!user) return setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `스캔된 값: ${scannedText}` }); 
-                
-                const session = schedules.find(s => s.id === targetSessionId); 
-                if (!session) return setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' }); 
-
-                const scanKey = `${session.id}_${user.uid}`;
-                const existingLog = logs.find(l => String(l.uid) === String(user.uid) && l.sessionId === session.id && !l.isCancelled);
-                
-                if (GLOBAL_PROCESSED_SCANS.has(scanKey) || existingLog) {
-                    return setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session }); 
-                }
-
-                // 🌟 중요: 처리 전 명시적 Confirm 단계 추가
-                const actionName = session.type === 'PAYMENT' ? '지급' : '탑승';
-                if (!confirm(`[${user.name}]님을 ${session.title} 일정에 ${actionName} 처리하시겠습니까?`)) {
-                    isProcessingRef.current = false;
-                    return;
-                }
-
-                const { isTarget, expectedBus } = getUserSessionInfo(user, session);
-                const domainInfo = getSessionDomainInfo(session);
-
-                if (!isTarget) {
-                     return setScanResult({ status: 'error', msg: '대상자 아님', subMsg: '해당 일정에 신청되지 않은 참가자입니다.', user, session, requiredChoice: session.targetVal !== 'ALL' ? session.targetVal : session.title });
-                }
-
-                let saveBus = targetBus;
-
-                if (session.type === 'BOARDING' && !domainInfo.isOutbound && !domainInfo.isInbound) {
-                    const eBusClean = expectedBus.replace('호차','').trim();
-                    const tBusClean = targetBus.replace('호차','').trim();
-
-                    if (['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) {
-                         if(!confirm(`${user.name}님은 현재 탑승 대상([${expectedBus}])이 아닙니다.\n\n그래도 [${targetBus}]에 강제 탑승 처리하시겠습니까?`)) {
-                             isProcessingRef.current = false;
-                             return;
-                         }
-                    } else if (eBusClean !== tBusClean) {
-                         if(!confirm(`${user.name}님의 지정 호차는 [${expectedBus}]입니다.\n\n현재 [${targetBus}]으로 변경하여 탑승 처리하시겠습니까?`)) {
-                             isProcessingRef.current = false;
-                             return;
-                         }
+                try {
+                    let scannedUid = scannedText;
+                    if (scannedText.includes('eid=')) {
+                        scannedUid = scannedText.split('eid=')[1].split('&')[0];
+                    } else if (scannedText.includes('uid=')) {
+                        scannedUid = scannedText.split('uid=')[1].split('&')[0];
+                    } else if (scannedText.includes('_')) {
+                        scannedUid = scannedText.split('_')[0]; 
                     }
-                } else {
-                    saveBus = domainInfo.isOutbound ? expectedBus : targetBus;
-                }
-                
-                GLOBAL_PROCESSED_SCANS.add(scanKey);
+                    scannedUid = String(scannedUid).trim(); 
 
-                let finalAmount = 0; let penaltyApplied = 0; 
-                if (session.type === 'PAYMENT') { 
-                    const baseAmount = session.price; const deduction = user.penaltyTotal || 0; 
-                    finalAmount = Math.max(0, baseAmount - deduction); penaltyApplied = (baseAmount - finalAmount); 
-                }
-                
-                const newLog = { 
-                    id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: session.type === 'PAYMENT' ? '-' : saveBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`,
-                    isCancelled: false // 🔥 추가: 소프트 삭제 처리를 위한 필드
-                }; 
-                
-                if (db) { 
-                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); 
-                    if (penaltyApplied > 0) { 
-                        const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
-                        await userRef.update({ penaltyTotal: user.penaltyTotal - penaltyApplied }); 
-                    } 
-                } else { 
-                    setLogs(prev => [newLog, ...prev]); 
-                    if (penaltyApplied > 0) { 
-                        setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u)); 
-                    } 
-                } 
-                
-                if (session.type === 'PAYMENT') {
-                    fetch(GOOGLE_SHEET_URL, {
-                        method: "POST", mode: "no-cors",
-                        body: JSON.stringify({ 
-                            type: "meal", 
-                            id: "\u200B" + String(user.uid),
-                            name: user.name, 
-                            action: "APPROVE", 
-                            tour: session.title, 
-                            time: formatTimeSafe(newLog.timestamp) 
-                        })
-                    }).catch(console.error);
-                }
+                    let user = users.find(u => String(u.uid) === String(scannedUid)); 
+                    if (!user) user = users.find(u => scannedText.includes(String(u.uid))); 
+                    if (!user) user = users.find(u => u.name === scannedText.trim()); 
 
-                const todayLogs = logs.filter(l => String(l.uid) === String(user.uid) && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급' && !l.isCancelled); 
-                setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':getSessionDomainInfo(session).action+' 완료', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
+                    if (!user) {
+                        setScanResult({ status: 'error', msg: '미등록 참가자', subMsg: `스캔된 값: ${scannedText}` });
+                        isProcessingRef.current = false;
+                        return;
+                    }
+                    
+                    const session = schedules.find(s => s.id === targetSessionId); 
+                    if (!session) {
+                        setScanResult({ status: 'error', msg: '세션 미선택', subMsg: '관리자에게 문의하세요' });
+                        isProcessingRef.current = false;
+                        return;
+                    }
+
+                    const scanKey = `${session.id}_${user.uid}`;
+                    const existingLog = logs.find(l => String(l.uid) === String(user.uid) && l.sessionId === session.id && !l.isCancelled);
+                    
+                    if (GLOBAL_PROCESSED_SCANS.has(scanKey) || existingLog) {
+                        setScanResult({ status: 'duplicate', msg: '이미 처리됨', subMsg: `${session.displayDate} - ${session.title}`, user, session });
+                        isProcessingRef.current = false;
+                        return;
+                    }
+
+                    const actionName = session.type === 'PAYMENT' ? '지급' : '탑승';
+                    if (!confirm(`[${user.name}]님을 ${session.title} 일정에 ${actionName} 처리하시겠습니까?`)) {
+                        isProcessingRef.current = false;
+                        return;
+                    }
+
+                    const { isTarget, expectedBus } = getUserSessionInfo(user, session);
+                    const domainInfo = getSessionDomainInfo(session);
+
+                    if (!isTarget) {
+                        setScanResult({ status: 'error', msg: '대상자 아님', subMsg: '해당 일정에 신청되지 않은 참가자입니다.', user, session, requiredChoice: session.targetVal !== 'ALL' ? session.targetVal : session.title });
+                        isProcessingRef.current = false;
+                        return;
+                    }
+
+                    let saveBus = targetBus;
+
+                    if (session.type === 'BOARDING' && !domainInfo.isOutbound && !domainInfo.isInbound) {
+                        const eBusClean = expectedBus.replace('호차','').trim();
+                        const tBusClean = targetBus.replace('호차','').trim();
+
+                        if (['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) {
+                            if(!confirm(`${user.name}님은 현재 탑승 대상([${expectedBus}])이 아닙니다.\n\n그래도 [${targetBus}]에 강제 탑승 처리하시겠습니까?`)) {
+                                isProcessingRef.current = false;
+                                return;
+                            }
+                        } else if (eBusClean !== tBusClean) {
+                            if(!confirm(`${user.name}님의 지정 호차는 [${expectedBus}]입니다.\n\n현재 [${targetBus}]으로 변경하여 탑승 처리하시겠습니까?`)) {
+                                isProcessingRef.current = false;
+                                return;
+                            }
+                        }
+                    } else {
+                        saveBus = domainInfo.isOutbound ? expectedBus : targetBus;
+                    }
+                    
+                    GLOBAL_PROCESSED_SCANS.add(scanKey);
+
+                    let finalAmount = 0; let penaltyApplied = 0; 
+                    if (session.type === 'PAYMENT') { 
+                        const baseAmount = session.price; const deduction = user.penaltyTotal || 0; 
+                        finalAmount = Math.max(0, baseAmount - deduction); penaltyApplied = (baseAmount - finalAmount); 
+                    }
+                    
+                    const newLog = { 
+                        id: `LOG_${Date.now()}_${Math.random().toString(36).substr(2,9)}`, timestamp: new Date().toISOString(), uid: String(user.uid), name: user.name, org: user.org, action: session.type === 'PAYMENT' ? '지급' : '탑승', sessionId: session.id, sessionTitle: session.title, bus: session.type === 'PAYMENT' ? '-' : saveBus, amount: session.type === 'PAYMENT' ? session.price : 0, penaltyApplied: penaltyApplied, finalAmount: finalAmount, processedBy: `${currentAdmin.name}(${currentAdmin.id})`,
+                        isCancelled: false 
+                    }; 
+                    
+                    if (db) { 
+                        await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').add(newLog); 
+                        if (penaltyApplied > 0) { 
+                            const userRef = db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)); 
+                            await userRef.update({ penaltyTotal: user.penaltyTotal - penaltyApplied }); 
+                        } 
+                    } else { 
+                        setLogs(prev => [newLog, ...prev]); 
+                        if (penaltyApplied > 0) { 
+                            setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, penaltyTotal: u.penaltyTotal - penaltyApplied } : u)); 
+                        } 
+                    } 
+                    
+                    if (session.type === 'PAYMENT') {
+                        fetch(GOOGLE_SHEET_URL, {
+                            method: "POST", mode: "no-cors",
+                            body: JSON.stringify({ 
+                                type: "meal", 
+                                id: "\u200B" + String(user.uid),
+                                name: user.name, 
+                                action: "APPROVE", 
+                                tour: session.title, 
+                                time: formatTimeSafe(newLog.timestamp) 
+                            })
+                        }).catch(console.error);
+                    }
+
+                    const todayLogs = logs.filter(l => String(l.uid) === String(user.uid) && l.timestamp.slice(0, 10) === newLog.timestamp.slice(0, 10) && l.action === '지급' && !l.isCancelled); 
+                    setScanResult({ status: 'success', msg: session.type==='PAYMENT'?'지급 완료':getSessionDomainInfo(session).action+' 완료', subMsg: session.title, user, logs: newLog, relatedLogs: todayLogs, session }); 
+                } catch (error) {
+                    console.error("스캔 처리 중 에러 발생:", error);
+                    setScanResult({ status: 'error', msg: '시스템 에러', subMsg: '관리자에게 문의하세요' });
+                    isProcessingRef.current = false;
+                }
             }, [db, users, schedules, logs, targetSessionId, targetBus, currentAdmin]);
 
             return (
