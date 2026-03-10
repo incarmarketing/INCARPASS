@@ -1107,6 +1107,8 @@
             const scannerRef = useRef(null); const isRunningRef = useRef(false);
             const [manualCode, setManualCode] = useState('');
             const [busChangeTarget, setBusChangeTarget] = useState(null);
+            const [isBulkMode, setIsBulkMode] = useState(false);
+            const [selectedUids, setSelectedUids] = useState(new Set());
             const [cameraList, setCameraList] = useState([]);
             const [currentCamId, setCurrentCamId] = useState(null);
             const [listSearch, setListSearch] = useState('');
@@ -1627,7 +1629,15 @@
                                     </h3>
                                     <span className="text-xs text-slate-500 font-bold mt-1 block">{filteredTargetUsers.length}명 대상</span>
                                 </div>
-                                <button onClick={() => setIsExpandedList(false)} className="p-3 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200"><Icon name="x" size={24}/></button>
+                                <div className="flex items-center gap-2">
+                                    <button 
+                                        onClick={() => { setIsBulkMode(!isBulkMode); setSelectedUids(new Set()); }}
+                                        className={`px-3 py-2 text-xs font-bold rounded-xl transition-colors ${isBulkMode ? (mode==='BOARDING' ? 'bg-incar text-white shadow-md' : 'bg-emerald-500 text-white shadow-md') : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                                    >
+                                        {isBulkMode ? '일괄 해제' : '일괄 처리'}
+                                    </button>
+                                    <button onClick={() => { setIsExpandedList(false); setIsBulkMode(false); setSelectedUids(new Set()); }} className="p-3 bg-slate-100 text-slate-600 rounded-full hover:bg-slate-200"><Icon name="x" size={24}/></button>
+                                </div>
                             </div>
                             
                             <div className="p-4 bg-white border-b border-slate-100 shadow-sm z-10 shrink-0">
@@ -1646,13 +1656,53 @@
                             </div>
 
                             <div className="flex border-b border-slate-200 bg-white shrink-0">
-                                <button onClick={() => setScanTab('yet')} className={`flex-1 py-3 text-sm font-bold transition-colors ${scanTab==='yet' ? (mode==='BOARDING'?'text-incar border-b-2 border-incar bg-indigo-50/50':'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50') : 'text-slate-400 hover:bg-slate-50'}`}>
+                                <button onClick={() => { setScanTab('yet'); setSelectedUids(new Set()); }} className={`flex-1 py-3 text-sm font-bold transition-colors ${scanTab==='yet' ? (mode==='BOARDING'?'text-incar border-b-2 border-incar bg-indigo-50/50':'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50') : 'text-slate-400 hover:bg-slate-50'}`}>
                                     {mode === 'BOARDING' ? `미탑승 (${yetUsers.length})` : `미지급 (${yetUsers.length})`}
                                 </button>
-                                <button onClick={() => setScanTab('done')} className={`flex-1 py-3 text-sm font-bold transition-colors ${scanTab==='done' ? (mode==='BOARDING'?'text-incar border-b-2 border-incar bg-indigo-50/50':'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50') : 'text-slate-400 hover:bg-slate-50'}`}>
+                                <button onClick={() => { setScanTab('done'); setSelectedUids(new Set()); }} className={`flex-1 py-3 text-sm font-bold transition-colors ${scanTab==='done' ? (mode==='BOARDING'?'text-incar border-b-2 border-incar bg-indigo-50/50':'text-emerald-600 border-b-2 border-emerald-600 bg-emerald-50/50') : 'text-slate-400 hover:bg-slate-50'}`}>
                                     {mode === 'BOARDING' ? `탑승완료 (${doneUsers.length})` : `지급완료 (${doneUsers.length})`}
                                 </button>
                             </div>
+                            
+                            {isBulkMode && scanTab === 'yet' && yetUsers.length > 0 && (
+                                <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-slate-100 shrink-0">
+                                    <span className="text-xs font-bold text-slate-500">
+                                        {selectedUids.size > 0 ? <span className={mode==='BOARDING' ? 'text-incar' : 'text-emerald-600'}>{selectedUids.size}명 선택됨</span> : '선택된 인원 없음'}
+                                    </span>
+                                    <button 
+                                        onClick={() => {
+                                            if (selectedUids.size === yetUsers.length) {
+                                                setSelectedUids(new Set());
+                                            } else {
+                                                setSelectedUids(new Set(yetUsers.map(u => u.uid)));
+                                            }
+                                        }}
+                                        className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-colors ${selectedUids.size === yetUsers.length ? 'bg-slate-200 text-slate-600' : (mode==='BOARDING' ? 'bg-indigo-50 text-incar' : 'bg-emerald-50 text-emerald-600')}`}
+                                    >
+                                        {selectedUids.size === yetUsers.length ? '전체 해제' : '전체 선택'}
+                                    </button>
+                                </div>
+                            )}
+                            
+                            {isBulkMode && scanTab === 'done' && doneUsers.length > 0 && (
+                                <div className="flex justify-between items-center px-4 py-2 bg-white border-b border-slate-100 shrink-0">
+                                    <span className="text-xs font-bold text-slate-500">
+                                        {selectedUids.size > 0 ? <span className="text-rose-500">{selectedUids.size}명 선택됨</span> : '선택된 인원 없음'}
+                                    </span>
+                                    <button 
+                                        onClick={() => {
+                                            if (selectedUids.size === doneUsers.length) {
+                                                setSelectedUids(new Set());
+                                            } else {
+                                                setSelectedUids(new Set(doneUsers.map(u => u.uid)));
+                                            }
+                                        }}
+                                        className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-colors ${selectedUids.size === doneUsers.length ? 'bg-slate-200 text-slate-600' : 'bg-rose-50 text-rose-500'}`}
+                                    >
+                                        {selectedUids.size === doneUsers.length ? '전체 해제' : '전체 선택'}
+                                    </button>
+                                </div>
+                            )}
 
                             <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 bg-slate-50 min-h-0">
                                 {currentList.length === 0 ? (
@@ -1666,9 +1716,26 @@
                                         const showBusChange = mode === 'BOARDING' && handleBusChange && !domainInfoCard.isOutbound && expectedBus && !['미정', '-', '자유일정'].includes(expectedBus);
                                         
                                         return (
-                                            <div key={u.uid} className={`p-4 rounded-2xl border transition-colors shadow-sm ${isBoarded ? (mode==='BOARDING'?'bg-indigo-50/50 border-indigo-100':'bg-emerald-50/50 border-emerald-100') : 'bg-white border-slate-200'}`}>
+                                            <div 
+                                                key={u.uid} 
+                                                onClick={() => {
+                                                    if (!isBulkMode) return;
+                                                    setSelectedUids(prev => {
+                                                        const next = new Set(prev);
+                                                        if (next.has(u.uid)) next.delete(u.uid);
+                                                        else next.add(u.uid);
+                                                        return next;
+                                                    });
+                                                }}
+                                                className={`p-4 rounded-2xl border transition-colors shadow-sm ${isBulkMode ? 'cursor-pointer active:scale-[0.98]' : ''} ${isBulkMode && selectedUids.has(u.uid) ? (mode==='BOARDING' ? 'bg-incar/10 border-incar ring-2 ring-incar/30' : 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/30') : isBoarded ? (mode==='BOARDING'?'bg-indigo-50/50 border-indigo-100':'bg-emerald-50/50 border-emerald-100') : 'bg-white border-slate-200'}`}
+                                            >
                                                 <div className="flex justify-between items-center">
                                                     <div className="flex items-center gap-4">
+                                                        {isBulkMode && (
+                                                            <div className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 transition-colors ${selectedUids.has(u.uid) ? (mode==='BOARDING' ? 'bg-incar border-incar' : 'bg-emerald-500 border-emerald-500') : 'border-slate-300 bg-white'}`}>
+                                                                {selectedUids.has(u.uid) && <Icon name="check" size={14} className="text-white" />}
+                                                            </div>
+                                                        )}
                                                         <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white shrink-0 shadow-sm ${isBoarded ? (mode==='BOARDING'?'bg-incar':'bg-emerald-500') : 'bg-slate-300'}`}>{u.name[0]}</div>
                                                         <div>
                                                             <div className="font-bold text-base text-slate-800 flex items-center gap-2">
@@ -1694,7 +1761,7 @@
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        {isBoarded ? (
+                                                        {isBulkMode ? null : isBoarded ? (
                                                             <button onClick={() => handleFastAction(u, selectedSession, targetBus, true)} className="px-4 py-2.5 bg-white text-slate-500 border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-xs font-bold rounded-xl transition-colors shadow-sm whitespace-nowrap">
                                                                 {mode==='BOARDING' ? '하차' : '지급 취소'}
                                                             </button>
@@ -1711,6 +1778,96 @@
                                 )}
                                 <div className="h-40 shrink-0" aria-hidden="true"></div>
                             </div>
+
+                            {isBulkMode && selectedUids.size > 0 && (
+                                <div className="fixed bottom-0 left-0 right-0 z-[350] pb-safe animate-slide-up">
+                                    <div className="mx-4 mb-4 rounded-2xl shadow-2xl border overflow-hidden" style={{boxShadow: '0 -4px 30px rgba(0,0,0,0.15)'}}>
+                                        <div className={`p-4 flex justify-between items-center ${scanTab === 'done' ? 'bg-rose-500' : (mode==='BOARDING' ? 'bg-incar' : 'bg-emerald-500')}`}>
+                                            <div className="text-white">
+                                                <div className="font-black text-lg">{selectedUids.size}명 선택됨</div>
+                                                <div className="text-[10px] opacity-80">
+                                                    {scanTab === 'done' 
+                                                        ? (mode==='BOARDING' ? '일괄 하차 처리' : '일괄 지급 취소')
+                                                        : (mode==='BOARDING' ? '일괄 탑승 처리' : '일괄 지급 처리')
+                                                    }
+                                                </div>
+                                            </div>
+                                            <button 
+                                                onClick={async () => {
+                                                    const isCancel = scanTab === 'done';
+                                                    const actionLabel = isCancel 
+                                                        ? (mode==='BOARDING' ? '하차' : '지급 취소')
+                                                        : (mode==='BOARDING' ? '탑승' : '지급');
+                                                    
+                                                    const selectedList = isCancel
+                                                        ? doneUsers.filter(u => selectedUids.has(u.uid))
+                                                        : yetUsers.filter(u => selectedUids.has(u.uid));
+                                                    
+                                                    const names = selectedList.slice(0, 5).map(u => u.name).join(', ');
+                                                    const moreCount = selectedList.length > 5 ? ` 외 ${selectedList.length - 5}명` : '';
+                                                    
+                                                    let doProcess = false;
+                                                    try {
+                                                        doProcess = window.confirm(
+                                                            `${selectedList.length}명 일괄 ${actionLabel} 처리\n\n` +
+                                                            `대상: ${names}${moreCount}\n\n` +
+                                                            `진행하시겠습니까?`
+                                                        );
+                                                    } catch(e) { doProcess = true; }
+                                                    
+                                                    if (!doProcess) return;
+                                                    
+                                                    let successCount = 0;
+                                                    let failCount = 0;
+                                                    
+                                                    for (const u of selectedList) {
+                                                        try {
+                                                            if (isCancel) {
+                                                                const logToCancel = logs.find(l => String(l.uid) === String(u.uid) && String(l.sessionId) === String(selectedSession.id) && !l.isCancelled);
+                                                                if (logToCancel) {
+                                                                    if (db) {
+                                                                        await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('logs').doc(logToCancel.id).set({ isCancelled: true }, { merge: true });
+                                                                    } else {
+                                                                        setLogs(prev => prev.map(l => l.id === logToCancel.id ? { ...l, isCancelled: true } : l));
+                                                                    }
+                                                                    GLOBAL_PROCESSED_SCANS.delete(`${selectedSession.id}_${u.uid}`);
+                                                                    successCount++;
+                                                                }
+                                                            } else {
+                                                                await processScan(String(u.uid));
+                                                                successCount++;
+                                                            }
+                                                        } catch(err) {
+                                                            console.error(`${u.name} 처리 실패:`, err);
+                                                            failCount++;
+                                                        }
+                                                        // 각 처리 사이 짧은 딜레이 (결과 모달 방지)
+                                                        if (!isCancel) setScanResult(null);
+                                                        await new Promise(r => setTimeout(r, 100));
+                                                    }
+                                                    
+                                                    setSelectedUids(new Set());
+                                                    setScanResult(null);
+                                                    
+                                                    try {
+                                                        alert(
+                                                            `일괄 ${actionLabel} 완료\n\n` +
+                                                            `성공: ${successCount}명` +
+                                                            (failCount > 0 ? `\n실패: ${failCount}명` : '')
+                                                        );
+                                                    } catch(e) {}
+                                                }}
+                                                className={`px-8 py-4 rounded-xl font-black text-base text-white transition-transform active:scale-95 shadow-lg ${scanTab === 'done' ? 'bg-rose-700 hover:bg-rose-800' : (mode==='BOARDING' ? 'bg-white/20 hover:bg-white/30' : 'bg-white/20 hover:bg-white/30')}`}
+                                            >
+                                                {scanTab === 'done' 
+                                                    ? (mode==='BOARDING' ? '일괄 하차' : '일괄 취소')
+                                                    : (mode==='BOARDING' ? '일괄 탑승' : '일괄 지급')
+                                                }
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {busChangeTarget && selectedSession && (
                                 <div className="fixed inset-0 z-[400] flex items-end justify-center bg-slate-900/50 backdrop-blur-sm animate-fade-in" onClick={() => setBusChangeTarget(null)}>
@@ -3719,6 +3876,7 @@
     </script>
 </body>
 </html>
+
 
 
 
