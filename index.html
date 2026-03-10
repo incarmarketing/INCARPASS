@@ -417,7 +417,7 @@
                 setIsLoading(true);
 
                 try {
-                    const apiKey = "AIzaSyD" + "UVx2p81Aop3Rv3hu8NMnGKcAYhwOaTI4"; 
+                    const apiKey = "" + ""; 
                     
                     if (!apiKey) {
                          setMessages(prev => [...prev, { role: 'assistant', text: '죄송합니다. 소스 코드에 챗봇용 API 키를 입력해주세요.' }]);
@@ -2301,16 +2301,16 @@
                                 <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-slide-up">
                                     <div className="bg-indigo-50 p-6 text-center border-b border-indigo-100">
                                         <div className="w-16 h-16 bg-white text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 shadow-sm text-2xl font-bold">?</div>
-                                        <h3 className="text-xl font-black text-indigo-900 mb-1 break-keep">일정 변경 확인 (Case 2)</h3>
-                                        <p className="text-slate-600 font-bold text-sm break-keep">예약된 관광 코스를 취소하고<br/>현금 지급 일정으로 변경합니다.</p>
+                                        <h3 className="text-xl font-black text-indigo-900 mb-1 break-keep">지급 일정으로 재변경</h3>
+                                        <p className="text-slate-600 font-bold text-sm break-keep">이전에 다른 일정으로 변경하면서<br/>지급액을 반환(환수) 하셨나요?</p>
                                     </div>
                                     <div className="p-6 space-y-4">
-                                        <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {localForfeitReq.oldVal} (예약취소)<br/>▼ <br/>변경: {localForfeitReq.session.title} (지급 {CURRENCY}{localForfeitReq.price})</div>
-                                        <button onClick={() => resolveForfeitRequest(false)} className="w-full py-4 bg-rose-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>부지급 (위약금 적용)</span><span className="text-[10px] opacity-80 font-normal">(예약 비용 패널티로 상계 처리)</span>
+                                        <div className="text-center text-xs text-slate-400 mb-2 break-keep">기존: {localForfeitReq.oldVal}<br/>▼ <br/>변경: {localForfeitReq.session.title} (지급 {CURRENCY}{localForfeitReq.price})</div>
+                                        <button onClick={() => resolveLocalForfeit(true)} className="w-full py-4 bg-emerald-500 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
+                                            <span>네, 반환했습니다 (재지급 필요)</span><span className="text-[10px] opacity-80 font-normal">(이전 반환금 상쇄, 스캔 시 정상 지급됨)</span>
                                         </button>
-                                        <button onClick={() => resolveForfeitRequest(true)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
-                                            <span>정상 지급</span><span className="text-[10px] opacity-80 font-normal">({CURRENCY}{localForfeitReq.price} 지급 승인)</span>
+                                        <button onClick={() => resolveLocalForfeit(false)} className="w-full py-4 bg-slate-800 text-white font-bold rounded-xl shadow-lg active:scale-95 transition-transform flex flex-col items-center justify-center leading-none gap-1 break-keep">
+                                            <span>아니요, 미반환입니다 (지급 안함)</span><span className="text-[10px] opacity-80 font-normal">(미반환금과 상계, 스캔 시 0원 지급됨)</span>
                                         </button>
                                         <button onClick={() => setLocalForfeitReq(null)} className="w-full py-3 text-slate-400 font-bold text-sm hover:bg-slate-50 rounded-xl break-keep">취소</button>
                                     </div>
@@ -3442,4 +3442,3 @@
     </script>
 </body>
 </html>
-
