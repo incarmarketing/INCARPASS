@@ -1068,7 +1068,7 @@
                                                     </div>
                                                     <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100 break-keep leading-relaxed">
                                                         <span className="font-bold mr-1">사유:</span> {log.reason}
-                                                        {log.penalty !== 0 && <span className={`ml-2 font-bold block sm:inline mt-1 sm:mt-0 ${log.penalty > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>{log.penalty > 0 ? `(차액반환/패널티 ${CURRENCY}${log.penalty} 적용됨)` : `(반환/마이너스 정산 ${CURRENCY}${Math.abs(log.penalty)})`}</span>}
+                                                        {log.penalty !== 0 && <span className={`ml-2 font-bold block sm:inline mt-1 sm:mt-0 ${log.penalty > 0 ? 'text-rose-500' : 'text-emerald-500'}`}>{log.penalty > 0 ? `(미반환/ ${CURRENCY}${log.penalty} )` : `(반환/마이너스 정산 ${CURRENCY}${Math.abs(log.penalty)})`}</span>}
                                                     </div>
                                                 </div>
                                             ))}
@@ -3430,5 +3430,6 @@
     </script>
 </body>
 </html>
+
 
 
