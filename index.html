@@ -723,6 +723,7 @@
             const targetUsers = useMemo(() => {
                 if (!session) return [];
                 return users.filter(u => {
+                    if (u.noShow) return false;
                     const { isTarget, expectedBus } = getUserSessionInfo(u, session);
                     if (!isTarget) return false;
                     return true;
@@ -1103,7 +1104,7 @@
             );
         };
 
-        const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile, busList, setBusList, scanResult, logs, handleFastAction, handleBusChange, handleBulkAction, handleBulkCancel }) => {
+        const ScanView = ({ mode, schedules, targetSessionId, setTargetSessionId, targetBus, setTargetBus, manualBus, setManualBus, isScanning, setIsScanning, processScan, users, isMobile, busList, setBusList, scanResult, logs, handleFastAction, handleBusChange, handleBulkAction, handleBulkCancel, handleNoShow }) => {
             const scannerRef = useRef(null); const isRunningRef = useRef(false);
             const [manualCode, setManualCode] = useState('');
             const [busChangeTarget, setBusChangeTarget] = useState(null);
@@ -1715,11 +1716,13 @@
                                         const domainInfoCard = getSessionDomainInfo(selectedSession);
                                         const showBusChange = mode === 'BOARDING' && handleBusChange && !domainInfoCard.isOutbound && expectedBus && !['미정', '-', '자유일정'].includes(expectedBus);
                                         
+                                        const isNoShow = u.noShow === true;
+                                        
                                         return (
                                             <div 
                                                 key={u.uid} 
                                                 onClick={() => {
-                                                    if (!isBulkMode) return;
+                                                    if (!isBulkMode || isNoShow) return;
                                                     setSelectedUids(prev => {
                                                         const next = new Set(prev);
                                                         if (next.has(u.uid)) next.delete(u.uid);
@@ -1727,7 +1730,7 @@
                                                         return next;
                                                     });
                                                 }}
-                                                className={`p-4 rounded-2xl border transition-colors shadow-sm ${isBulkMode ? 'cursor-pointer active:scale-[0.98]' : ''} ${isBulkMode && selectedUids.has(u.uid) ? (mode==='BOARDING' ? 'bg-incar/10 border-incar ring-2 ring-incar/30' : 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/30') : isBoarded ? (mode==='BOARDING'?'bg-indigo-50/50 border-indigo-100':'bg-emerald-50/50 border-emerald-100') : 'bg-white border-slate-200'}`}
+                                                className={`p-4 rounded-2xl border transition-colors shadow-sm ${isNoShow ? 'opacity-50 bg-rose-50/50 border-rose-200' : ''} ${isBulkMode && !isNoShow ? 'cursor-pointer active:scale-[0.98]' : ''} ${isBulkMode && selectedUids.has(u.uid) && !isNoShow ? (mode==='BOARDING' ? 'bg-incar/10 border-incar ring-2 ring-incar/30' : 'bg-emerald-500/10 border-emerald-500 ring-2 ring-emerald-500/30') : isBoarded ? (mode==='BOARDING'?'bg-indigo-50/50 border-indigo-100':'bg-emerald-50/50 border-emerald-100') : isNoShow ? '' : 'bg-white border-slate-200'}`}
                                             >
                                                 <div className="flex justify-between items-center">
                                                     <div className="flex items-center gap-4">
@@ -1738,9 +1741,10 @@
                                                         )}
                                                         <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold text-white shrink-0 shadow-sm ${isBoarded ? (mode==='BOARDING'?'bg-incar':'bg-emerald-500') : 'bg-slate-300'}`}>{u.name[0]}</div>
                                                         <div>
-                                                            <div className="font-bold text-base text-slate-800 flex items-center gap-2">
+                                                            <div className="font-bold text-base text-slate-800 flex items-center gap-2 flex-wrap">
                                                                 {u.name}
-                                                                {isBoarded && <span className={`text-[10px] px-2 py-0.5 rounded font-black ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING'?'탑승완료':'지급완료'}</span>}
+                                                                {isNoShow && <span className="text-[10px] px-2 py-0.5 rounded font-black bg-rose-500 text-white">노쇼</span>}
+                                                                {!isNoShow && isBoarded && <span className={`text-[10px] px-2 py-0.5 rounded font-black ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING'?'탑승완료':'지급완료'}</span>}
                                                             </div>
                                                             <div className="text-xs text-slate-400 mt-1 flex flex-col gap-1">
                                                                 <span>{u.org} | {u.uid}</span>
@@ -1761,7 +1765,9 @@
                                                         </div>
                                                     </div>
                                                     <div>
-                                                        {isBulkMode ? null : isBoarded ? (
+                                                        {isBulkMode ? null : isNoShow ? (
+                                                            <span className="px-4 py-2.5 bg-rose-100 text-rose-400 text-xs font-bold rounded-xl whitespace-nowrap cursor-not-allowed">노쇼</span>
+                                                        ) : isBoarded ? (
                                                             <button onClick={() => handleFastAction(u, selectedSession, targetBus, true)} className="px-4 py-2.5 bg-white text-slate-500 border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-xs font-bold rounded-xl transition-colors shadow-sm whitespace-nowrap">
                                                                 {mode==='BOARDING' ? '하차' : '지급 취소'}
                                                             </button>
@@ -1870,7 +1876,7 @@
             );
         };
 
-        const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules, changeLogs, logs, busList }) => {
+        const ChangeView = ({ searchQuery, setSearchQuery, selectedUser, setSelectedUser, editForm, setEditForm, handleUserUpdate, users, schedules, changeLogs, logs, busList, handleNoShow }) => {
             const [manualInput, setManualInput] = useState(false);
             const [showAllHistory, setShowAllHistory] = useState(false);
             const [isLookupScanning, setIsLookupScanning] = useState(false);
@@ -2327,6 +2333,18 @@
                                     <div className="flex-1 bg-slate-50 p-5 rounded-2xl border border-slate-100 flex flex-col justify-center">
                                         <div className="flex justify-between items-start mb-2"><div><div className="font-black text-2xl text-slate-800 break-keep">{selectedUser.name}</div><div className="text-sm font-bold text-slate-500 break-all">{selectedUser.org}</div></div><div className="text-right"><div className="text-[10px] font-bold text-slate-400 uppercase">사번(ID)</div><div className="font-mono font-bold text-incar">{selectedUser.uid}</div></div></div>
                                         <div className="mt-4 pt-4 border-t border-slate-200/50 flex justify-between items-center"><span className="text-xs font-bold text-slate-400 break-keep">누적 차감액(패널티)</span><span className="font-black text-rose-500 text-lg break-keep">-{CURRENCY}{selectedUser.penaltyTotal || 0}</span></div>
+                                        {selectedUser.noShow ? (
+                                            <div className="mt-3 pt-3 border-t border-rose-200/50">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <span className="text-xs font-black text-rose-500 flex items-center gap-1"><Icon name="alertTriangle" size={12}/> 노쇼 상태 (전 일정 제외됨)</span>
+                                                </div>
+                                                <button onClick={() => handleNoShow(selectedUser, false)} className="w-full py-2.5 bg-emerald-500 text-white font-bold rounded-xl text-xs shadow-md active:scale-95 transition-transform">노쇼 해제 (일정 복구)</button>
+                                            </div>
+                                        ) : (
+                                            <div className="mt-3 pt-3 border-t border-slate-200/50">
+                                                <button onClick={() => handleNoShow(selectedUser, true)} className="w-full py-2.5 bg-rose-50 text-rose-500 font-bold rounded-xl text-xs border border-rose-200 hover:bg-rose-100 transition-colors">노쇼 처리</button>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="bg-white border-2 border-dashed border-slate-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center w-full md:w-auto cursor-pointer hover:bg-slate-50 hover:border-incar/30 transition-all group" onClick={() => setShowQrModal(true)} title="QR코드 확대 및 다운로드">
                                         <div className="mb-2 w-28 h-28 flex items-center justify-center bg-white rounded-xl shadow-sm border border-slate-100 p-2 group-hover:scale-105 transition-transform"><QRCodeCanvas text={`https://incarmkt.github.io/travel/?eid=${selectedUser.uid}`} size={100} /></div>
@@ -3420,11 +3438,12 @@
             const scheduleStats = useMemo(() => {
                 return schedules.map(s => {
                     const validUsers = users.filter(u => {
+                        if (u.noShow) return false;
                         const { isTarget, expectedBus } = getUserSessionInfo(u, s);
                         if (!isTarget) return false;
                         const dInfo = getSessionDomainInfo(s);
-                        if (s.type === 'BOARDING' && !dInfo.isOutbound && !dInfo.isInbound && ['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) return false;
-                        if (s.type === 'BOARDING' && (dInfo.isOutbound || dInfo.isInbound) && ['비탑승', '제외'].includes(expectedBus)) return false;
+                        if (dInfo.isOutbound || dInfo.isInbound) return true;
+                        if (s.type === 'BOARDING' && ['비탑승', '제외', '-', '미정', ''].includes(expectedBus)) return false;
                         return true;
                     });
                     const targetCount = validUsers.length;
@@ -3470,6 +3489,37 @@
                     }
                 }
                 return oldLogIds;
+            };
+
+            const handleNoShow = async (user, isNoShow) => {
+                const action = isNoShow ? '노쇼 처리' : '노쇼 해제';
+                let doProcess = false;
+                try {
+                    doProcess = window.confirm(`${user.name}님을 ${action}하시겠습니까?${isNoShow ? '\n\n모든 일정의 진행도에서 제외되고, 탑승/지급이 차단됩니다.' : '\n\n모든 일정에 다시 포함됩니다.'}`);
+                } catch(e) { doProcess = true; }
+                if (!doProcess) return;
+                
+                if (db) {
+                    await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('users').doc(String(user.uid)).update({ noShow: isNoShow });
+                } else {
+                    setUsers(prev => prev.map(u => String(u.uid) === String(user.uid) ? { ...u, noShow: isNoShow } : u));
+                }
+                
+                const changeLog = {
+                    id: `CHG_${Date.now()}`,
+                    timestamp: new Date().toISOString(),
+                    uid: String(user.uid),
+                    name: user.name,
+                    targetOption: '출석상태',
+                    oldVal: isNoShow ? '정상' : '노쇼',
+                    newVal: isNoShow ? '노쇼' : '정상',
+                    penalty: 0,
+                    reason: isNoShow ? '노쇼 처리 (전 일정 제외)' : '노쇼 해제 (전 일정 복구)',
+                    processedBy: `${currentAdmin?.name}(${currentAdmin?.id})`
+                };
+                
+                if (db) await db.collection('artifacts').doc(SYSTEM_APP_ID).collection('changelogs').add(changeLog);
+                else setChangeLogs(prev => [changeLog, ...prev]);
             };
 
             const handleBusChange = async (user, session, newBus) => {
@@ -3954,9 +4004,9 @@
                                 <div className="flex-1 overflow-y-auto p-4 pb-32 md:pb-8 md:p-8 w-full h-full z-10 custom-scrollbar min-h-0">
                                     <div className="max-w-5xl mx-auto w-full">
                                         {activeTab === 'dashboard' && <DashboardView users={users} logs={logs} scheduleStats={scheduleStats} groupedStats={groupedStats} groupKeys={groupKeys} changeLogs={changeLogs} onSessionClick={setSelectedSession} />}
-                                        {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} scanResult={scanResult} logs={logs} handleFastAction={handleFastAction} handleBusChange={handleBusChange} handleBulkAction={handleBulkAction} handleBulkCancel={handleBulkCancel} />}
-                                        {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} scanResult={scanResult} logs={logs} handleFastAction={handleFastAction} handleBulkAction={handleBulkAction} handleBulkCancel={handleBulkCancel} />}
-                                        {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} schedules={schedules} changeLogs={changeLogs} logs={logs} busList={busList} />}
+                                        {activeTab === 'boarding' && <ScanView mode="BOARDING" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} scanResult={scanResult} logs={logs} handleFastAction={handleFastAction} handleBusChange={handleBusChange} handleBulkAction={handleBulkAction} handleBulkCancel={handleBulkCancel} handleNoShow={handleNoShow} />}
+                                        {activeTab === 'payment' && <ScanView mode="PAYMENT" schedules={schedules} targetSessionId={targetSessionId} setTargetSessionId={setTargetSessionId} targetBus={targetBus} setTargetBus={setTargetBus} manualBus={manualBus} setManualBus={setManualBus} isScanning={isScanning} setIsScanning={setIsScanning} processScan={processScan} users={users} isMobile={isMobile} busList={busList} setBusList={setBusList} scanResult={scanResult} logs={logs} handleFastAction={handleFastAction} handleBulkAction={handleBulkAction} handleBulkCancel={handleBulkCancel} handleNoShow={handleNoShow} />}
+                                        {activeTab === 'change' && <ChangeView searchQuery={searchQuery} setSearchQuery={setSearchQuery} selectedUser={selectedUser} setSelectedUser={setSelectedUser} editForm={editForm} setEditForm={setEditForm} handleUserUpdate={handleUserUpdate} users={users} schedules={schedules} changeLogs={changeLogs} logs={logs} busList={busList} handleNoShow={handleNoShow} />}
                                         {activeTab === 'manage' && <ManageView users={users} handleUserUpload={handleUserUpload} handleScheduleUpload={handleScheduleUpload} exportAllData={exportAllData} handleFullReset={handleFullReset} handlePartialReset={handlePartialReset} schedules={schedules} setSchedules={setSchedules} logs={logs} appBgImage={appBgImage} setAppBgImage={setAppBgImage} handleAppBgUpload={handleAppBgUpload} db={db} SYSTEM_APP_ID={SYSTEM_APP_ID} admins={admins} handleAddAdmin={handleAddAdmin} handleDeleteAdmin={handleDeleteAdmin} handleUpdateAdminRole={handleUpdateAdminRole} currentAdmin={currentAdmin} />}
                                     </div>
                                 </div>
@@ -3987,5 +4037,6 @@
     </script>
 </body>
 </html>
+
 
 
