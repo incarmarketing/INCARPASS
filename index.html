@@ -366,46 +366,93 @@
             }, [isOpen]);
 
             const generateSystemPrompt = () => {
-                const userSummary = users.map(u => `{이름:"${u.name}",사번:"${u.uid}",배정차량:"${u.bus}",옵션:${JSON.stringify(u.options)}}`);
-                const logSummary = logs.filter(l => !l.isCancelled).slice(0, 500).map(l => `{이름:"${l.name}",사번:"${l.uid}",일정:"${l.sessionTitle}",수단:"${l.bus}",액션:"${l.action}"}`);
+                // 참가자 테이블
+                const userTable = users.map(u => {
+                    const opts = Object.entries(u.options || {}).filter(([k]) => !k.includes('버스')).map(([k,v]) => `${k}=${v}`).join(', ');
+                    const busInfo = Object.entries(u.options || {}).filter(([k]) => k.includes('버스')).map(([k,v]) => `${k}:${v}`).join(', ') || u.bus || '미정';
+                    return `| ${u.name} | ${u.uid} | ${u.org} | ${busInfo} | ${u.noShow ? '⛔노쇼' : '정상'} | ${opts} | 패널티:${CURRENCY}${u.penaltyTotal || 0} |`;
+                }).join('\n');
+
+                // 스캔 완료 기록
+                const activeLogs = logs.filter(l => !l.isCancelled);
+                const logTable = activeLogs.slice(0, 300).map(l => 
+                    `| ${l.name} | ${l.uid} | ${l.sessionTitle} | ${l.bus || '-'} | ${l.action} | ${l.finalAmount !== undefined ? CURRENCY + l.finalAmount : '-'} | ${formatTimeSafe(l.timestamp)} |`
+                ).join('\n');
+
+                // 실시간 통계 (모델이 계산하지 않아도 되게)
+                const totalUsers = users.length;
+                const noShowUsers = users.filter(u => u.noShow);
+                const activeUsers = totalUsers - noShowUsers.length;
                 
+                const sessionStats = schedules.filter(s => s.type !== 'NONE').map(s => {
+                    const target = users.filter(u => !u.noShow && getUserSessionInfo(u, s).isTarget).length;
+                    const done = new Set(activeLogs.filter(l => l.sessionId === s.id).map(l => l.uid)).size;
+                    return `- [${s.displayDate}] ${s.title} (${s.type === 'PAYMENT' ? '지급' : '탑승'}): ${done}/${target}명 완료 (${target > 0 ? Math.round(done/target*100) : 0}%)`;
+                }).join('\n');
+
+                const totalPaid = activeLogs.filter(l => l.action === '지급').reduce((sum, l) => sum + (l.finalAmount || 0), 0);
+
+                // 호차별 현황
+                const busStats = {};
+                activeLogs.filter(l => l.action === '탑승' && l.bus && l.bus !== '-').forEach(l => {
+                    if (!busStats[l.bus]) busStats[l.bus] = [];
+                    if (!busStats[l.bus].includes(l.name)) busStats[l.bus].push(l.name);
+                });
+                const busStatsText = Object.entries(busStats).map(([bus, names]) => 
+                    `- ${bus}: ${names.length}명 탑승 (${names.slice(0, 10).join(', ')}${names.length > 10 ? ` 외 ${names.length-10}명` : ''})`
+                ).join('\n');
+
                 const detailedSchedule = `
-                [INCAR ISC TAIWAN 대만 3박 4일 상세 일정표]
-                * 숙박: 타이베이 메리어트 호텔 (전 일정 5성급)
+[INCAR ISC TAIWAN 대만 3박 4일 상세 일정표]
+* 숙박: 타이베이 메리어트 호텔 (전 일정 5성급)
 
-                - 1일차 (3/11 수): 
-                  08:00/09:00 인천 출발(기내식) (OZ 711 / KE 2021) -> 12:30/13:30 중식(우육면) -> 13:30/14:30 단수이 옛거리, 홍마오청, 진리대학 투어 -> 16:30/17:30 호텔 체크인 -> 18:00/18:30 석식(타카오1972 무제한 샤브샤브) -> 19:30/20:00 타이베이 101 전망대 및 야경투어 -> 21:00 호텔 복귀
-                
-                - 2일차 (3/12 목) - 참가자별 '선택 관광' 진행:
-                  [1안] 08:30 출발 -> 09:40 티엔라이 온천 힐링 -> 13:00 중식(베이징덕) -> 14:30 서문정(1시간)
-                  [2안] 09:00 출발 -> 09:20 고궁박물관 역사투어 -> 13:00 중식(베이징덕) -> 14:30 서문정(1시간)
-                  [3안] 09:00 자유시간 (중식비 개별 지급)
-                  * 공통: 18:00 INCAR 만찬 행사 (전원 필수 참석, 화합과 축하의 밤) -> 21:00 호텔 복귀
-                
-                - 3일차 (3/13 금) - 예스지 투어:
-                  10:00 호텔 출발 -> 11:00 예류 해양국립공원 (기암괴석) -> 12:30 중식(씨푸드) -> 14:30 스펀 천등 날리기(+버블티 1잔) -> 17:00 지우펀 야경(홍등거리) -> 20:00 야시장 및 석식 -> 21:30 호텔 복귀
-                
-                - 4일차 (3/14 토):
-                  08:00/09:00 호텔 조식 및 체크아웃, 공항 이동 -> 11:40/12:25 타이베이 출발(기내식) (OZ 712 / KE 2022) -> 15:25/15:50 인천 도착
-                `;
-                
-                return `당신은 "INCARPASS PRO" 현장 운영을 돕는 친절하고 명확한 AI 에이전트입니다. 한국어로 짧고 명확하게 답변하세요.
-                
-                ${detailedSchedule}
+- 1일차 (3/11 수): 
+  08:00/09:00 인천 출발(기내식) (OZ 711 / KE 2021) -> 12:30/13:30 중식(우육면) -> 13:30/14:30 단수이 옛거리, 홍마오청, 진리대학 투어 -> 16:30/17:30 호텔 체크인 -> 18:00/18:30 석식(타카오1972 무제한 샤브샤브) -> 19:30/20:00 타이베이 101 전망대 및 야경투어 -> 21:00 호텔 복귀
 
-                [참가자 명단 (전체)]
-                ${userSummary.join('\n')}
+- 2일차 (3/12 목) - 참가자별 '선택 관광' 진행:
+  [1안] 08:30 출발 -> 09:40 티엔라이 온천 힐링 -> 13:00 중식(베이징덕) -> 14:30 서문정(1시간)
+  [2안] 09:00 출발 -> 09:20 고궁박물관 역사투어 -> 13:00 중식(베이징덕) -> 14:30 서문정(1시간)
+  [3안] 09:00 자유시간 (중식비 개별 지급)
+  * 공통: 18:00 INCAR 만찬 행사 (전원 필수 참석, 화합과 축하의 밤) -> 21:00 호텔 복귀
 
-                [최근 처리된 스캔(완료) 기록]
-                ${logSummary.length > 0 ? logSummary.join('\n') : "아직 스캔된 기록이 없습니다."}
-                
-                [규칙]
-                1. 특정 참가자(이름)의 일정을 물어보면, [참가자 명단]에서 그 사람의 '옵션(선택관광/항공 등)'을 찾은 뒤, [상세 일정표]와 매칭해서 구체적인 시간과 장소를 알려주세요.
-                2. 명단에 이름이 없으면 "명단에서 찾을 수 없습니다. 사번이나 이름을 다시 확인해주세요."라고 답변하세요.
-                3. 참가자의 '탑승 여부'나 '지급 완료 여부'를 물어보면 [최근 처리된 스캔(완료) 기록] 데이터를 검색해서 해당 이름이나 사번이 있는지 확인하고 대답하세요. 기록에 없으면 '아직 처리(스캔)되지 않았습니다'라고 대답하세요.
-                4. 특정 차량(예: 1호차)에 탑승 완료된 사람을 물어보면 [최근 처리된 스캔(완료) 기록]에서 해당 수단을 찾아서 이름을 나열해주세요.
-                5. 없는 일정을 지어내지 마세요.
-                `;
+- 3일차 (3/13 금) - 예스지 투어:
+  10:00 호텔 출발 -> 11:00 예류 해양국립공원 (기암괴석) -> 12:30 중식(씨푸드) -> 14:30 스펀 천등 날리기(+버블티 1잔) -> 17:00 지우펀 야경(홍등거리) -> 20:00 야시장 및 석식 -> 21:30 호텔 복귀
+
+- 4일차 (3/14 토):
+  08:00/09:00 호텔 조식 및 체크아웃, 공항 이동 -> 11:40/12:25 타이베이 출발(기내식) (OZ 712 / KE 2022) -> 15:25/15:50 인천 도착`;
+
+                return `당신은 "INCARPASS PRO" 현장 운영 총괄 AI 어시스턴트입니다.
+현장 운영자가 묻는 질문에 정확하고 간결하게 한국어로 답변하세요.
+
+${detailedSchedule}
+
+=== 실시간 현황 요약 ===
+- 전체 참가자: ${totalUsers}명 (활성: ${activeUsers}명)
+- 노쇼: ${noShowUsers.length}명${noShowUsers.length > 0 ? ' (' + noShowUsers.map(u => u.name).join(', ') + ')' : ''}
+- 총 지급액: ${CURRENCY}${totalPaid.toLocaleString()}
+
+=== 일정별 진행도 ===
+${sessionStats || '아직 진행된 일정이 없습니다.'}
+
+=== 호차별 탑승 현황 ===
+${busStatsText || '아직 탑승 기록이 없습니다.'}
+
+=== 참가자 명단 (이름|사번|소속|차량|상태|옵션|패널티) ===
+${userTable}
+
+=== 최근 처리(스캔) 기록 (이름|사번|일정|수단|액션|금액|시간) ===
+${logTable || '아직 스캔된 기록이 없습니다.'}
+
+=== 응답 규칙 ===
+1. 특정 참가자의 일정을 물어보면 → 참가자 명단의 '옵션'을 확인하고 상세 일정표와 매칭하여 시간/장소를 알려줘.
+2. 명단에 없으면 → "명단에서 찾을 수 없습니다."
+3. 탑승/지급 여부 → 처리 기록에서 확인. 없으면 "아직 처리되지 않았습니다."
+4. 호차별 탑승 인원 → 호차별 탑승 현황에서 확인.
+5. 노쇼 관련 질문 → 실시간 현황의 노쇼 정보를 활용.
+6. 진행률/통계 질문 → 일정별 진행도를 그대로 안내.
+7. 확실하지 않은 정보는 추측하지 말고 "확인이 필요합니다"라고 답변.
+8. 없는 일정을 지어내지 마.
+9. 답변은 3~5문장 이내로 간결하게.`;
             };
 
             const handleSend = async () => {
@@ -4057,4 +4104,5 @@
     </script>
 </body>
 </html>
+
 
