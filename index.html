@@ -986,7 +986,7 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
                         <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-incar flex flex-col justify-center">
                             <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">전체 참가자</div>
                             <div className="text-2xl md:text-3xl lg:text-4xl font-black text-slate-800">{users.filter(u => !u.noShow).length}명</div>
-                            {users.filter(u => u.noShow).length > 0 && <div className="text-[10px] text-rose-500 font-bold mt-1">노쇼 {users.filter(u => u.noShow).length}명</div>}
+                            {users.filter(u => u.noShow).length > 0 && <div className="text-[10px] text-rose-500 font-bold mt-1">노쇼 {users.filter(u => u.noShow).length}명 제외</div>}
                         </div>
                         <div className="bg-white p-4 md:p-6 rounded-3xl shadow-card border-l-8 border-emerald-50 flex flex-col justify-center">
                             <div className="text-slate-400 text-[10px] md:text-xs font-bold mb-1 break-keep">총 지급액</div>
@@ -4105,6 +4105,7 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
     </script>
 </body>
 </html>
+
 
 
 
