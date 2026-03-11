@@ -2759,7 +2759,13 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
                                     <tr><th className="p-3 whitespace-nowrap">이름/직책</th><th className="p-3 whitespace-nowrap">로그인 ID</th><th className="p-3 text-center whitespace-nowrap">권한 등급</th><th className="p-3 whitespace-nowrap">비밀번호</th>{isMaster && <th className="p-3 text-center">관리</th>}</tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {admins.filter(a => isMaster || a.id === currentAdmin.id).map((a) => (
+                                    {admins.filter(a => isMaster || a.id === currentAdmin.id).sort((a, b) => {
+                                        const roleOrder = { master: 0, manager: 1, staff: 2 };
+                                        const rA = roleOrder[a.role] ?? 3;
+                                        const rB = roleOrder[b.role] ?? 3;
+                                        if (rA !== rB) return rA - rB;
+                                        return (parseInt(a.id) || 0) - (parseInt(b.id) || 0);
+                                    }).map((a) => (
                                         <tr key={a.id} className="hover:bg-slate-50 transition-colors">
                                             <td className="p-3 font-bold text-slate-800 whitespace-nowrap">{a.name}</td>
                                             <td className="p-3 text-slate-600 font-mono whitespace-nowrap">{a.id}</td>
@@ -4105,6 +4111,7 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
     </script>
 </body>
 </html>
+
 
 
 
