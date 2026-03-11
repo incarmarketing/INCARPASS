@@ -1504,16 +1504,18 @@
                                             currentList.map(item => {
                                                 const u = item;
                                                 const isBoarded = scanTab === 'done';
+                                                const isNoShow = u.noShow === true;
                                                 const { expectedBus } = getUserSessionInfo(u, selectedSession);
                                                 
                                                 return (
-                                                    <div key={u.uid} className={`flex justify-between items-center p-3 rounded-xl border transition-colors ${isBoarded ? (mode==='BOARDING'?'bg-indigo-50 border-indigo-100':'bg-emerald-50 border-emerald-100') : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
+                                                    <div key={u.uid} className={`flex justify-between items-center p-3 rounded-xl border transition-colors ${isNoShow ? 'opacity-50 bg-rose-50/50 border-rose-200' : isBoarded ? (mode==='BOARDING'?'bg-indigo-50 border-indigo-100':'bg-emerald-50 border-emerald-100') : 'bg-white border-slate-200 hover:bg-slate-50'}`}>
                                                         <div className="flex items-center gap-3">
-                                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${isBoarded ? (mode==='BOARDING'?'bg-incar':'bg-emerald-500') : 'bg-slate-300'}`}>{u.name[0]}</div>
+                                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 ${isNoShow ? 'bg-rose-400' : isBoarded ? (mode==='BOARDING'?'bg-incar':'bg-emerald-500') : 'bg-slate-300'}`}>{u.name[0]}</div>
                                                             <div>
                                                                 <div className="font-bold text-sm text-slate-800 flex items-center gap-2">
                                                                     {u.name}
-                                                                    {isBoarded && <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING'?'탑승완료':'지급완료'}</span>}
+                                                                    {isNoShow && <span className="text-[9px] px-1.5 py-0.5 rounded font-black bg-rose-500 text-white">노쇼</span>}
+                                                                    {!isNoShow && isBoarded && <span className={`text-[9px] px-1.5 py-0.5 rounded font-black ${mode==='BOARDING'?'bg-incar text-white':'bg-emerald-500 text-white'}`}>{mode==='BOARDING'?'탑승완료':'지급완료'}</span>}
                                                                 </div>
                                                                 <div className="text-[10px] text-slate-400 mt-0.5 flex gap-2">
                                                                     <span>{u.org}</span>
@@ -1522,7 +1524,9 @@
                                                             </div>
                                                         </div>
                                                         <div>
-                                                            {isBoarded ? (
+                                                            {isNoShow ? (
+                                                                <span className="px-3 py-1.5 bg-rose-100 text-rose-400 text-[10px] font-bold rounded-lg whitespace-nowrap cursor-not-allowed">노쇼</span>
+                                                            ) : isBoarded ? (
                                                                 <button onClick={() => handleFastAction(u, selectedSession, targetBus, true)} className="px-3 py-1.5 bg-white text-slate-500 border border-slate-200 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 text-[10px] font-bold rounded-lg transition-colors shadow-sm whitespace-nowrap">
                                                                     {mode==='BOARDING' ? '하차' : '지급 취소'}
                                                                 </button>
@@ -4037,6 +4041,7 @@
     </script>
 </body>
 </html>
+
 
 
 
