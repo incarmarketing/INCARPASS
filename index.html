@@ -272,6 +272,8 @@
             const [input, setInput] = useState('');
             const [isLoading, setIsLoading] = useState(false);
             const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
+            const [isListening, setIsListening] = useState(false);
+            const recognitionRef = useRef(null);
             
             const chatContainerRef = useRef(null);
 
@@ -4191,6 +4193,7 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
     </script>
 </body>
 </html>
+
 
 
 
