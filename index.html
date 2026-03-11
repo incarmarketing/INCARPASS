@@ -1805,9 +1805,16 @@
                                             <button 
                                                 onClick={async () => {
                                                     const isCancel = scanTab === 'done';
+                                                    const allTargetDone = [];
+                                                    const allTargetYet = [];
+                                                    targetUsersList.forEach(u => {
+                                                        const log = logs.find(l => l.uid === String(u.uid) && l.sessionId === selectedSession.id && !l.isCancelled);
+                                                        if (log) allTargetDone.push({ ...u, log });
+                                                        else allTargetYet.push(u);
+                                                    });
                                                     const selectedList = isCancel
-                                                        ? doneUsers.filter(u => selectedUids.has(u.uid))
-                                                        : yetUsers.filter(u => selectedUids.has(u.uid));
+                                                        ? allTargetDone.filter(u => selectedUids.has(u.uid))
+                                                        : allTargetYet.filter(u => selectedUids.has(u.uid));
                                                     
                                                     let result = 0;
                                                     if (isCancel) {
@@ -2268,7 +2275,16 @@
                     <div className="bg-white p-6 rounded-3xl shadow-card">
                         <h3 className="font-bold text-lg mb-4 text-slate-800 break-keep">참가자 일정 변경 및 관리</h3>
                         <div className="flex flex-col gap-2 mb-6 relative">
-                            <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} placeholder="사번 또는 이름 검색" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-incar" />
+                            <input type="text" value={searchQuery} onChange={(e)=>setSearchQuery(e.target.value)} onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    const term = normalizeString(searchQuery);
+                                    if(!term) return;
+                                    const foundList = users.filter(u => normalizeString(u.uid).includes(term) || normalizeString(u.name).includes(term));
+                                    if (foundList.length === 1) { setSelectedUser(foundList[0]); setSearchResults([]); }
+                                    else if (foundList.length > 1) { setSearchResults(foundList); }
+                                    else { alert("사용자를 찾을 수 없습니다."); setSearchResults([]); }
+                                }
+                            }} placeholder="사번 또는 이름 검색" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-incar" />
                             <div className="flex gap-2">
                                 <button onClick={startLookupScanner} className="bg-slate-100 text-slate-600 px-4 py-4 rounded-2xl hover:bg-slate-200 transition-colors border border-slate-200 flex-none" title="QR 스캔으로 찾기"><Icon name="qr" size={24} /></button>
                                 <button onClick={()=>{ 
@@ -4041,6 +4057,7 @@
     </script>
 </body>
 </html>
+
 
 
 
