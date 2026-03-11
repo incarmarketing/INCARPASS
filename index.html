@@ -272,8 +272,6 @@
             const [input, setInput] = useState('');
             const [isLoading, setIsLoading] = useState(false);
             const [selectedModel, setSelectedModel] = useState('gemini-2.5-flash');
-            const [isListening, setIsListening] = useState(false);
-            const recognitionRef = useRef(null);
             
             const chatContainerRef = useRef(null);
 
@@ -623,66 +621,18 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
                                                 scrollToBottom();
                                             }, 300); 
                                         }}
-                                        placeholder={isListening ? '듣고 있어요...' : '질문을 입력하세요...'}
-                                        className={`flex-1 bg-slate-100 border rounded-full pl-4 pr-24 py-3 text-sm outline-none transition-all ${isListening ? 'border-rose-400 ring-2 ring-rose-200 bg-rose-50' : 'border-slate-200 focus:ring-2 focus:ring-incar/20'}`}
+                                        placeholder="운영 관련 질문을 입력하세요..."
+                                        className="flex-1 bg-slate-100 border border-slate-200 rounded-full pl-4 pr-12 py-3 text-sm outline-none focus:ring-2 focus:ring-incar/20"
                                         disabled={isLoading}
                                     />
-                                    <div className="absolute right-1.5 top-1.5 flex gap-1">
-                                        <button 
-                                            type="button"
-                                            onClick={() => {
-                                                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                                                    return alert('이 브라우저에서 음성 인식을 지원하지 않습니다.');
-                                                }
-                                                
-                                                if (isListening && recognitionRef.current) {
-                                                    recognitionRef.current.stop();
-                                                    setIsListening(false);
-                                                    return;
-                                                }
-                                                
-                                                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                                                const recognition = new SpeechRecognition();
-                                                recognition.lang = 'ko-KR';
-                                                recognition.continuous = false;
-                                                recognition.interimResults = true;
-                                                
-                                                recognition.onstart = () => setIsListening(true);
-                                                recognition.onresult = (event) => {
-                                                    let transcript = '';
-                                                    for (let i = 0; i < event.results.length; i++) {
-                                                        transcript += event.results[i][0].transcript;
-                                                    }
-                                                    setInput(transcript);
-                                                };
-                                                recognition.onend = () => {
-                                                    setIsListening(false);
-                                                    recognitionRef.current = null;
-                                                };
-                                                recognition.onerror = (e) => {
-                                                    setIsListening(false);
-                                                    recognitionRef.current = null;
-                                                    if (e.error === 'not-allowed') alert('마이크 권한을 허용해주세요.');
-                                                };
-                                                
-                                                recognitionRef.current = recognition;
-                                                recognition.start();
-                                            }}
-                                            disabled={isLoading}
-                                            style={{ cursor: isLoading ? 'not-allowed' : 'pointer' }}
-                                            className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${isListening ? 'bg-rose-500 text-white animate-pulse shadow-lg shadow-rose-500/30' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'}`}
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill={isListening ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
-                                        </button>
-                                        <button 
-                                            type="submit" 
-                                            disabled={isLoading || !input.trim()}
-                                            style={{ cursor: isLoading || !input.trim() ? 'not-allowed' : 'pointer' }}
-                                            className="w-9 h-9 bg-incar text-white rounded-full flex items-center justify-center disabled:bg-slate-300 transition-colors"
-                                        >
-                                            <Icon name="send" size={16} />
-                                        </button>
-                                    </div>
+                                    <button 
+                                        type="submit" 
+                                        disabled={isLoading || !input.trim()}
+                                        style={{ cursor: isLoading || !input.trim() ? 'not-allowed' : 'pointer' }}
+                                        className="absolute right-1.5 top-1.5 w-9 h-9 bg-incar text-white rounded-full flex items-center justify-center disabled:bg-slate-300 transition-colors"
+                                    >
+                                        <Icon name="send" size={16} />
+                                    </button>
                                 </form>
                             </div>
                         </div>
