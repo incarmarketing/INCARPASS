@@ -2259,10 +2259,6 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
                     return alert("변경할 항목을 선택하거나 입력하세요.");
                 }
 
-                if (isBusRequired && (!editForm.newBus || editForm.newBus.trim() === '' || editForm.newBus === '-')) {
-                    return alert(`[${editForm.optVal}] 일정은 버스 배정이 필수입니다. 탑승할 호차를 선택해주세요.`);
-                }
-                
                 const oldVal = selectedUser.options[editForm.optKey];
                 const newVal = editForm.optVal;
 
@@ -2279,10 +2275,23 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
                         handleBusChange(selectedUser, targetSessionForBus, targetNewBus);
                         setSelectedUser(null);
                         setEditForm({ optKey: '', optVal: '', newBus: '', penalty: 0, reason: '' });
+                        setIsStaffException(false);
                         return;
                     } else {
                         return alert("기존 옵션 및 호차와 동일합니다. 변경할 내역이 없습니다.");
                     }
+                }
+
+                // 💡 [스태프 예외 처리] 강제 0원 적용 및 버스 필수 룰 패스
+                if (isStaffException) {
+                    handleUserUpdate(0, editForm.reason || '[스태프 예외 처리] 현장 변경 및 배정');
+                    setIsStaffException(false);
+                    return;
+                }
+
+                // 직원이 아닐 때만 버스 필수 룰 체크
+                if (isBusRequired && (!editForm.newBus || editForm.newBus.trim() === '' || editForm.newBus === '-')) {
+                    return alert(`[${editForm.optVal}] 일정은 버스 배정이 필수입니다. 탑승할 호차를 선택해주세요.\n(직원/스태프인 경우 하단의 '예외 처리'를 체크하세요)`);
                 }
 
                 if (financialImpact && financialImpact.needsRefund) {
@@ -2601,15 +2610,24 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
                                     </div>
                                 )}
 
+                                <div className="col-span-2 bg-indigo-50 border border-indigo-100 p-3 rounded-xl mt-2 flex items-center justify-between transition-colors">
+                                    <label className="flex items-center gap-2 cursor-pointer w-full">
+                                        <input type="checkbox" checked={isStaffException} onChange={e => {
+                                            setIsStaffException(e.target.checked);
+                                            if (e.target.checked) setEditForm(prev => ({ ...prev, penalty: 0, reason: '[스태프 예외 처리] 현장 변경 및 배정' }));
+                                        }} className="w-5 h-5 text-incar rounded focus:ring-incar cursor-pointer" />
+                                        <span className="text-sm font-bold text-indigo-900">👨‍💼 직원/스태프 예외 처리 (패널티 0원 및 호차 미정 허용)</span>
+                                    </label>
+                                </div>
                                 <div>
                                     <label className="block text-xs font-bold text-slate-400 mb-1 break-keep">차액/패널티 수동입력 ({CURRENCY})</label>
-                                    <input type="number" value={editForm.penalty} onChange={e=>setEditForm({...editForm, penalty: e.target.value})} className="w-full p-3 border border-rose-200 bg-rose-50 rounded-xl font-bold text-rose-600 break-keep" />
+                                    <input type="number" disabled={isStaffException} value={editForm.penalty} onChange={e=>setEditForm({...editForm, penalty: e.target.value})} className="w-full p-3 border border-rose-200 bg-rose-50 rounded-xl font-bold text-rose-600 break-keep disabled:opacity-40" />
                                     <p className="text-[10px] text-slate-400 mt-1 break-keep">
                                         * 음수(-)를 입력하면 총 차감액(패널티)에서 차감(반환 정산)됩니다.
                                     </p>
                                 </div>
                                 <div><label className="block text-xs font-bold text-slate-400 mb-1 break-keep">변경 사유</label><input type="text" value={editForm.reason} onChange={e=>setEditForm({...editForm, reason: e.target.value})} className="w-full p-3 border rounded-xl font-bold text-sm break-keep" /></div>
-                                <button onClick={onSaveClick} className="w-full py-4 bg-incar text-white font-bold rounded-2xl shadow-lg mt-4 hover:bg-incar-dark break-keep">저장하기</button>
+                                <div className="col-span-2"><button onClick={onSaveClick} className="w-full py-4 bg-incar text-white font-bold rounded-2xl shadow-lg mt-2 hover:bg-incar-dark break-keep transition-transform active:scale-95">저장하기</button></div>
                             </div>
                         )}
 
@@ -4161,6 +4179,7 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
     </script>
 </body>
 </html>
+
 
 
 
