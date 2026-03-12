@@ -2237,9 +2237,8 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
 
                 if (impact.needsRefund) {
                     setEditForm(prev => ({ ...prev, penalty: -impact.refundAmount, reason: `기지급금 미반환 패널티 (${oldVal} -> ${newVal})` }));
-                } else if (diff > 0 && paidAmount === 0) {
-                    setEditForm(prev => ({ ...prev, penalty: diff, reason: `일정 변경 차액 (${oldVal} -> ${newVal})` }));
                 } else {
+                    // 💡 [수정됨] 지급받은 적이 없거나(paidAmount===0) 뱉어낼 돈이 없으면 무조건 패널티 0원 처리
                     setEditForm(prev => ({ ...prev, penalty: 0, reason: `일정 변경 (${oldVal} -> ${newVal})` }));
                 }
             }, [editForm.optVal, editForm.optKey, selectedUser, schedules, logs]);
@@ -4162,4 +4161,5 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
     </script>
 </body>
 </html>
+
 
