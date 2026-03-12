@@ -2596,8 +2596,7 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
                                         <div className="mt-3 break-keep">
                                             {financialImpact.needsRefund && <span className="inline-block bg-rose-500 text-white font-bold text-xs px-2 py-1 rounded">⚠️ 현장 반환 필요: {CURRENCY}{financialImpact.refundAmount} (미반환 시 패널티 적용됨)</span>}
                                             {financialImpact.needsExtraPay && <span className="inline-block bg-emerald-500 text-white font-bold text-xs px-2 py-1 rounded">✅ 추가 지급 발생: {CURRENCY}{financialImpact.extraPayAmount} (해당 일정 스캔에서 처리됨)</span>}
-                                            {!financialImpact.needsRefund && !financialImpact.needsExtraPay && financialImpact.diff > 0 && financialImpact.paidAmount === 0 && <span className="inline-block bg-amber-500 text-white font-bold text-xs px-2 py-1 rounded">💰 지급 전 다운그레이드: {CURRENCY}{financialImpact.diff} 차감 적용됨</span>}
-                                            {!financialImpact.needsRefund && !financialImpact.needsExtraPay && financialImpact.diff <= 0 && <span className="inline-block bg-blue-500 text-white font-bold text-xs px-2 py-1 rounded">✔️ 추가 비용 및 반환 문제 없음</span>}
+                                            {!financialImpact.needsRefund && !financialImpact.needsExtraPay && <span className="inline-block bg-blue-500 text-white font-bold text-xs px-2 py-1 rounded">✔️ 정산 문제 없음 (패널티 발생 안함)</span>}
                                         </div>
                                     </div>
                                 )}
@@ -4162,6 +4161,7 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
     </script>
 </body>
 </html>
+
 
 
 
