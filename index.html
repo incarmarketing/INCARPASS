@@ -2266,6 +2266,25 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
                 const oldVal = selectedUser.options[editForm.optKey];
                 const newVal = editForm.optVal;
 
+                // 💡 [개선 1] 옵션은 그대로 두고 '호차'만 변경하려는 경우의 스마트 처리
+                if (oldVal === newVal) {
+                    const dayStrMatch = editForm.optKey.match(/(\d+일차)/);
+                    const busKey = dayStrMatch ? `${dayStrMatch[1]}버스` : '버스';
+                    const busKey2 = dayStrMatch ? `${dayStrMatch[1]} 버스` : '버스';
+                    const oldBus = selectedUser.options[busKey] || selectedUser.options[busKey2] || selectedUser.bus || '미정';
+                    const targetNewBus = editForm.newBus?.trim();
+
+                    if (targetNewBus && targetNewBus !== '-' && oldBus !== targetNewBus) {
+                        const targetSessionForBus = schedules.find(s => s.targetKey === editForm.optKey && s.targetVal === oldVal) || { id: `TMP_${Date.now()}`, title: editForm.optKey, displayDate: editForm.optKey };
+                        handleBusChange(selectedUser, targetSessionForBus, targetNewBus);
+                        setSelectedUser(null);
+                        setEditForm({ optKey: '', optVal: '', newBus: '', penalty: 0, reason: '' });
+                        return;
+                    } else {
+                        return alert("기존 옵션 및 호차와 동일합니다. 변경할 내역이 없습니다.");
+                    }
+                }
+
                 if (financialImpact && financialImpact.needsRefund) {
                     setLocalRefundReq({ amount: financialImpact.refundAmount, oldVal, newVal });
                     return;
@@ -4143,3 +4162,4 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
     </script>
 </body>
 </html>
+
