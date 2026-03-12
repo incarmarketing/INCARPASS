@@ -1971,6 +1971,7 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
             const [manualInput, setManualInput] = useState(false);
             const [showAllHistory, setShowAllHistory] = useState(false);
             const [isLookupScanning, setIsLookupScanning] = useState(false);
+            const [isStaffException, setIsStaffException] = useState(false); // 💡 스태프 예외 처리 토글 추가
             const [financialImpact, setFinancialImpact] = useState(null);
             const [showQrModal, setShowQrModal] = useState(false);
             const html5QrCodeRef = useRef(null);
@@ -4161,5 +4162,6 @@ ${logTable || '아직 스캔된 기록이 없습니다.'}
     </script>
 </body>
 </html>
+
 
 
